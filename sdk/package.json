@@ -1,0 +1,45 @@
+{
+  "name": "shortx-sdk",
+  "version": "0.1.2",
+  "description": "SDK for interacting with the ShortX Protocol Solana contract",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "solana",
+    "anchor",
+    "sdk",
+    "shortx",
+    "protocol"
+  ],
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/shortx-contract.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/shortx-contract/issues"
+  },
+  "homepage": "https://github.com/yourusername/shortx-contract#readme",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/web3.js": "^1.90.0",
+    "axios": "^1.9.0",
+    "bs58": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
