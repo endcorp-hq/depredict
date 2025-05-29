@@ -92,3 +92,9 @@ Tests the complete order lifecycle:
 - Each test file is independent and can be run separately
 - Some tests require specific market IDs to be set correctly
 - The order flow test includes delays to ensure proper transaction sequencing
+
+### .ENV
+
+`
+PROVIDER_WALLET=
+`
