@@ -15,6 +15,12 @@ ShortxError {
     #[msg("No available order slot")]
     NoAvailableOrderSlot,
 
+    #[msg("Invalid oracle")]
+    InvalidOracle,
+
+    #[msg("Oracle not resolved")]
+    OracleNotResolved,
+
     #[msg("Market is inactive")]
     MarketInactive,
 

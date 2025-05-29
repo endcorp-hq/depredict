@@ -22,6 +22,7 @@ pub struct MarketState {
     pub question: [u8; 80],
     pub winning_direction: WinningDirection,
     pub version: u64,
+    pub oracle_pubkey: Pubkey,
     // pub pool_id: u64,
     pub padding: [u8; 72],
 }
@@ -46,9 +47,7 @@ pub struct CreateMarketArgs {
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct UpdateMarketArgs {
     pub market_id: u64,
-    pub market_end: Option<i64>,
-    pub winning_direction: Option<WinningDirection>,
-    pub state: Option<MarketStates>,
+    pub market_end: i64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -74,6 +73,7 @@ impl Default for MarketState {
         Self {
             bump: 0,
             authority: Pubkey::default(),
+            oracle_pubkey: Pubkey::default(),
             market_id: 0,
             yes_liquidity: 0,
             no_liquidity: 0,

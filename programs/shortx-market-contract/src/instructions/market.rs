@@ -3,11 +3,9 @@ use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
 };
-use crate::{constants::{ MARKET, USDC_MINT}, state::{CloseMarketArgs, Config, MarketStates}};
-use crate::{
-    errors::ShortxError,
-    state::{CreateMarketArgs, UpdateMarketArgs, MarketState},
-};
+use switchboard_on_demand::{prelude::rust_decimal::Decimal};
+use crate::{constants::{ MARKET, USDC_MINT}, constraints::{get_oracle_price, is_valid_oracle}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, UpdateMarketArgs, WinningDirection}};
+use crate::errors::ShortxError;
 
 #[derive(Accounts)]
 #[instruction(args: CreateMarketArgs)]
@@ -21,6 +19,12 @@ pub struct MarketContext<'info> {
         constraint = fee_vault.key() == config.fee_vault @ ShortxError::InvalidFeeVault
     )]
     pub fee_vault: AccountInfo<'info>,
+
+    /// CHECK: oracle is checked in the implementation function
+    #[account(
+        mut
+    )]
+    pub oracle_pubkey: AccountInfo<'info>,
 
     pub config: Account<'info, Config>,
 
@@ -62,6 +66,22 @@ pub struct UpdateMarketContext<'info> {
     #[account(mut)] // Market must exist already
     pub market: Box<Account<'info, MarketState>>,
     pub system_program: Program<'info, System>,
+}
+
+// Context for resolving the market
+#[derive(Accounts)]
+pub struct ResolveMarketContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    pub market: Box<Account<'info, MarketState>>,
+
+    /// CHECK: oracle is same as the market's oracle pubkey
+    #[account(
+        mut,
+        constraint = oracle_pubkey.key() == market.oracle_pubkey @ ShortxError::InvalidOracle
+    )]
+    pub oracle_pubkey: AccountInfo<'info>,
 }
 
 // Context for closing the market
@@ -123,17 +143,18 @@ impl<'info> MarketContext<'info> {
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
 
-        // only the config authority can create a market
-        require!(self.config.authority == *signer.key, ShortxError::Unauthorized);
+        // check if the oracle is valid
+        require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
 
         market.set_inner(MarketState {
             bump: bumps.market,
-            authority: self.signer.key(),
+            authority: signer.key(),
             market_id: args.market_id,
             market_start: args.market_start,
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
+            oracle_pubkey: self.oracle_pubkey.key(),
             ..Default::default()
         });
 
@@ -149,24 +170,50 @@ impl<'info> UpdateMarketContext<'info> {
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
 
-        require!(market.authority == *signer.key, ShortxError::Unauthorized);
+        // only the market creator can update the market end time
+         require!(market.authority == *signer.key, ShortxError::Unauthorized);
 
-        if let Some(market_end) = args.market_end {
-            market.market_end = market_end;
-        }
-
-        if let Some(winning_direction) = args.winning_direction {
-            market.winning_direction = winning_direction;
-        }
-
-        if let Some(market_state) = args.state {
-            market.market_state = market_state;
-        }
-
+        // update the market end time
+        market.market_end = args.market_end;
         market.update_ts = ts;
         Ok(())
     }
 }
+
+impl<'info> ResolveMarketContext<'info> {
+    pub fn resolve_market(&mut self) -> Result<()> {
+        let market = &mut self.market;
+        let signer = &self.signer;
+
+        let ts = Clock::get()?.unix_timestamp;
+
+        require!(market.authority == *signer.key, ShortxError::Unauthorized);
+        require!(market.market_state == MarketStates::Active || market.market_state == MarketStates::Ended, ShortxError::MarketAlreadyResolved);
+
+        // Get oracle price data
+        let direction = get_oracle_price(&self.oracle_pubkey)?;
+        // Determine winning direction based on price
+        let winning_direction = if direction == Decimal::from(0) {
+            WinningDirection::No
+        } else if direction == Decimal::from(1) {
+            WinningDirection::Yes
+        } else {
+            WinningDirection::None
+        };
+
+        require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
+
+        // Update market state
+        market.market_state = MarketStates::Resolved;
+        market.winning_direction = winning_direction;
+        market.update_ts = ts;
+
+        market.emit_market_event()?;
+
+        Ok(())
+    }
+}
+
 
 impl<'info> CloseMarketContext<'info> {
     pub fn close_market(&mut self, args: CloseMarketArgs) -> Result<()> {
