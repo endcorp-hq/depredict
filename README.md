@@ -2,6 +2,8 @@
 
 A Solana-based prediction market contract that allows users to bet on outcomes of events.
 
+Devnet: `shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ`  
+Mainnet: `shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ`
 ## Prerequisites
 
 - Node.js and Yarn

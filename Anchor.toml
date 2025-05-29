@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-shortx_market_contract = "3AhNo8g3CQ5EdLjYurtAodG7Zrbkv3aj94L1yiw8m9s6"
+shortx_market_contract = "shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ"
 
 [registry]
 url = "https://api.apr.dev"
