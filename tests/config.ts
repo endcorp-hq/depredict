@@ -32,19 +32,28 @@ describe("shortx-contract", () => {
     it("Initializes config", async () => {
       const feeAmount = new anchor.BN(100);
 
-      await program.methods
-        .initializeConfig(feeAmount)
-        .accountsPartial({
-          signer: admin.publicKey,
-          feeVault: feeVault.publicKey,
-          config: configPda,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .signers([admin])
-        .rpc({
-          skipPreflight: true,
-          commitment: "confirmed",
-        });
+      try {
+        const tx = await program.methods
+          .initializeConfig(feeAmount)
+          .accountsPartial({
+            signer: admin.publicKey,
+            feeVault: feeVault.publicKey,
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([admin])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        console.log("Initialize config tx:", tx);
+      } catch (error) {
+        console.error("Initialize config error:", error);
+        if (error.logs) {
+          console.error("Program logs:", error.logs);
+        }
+        throw error;
+      }
 
       const configAccount = await program.account.config.fetch(configPda);
       assert.ok(configAccount.authority.equals(admin.publicKey));
@@ -55,22 +64,75 @@ describe("shortx-contract", () => {
     it("Updates config", async () => {
       const newFeeAmount = new anchor.BN(200);
 
-      await program.methods
-        .updateConfig(newFeeAmount, null, null)
-        .accountsPartial({
-          signer: admin.publicKey,
-          feeVault: feeVault.publicKey,
-          config: configPda,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .signers([admin])
-        .rpc(
-          {
-            skipPreflight: true,
+      try {
+        const tx = await program.methods
+          .updateConfig(newFeeAmount, null, null)
+          .accountsPartial({
+            signer: admin.publicKey,
+            feeVault: feeVault.publicKey,
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([admin])
+          .rpc({
+            skipPreflight: false,
             commitment: "confirmed",
-          }
-        );
+            preflightCommitment: "confirmed",
+          });
+        console.log("Update config tx:", tx);
+      } catch (error) {
+        console.error("Update config error:", error);
+        if (error.logs) {
+          console.error("Program logs:", error.logs);
+        }
+        throw error;
+      }
 
+      const configAccount = await program.account.config.fetch(configPda);
+      assert.ok(configAccount.feeAmount.eq(newFeeAmount));
+    });
+
+    it("Tried to update config with wrong authority", async () => {
+      const newFeeAmount = new anchor.BN(200);
+      const wrongAdmin = Keypair.generate();
+
+      try {
+        await program.methods
+          .updateConfig(newFeeAmount, null, null)
+          .accountsPartial({
+            signer: wrongAdmin.publicKey,
+            feeVault: feeVault.publicKey,
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([wrongAdmin])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+            preflightCommitment: "confirmed",
+          });
+        
+        assert.fail("Transaction should have failed due to unauthorized access");
+      } catch (error) {
+        // Log the full error details for debugging
+        console.log("Full error:", error);
+        console.log("Error message:", error.message);
+        if (error.logs) {
+          console.log("Program logs:", error.logs);
+        }
+
+        // Check for Anchor error format
+        assert.include(error.message, "AnchorError");
+        assert.include(error.message, "config");
+        
+        // Verify the program logs contain the expected error message
+        if (error.logs) {
+          const logsString = error.logs.join(" ");
+          assert.include(logsString, "Error");
+        }
+      }
+
+      // Verify the config hasn't changed
       const configAccount = await program.account.config.fetch(configPda);
       assert.ok(configAccount.feeAmount.eq(newFeeAmount));
     });
