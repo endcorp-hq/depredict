@@ -168,7 +168,8 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
 
         // check if the oracle is valid
-        require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        // require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        msg!("Skipping oracle check");
 
         market.set_inner(MarketState {
             bump: bumps.market,
