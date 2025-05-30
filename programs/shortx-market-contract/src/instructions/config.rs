@@ -23,7 +23,7 @@ pub struct InitConfigContext<'info> {
         seeds = [CONFIG.as_bytes()],
         bump
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -44,7 +44,7 @@ pub struct UpdateConfigContext<'info> {
         seeds = [CONFIG.as_bytes()],
         bump = config.bump
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     pub system_program: Program<'info, System>,
 }
 

@@ -6,11 +6,10 @@ use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, To
 use std::str::FromStr;
 
 use crate::constants::USDC_MINT;
-use crate::state::{Config, MarketStates, OpenOrderArgs, OrderStatus};
+use crate::state::{Config, MarketStates, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
-    constraints::is_authority_for_user_trade,
     errors::ShortxError,
-    state::{ MarketState, Order, OrderDirection, UserTrade, WinningDirection },
+    state::{ MarketState, WinningDirection },
 };
 
 #[derive(Accounts)]
@@ -27,9 +26,9 @@ pub struct OrderContext<'info> {
 
     #[account(
         mut,
-        constraint = is_authority_for_user_trade(&user_trade, &signer)?
+        constraint = position_account.market_id == market.market_id @ ShortxError::InvalidMarketId
     )]
-    pub user_trade: Box<Account<'info, UserTrade>>,
+    pub position_account: Box<Account<'info, PositionAccount>>,
 
     #[account(mut)]
     pub market: Box<Account<'info, MarketState>>,
@@ -57,8 +56,7 @@ pub struct OrderContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -66,9 +64,9 @@ pub struct OrderContext<'info> {
 }
 
 impl<'info> OrderContext<'info> {
-    pub fn open_order(&mut self, args: OpenOrderArgs) -> Result<()> {
+    pub fn open_order(&mut self, args: OpenPositionArgs) -> Result<()> {
         let market = &mut self.market;
-        let user_trade = &mut self.user_trade;
+        let position_account = &mut self.position_account;
     
         let ts = Clock::get()?.unix_timestamp;
     
@@ -90,8 +88,8 @@ impl<'info> OrderContext<'info> {
         let net_amount = args.amount;
     
         let ( current_liquidity, otherside_current_liquidity) = match args.direction {
-            OrderDirection::Yes => (market.yes_liquidity, market.no_liquidity),
-            OrderDirection::No => (market.no_liquidity, market.yes_liquidity),
+            PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
+            PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
         };
         msg!("current liquidity {:?}", current_liquidity);
         msg!("otherside current liquidity {:?}", otherside_current_liquidity);
@@ -105,41 +103,41 @@ impl<'info> OrderContext<'info> {
         msg!("markets liquidity {:?}", markets_liquidity);
         
     
-        let order_index = user_trade.orders
+        let position_index = position_account.positions
             .iter()
             .position(
                 |order|
-                    order.order_status != OrderStatus::Open
+                    order.position_status != PositionStatus::Open
             )
             .ok_or(ShortxError::NoAvailableOrderSlot)?;
     
             
-        msg!("Order Index {:?}", order_index);
+        msg!("Position Index {:?}", position_index);
 
-        let user_nonce = user_trade.get_user_nonce();
-        msg!("User Nonce {:?}", user_nonce);
-        user_trade.orders[order_index] = Order {
+        let position_nonce = position_account.get_position_nonce();
+        msg!("Position Nonce {:?}", position_nonce);
+        position_account.positions[position_index] = Position {
             ts,
-            order_id: market.next_order_id(),
+            position_id: market.next_position_id(),
             market_id: market.market_id,
-            order_status: OrderStatus::Open,
-            price: net_amount,
-            order_direction: args.direction,
-            user_nonce,
+            position_status: PositionStatus::Open,
+            amount: net_amount,
+            direction: args.direction,
+            is_nft: false,
+            mint: None,
+            authority: None,
             created_at: ts,
-            padding: [0; 3],
             version: 0,
+            padding: [0; 10],
         };
-    
-        user_trade.total_deposits = user_trade.total_deposits.checked_add(net_amount).unwrap();
     
         market.volume = market.volume.checked_add(net_amount).unwrap();
 
         match args.direction {
-            OrderDirection::Yes => {
+            PositionDirection::Yes => {
                 market.yes_liquidity = market.yes_liquidity.checked_add(net_amount).unwrap();
             }
-            OrderDirection::No => {
+            PositionDirection::No => {
                 market.no_liquidity = market.no_liquidity.checked_add(net_amount).unwrap();
             }
         }
@@ -156,9 +154,9 @@ impl<'info> OrderContext<'info> {
             self.mint.decimals
         )?;
     
-        let current_order = user_trade.orders[order_index];
+        let current_position = position_account.positions[position_index];
     
-        user_trade.emit_order_event(current_order, user_nonce)?;
+        position_account.emit_position_event(current_position)?;
     
         let fee = self.config.fee_amount;
     
@@ -184,9 +182,9 @@ impl<'info> OrderContext<'info> {
     }
 
 
-    pub fn payout_order(&mut self, order_id: u64) -> Result<()> {
+    pub fn payout_order(&mut self, position_id: u64) -> Result<()> {
         let market = &mut self.market;
-        let user_trade = &mut self.user_trade;
+        let position_account = &mut self.position_account;
         let ts = Clock::get()?.unix_timestamp;
     
         require!(
@@ -194,31 +192,30 @@ impl<'info> OrderContext<'info> {
             ShortxError::MarketStillActive
         );
         require!(market.market_state == MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
+
     
-        let user_nonce = user_trade.get_user_nonce();
-    
-        let order_index = user_trade.orders
+        let position_index = position_account.positions
             .iter()
             .position(|order| {
-                order.order_id == order_id &&
-                    order.order_status == OrderStatus::Open &&
+                order.position_id == position_id &&
+                    order.position_status == PositionStatus::Open &&
                     order.market_id == market.market_id
             })
             .ok_or(ShortxError::OrderNotFound)?;
     
-        let order = user_trade.orders[order_index];
+        let position = position_account.positions[position_index];
     
-        let is_winner = match (order.order_direction, market.winning_direction) {
-            | (OrderDirection::Yes, WinningDirection::Yes)
-            | (OrderDirection::No, WinningDirection::No) => true,
+        let is_winner = match (position.direction, market.winning_direction) {
+            | (PositionDirection::Yes, WinningDirection::Yes)
+            | (PositionDirection::No, WinningDirection::No) => true,
             _ => false,
         };
     
         let mut payout = 0;
     
         if is_winner {
-            let winning_liquidity_percentage = order.price.checked_div(market.yes_liquidity).unwrap();
-            payout = market.no_liquidity.checked_mul(winning_liquidity_percentage).unwrap() + order.price;
+            let winning_liquidity_percentage = position.amount.checked_div(market.yes_liquidity).unwrap();
+            payout = market.no_liquidity.checked_mul(winning_liquidity_percentage).unwrap() + position.amount;
         }
     
         
@@ -240,19 +237,16 @@ impl<'info> OrderContext<'info> {
                     payout,
                     self.mint.decimals
                 )?;
-            
-    
-            user_trade.total_withdraws = user_trade.total_withdraws.checked_add(payout).unwrap();
-    
+                
             msg!("Market Liquidity {:?}", self.market_vault.amount);
-            msg!("Order Price {:?}", order.price);
+            msg!("Order Price {:?}", position.amount);
             msg!("Payout {:?}", payout);
         }
     
-        user_trade.orders[order_index].order_status = OrderStatus::Closed;
-        user_trade.orders[order_index].ts = ts;
+        position_account.positions[position_index].position_status = PositionStatus::Closed;
+        position_account.positions[position_index].ts = ts;
     
-        user_trade.emit_order_event(user_trade.orders[order_index], user_nonce)?;
+        position_account.emit_position_event(position_account.positions[position_index])?;
     
         require!(ts > market.update_ts, ShortxError::ConcurrentTransaction);
     

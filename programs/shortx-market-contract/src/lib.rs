@@ -46,17 +46,13 @@ pub mod shortx_contract {
         Ok(())
     }
 
-    pub fn create_user_trade(ctx: Context<UserTradeContext>) -> Result<()> {
-        ctx.accounts.create_user_trade(&ctx.bumps)?;
+
+    pub fn create_sub_position_account(ctx: Context<SubPositionContext>, sub_position_key: Pubkey) -> Result<()> {
+        ctx.accounts.create_sub_position_account(sub_position_key, &ctx.bumps)?;
         Ok(())
     }
 
-    pub fn create_sub_user_trade(ctx: Context<SubUserTradeContext>, sub_user_key: Pubkey) -> Result<()> {
-        ctx.accounts.create_sub_user_trade(sub_user_key, &ctx.bumps)?;
-        Ok(())
-    }
-
-    pub fn create_order(ctx: Context<OrderContext>, args: OpenOrderArgs) -> Result<()> {
+    pub fn create_order(ctx: Context<OrderContext>, args: OpenPositionArgs) -> Result<()> {
         ctx.accounts.open_order(args)?;
         Ok(())
     }

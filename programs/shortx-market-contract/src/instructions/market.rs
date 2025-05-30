@@ -1,10 +1,11 @@
 use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
+    associated_token::AssociatedToken, metadata::Metadata, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
 };
+use mpl_token_metadata::{instructions::CreateV1CpiBuilder, types::{PrintSupply, TokenStandard}};
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
-use crate::{constants::{ MARKET, USDC_MINT}, constraints::{get_oracle_price, is_valid_oracle}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, UpdateMarketArgs, WinningDirection}};
+use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price, is_valid_oracle}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, UpdateMarketArgs, WinningDirection}};
 use crate::errors::ShortxError;
 
 #[derive(Accounts)]
@@ -26,7 +27,7 @@ pub struct MarketContext<'info> {
     )]
     pub oracle_pubkey: AccountInfo<'info>,
 
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         init,
@@ -36,6 +37,15 @@ pub struct MarketContext<'info> {
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
+
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + PositionAccount::INIT_SPACE,
+        seeds = [POSITION.as_bytes(), &args.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
     #[account(
         mut, 
@@ -52,9 +62,22 @@ pub struct MarketContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    /// CHECK: We create it using metaplex
+    #[account(mut)]
+    pub collection_mint: AccountInfo<'info>,
+
+    /// CHECK: We create it using metaplex
+    #[account(mut)]
+    pub collection_metadata: AccountInfo<'info>,
+
+    /// CHECK: We create it using metaplex
+    #[account(mut)]
+    pub collection_master_edition: UncheckedAccount<'info>,
+
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+    pub token_metadata_program: Program<'info, Metadata>,
 }
 
 // Create a separate context for the update_market instruction
@@ -98,7 +121,7 @@ pub struct CloseMarketContext<'info> {
     )]
     pub fee_vault: AccountInfo<'info>,
 
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         init_if_needed,
@@ -142,6 +165,7 @@ impl<'info> MarketContext<'info> {
         let market = &mut self.market;
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
+        let market_positions = &mut self.market_positions_account;
 
         // check if the oracle is valid
         require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
@@ -155,10 +179,55 @@ impl<'info> MarketContext<'info> {
             question: args.question,
             update_ts: ts,
             oracle_pubkey: self.oracle_pubkey.key(),
+            collection_mint: None,
             ..Default::default()
         });
+    
+        market_positions.set_inner(PositionAccount {
+            bump: bumps.market_positions_account,
+            authority: self.signer.key(),
+            version: 0,
+            positions: [Position::default(); 10],
+            nonce: 0,
+            market_id: args.market_id,
+            is_sub_position: false,
+        });
+    
 
         market.emit_market_event()?;
+
+        // Create collection NFT
+        let collection_name = String::from_utf8(args.question.to_vec()).unwrap();
+        
+        let token_metadata_program = self.token_metadata_program.to_account_info();
+        let collection_metadata = self.collection_metadata.to_account_info();
+        let collection_mint = self.collection_mint.to_account_info();
+        let signer_account = self.signer.to_account_info();
+        let collection_master_edition = self.collection_master_edition.to_account_info();
+        let system_program = self.system_program.to_account_info();
+        let token_program = self.token_program.to_account_info();
+
+        let mut create_collection_cpi = CreateV1CpiBuilder::new(&token_metadata_program);
+
+        create_collection_cpi
+            .metadata(&collection_metadata)
+            .mint(&collection_mint, true)
+            .authority(&signer_account)
+            .payer(&signer_account)
+            .update_authority(&signer_account, false)
+            .master_edition(Some(&collection_master_edition))
+            .system_program(&system_program)
+            .spl_token_program(Some(&token_program))
+            .token_standard(TokenStandard::NonFungible)
+            .name(collection_name)
+            .uri(args.metadata_uri)
+            .token_standard(TokenStandard::NonFungible)
+            .print_supply(PrintSupply::Zero);
+
+        create_collection_cpi.invoke()?;
+
+        // Store collection mint in market state
+        market.collection_mint = Some(self.collection_mint.key());
 
         Ok(())
     }

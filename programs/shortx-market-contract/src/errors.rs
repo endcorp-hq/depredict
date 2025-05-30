@@ -89,4 +89,7 @@ ShortxError {
 
     #[msg("Invalid market id")]
     InvalidMarketId,
+
+    #[msg("Invalid collection")]
+    InvalidCollection,
 }

@@ -15,7 +15,7 @@ pub struct MarketState {
     pub volume: u64,
     pub update_ts: i64,
     pub padding_1: [u8; 8],
-    pub next_order_id: u64,
+    pub next_position_id: u64,
     pub market_state: MarketStates,
     pub market_start: i64,
     pub market_end: i64,
@@ -23,6 +23,7 @@ pub struct MarketState {
     pub winning_direction: WinningDirection,
     pub version: u64,
     pub oracle_pubkey: Pubkey,
+    pub collection_mint: Option<Pubkey>,
     // pub pool_id: u64,
     pub padding: [u8; 72],
 }
@@ -42,6 +43,7 @@ pub struct CreateMarketArgs {
     pub question: [u8; 80],
     pub market_start: i64,
     pub market_end: i64,
+    pub metadata_uri: String,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -78,7 +80,7 @@ impl Default for MarketState {
             yes_liquidity: 0,
             no_liquidity: 0,
             update_ts: 0,
-            next_order_id: 1,
+            next_position_id: 1,
             market_state: MarketStates::Active,
             market_start: 0,
             market_end: 0,
@@ -87,6 +89,7 @@ impl Default for MarketState {
             winning_direction: WinningDirection::None,
             question: [0; 80],
             version: 0,
+            collection_mint: None,
             padding: [0; 72],
         }
     }
@@ -94,9 +97,9 @@ impl Default for MarketState {
 
 
 impl MarketState {
-    pub fn next_order_id(&mut self) -> u64 {
-        let id: u64 = self.next_order_id;
-        self.next_order_id = self.next_order_id.checked_add(1).unwrap();
+    pub fn next_position_id(&mut self) -> u64 {
+        let id: u64 = self.next_position_id;
+        self.next_position_id = self.next_position_id.checked_add(1).unwrap();
         id
     }
 
@@ -220,7 +223,7 @@ impl MarketState {
             no_liquidity: self.no_liquidity,
             volume: self.volume,
             update_ts: self.update_ts,
-            next_order_id: self.next_order_id,
+            next_position_id: self.next_position_id,
             winning_direction: self.winning_direction,
             market_start: self.market_start,
             market_end: self.market_end,

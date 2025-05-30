@@ -1,17 +1,17 @@
 
-use crate::{constants::{MAX_STALE_SLOTS, MIN_SAMPLES}, errors::ShortxError, UserTrade};
+use crate::{constants::{MAX_STALE_SLOTS, MIN_SAMPLES}, errors::ShortxError};
 
 
 use anchor_lang::prelude::*;
 use switchboard_on_demand::{prelude::rust_decimal::Decimal, PullFeedAccountData};
 
 
-pub fn is_authority_for_user_trade(
-    user_trade: &Account<UserTrade>,
-    signer: &Signer
-) -> anchor_lang::Result<bool> {
-    Ok(user_trade.authority.eq(signer.key))
-}
+// pub fn is_authority_for_user_trade(
+//     user_trade: &Account<UserTrade>,
+//     signer: &Signer
+// ) -> anchor_lang::Result<bool> {
+//     Ok(user_trade.authority.eq(signer.key))
+// }
 
 pub fn get_oracle_price(oracle_account: &AccountInfo) -> anchor_lang::Result<Decimal> {
     let account_data = oracle_account.try_borrow_data()
