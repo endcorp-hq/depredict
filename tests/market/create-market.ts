@@ -31,6 +31,14 @@ describe("shortx-contract", () => {
   let localMintPubkey: PublicKey;
 
   before(async () => {
+    // Request airdrop for admin if needed
+    const balance = await provider.connection.getBalance(admin.publicKey);
+    if (balance < 1_000_000_000) { // Less than 1 SOL
+      console.log("Requesting airdrop for admin...");
+      const signature = await provider.connection.requestAirdrop(admin.publicKey, 2_000_000_000); // 2 SOL
+      await provider.connection.confirmTransaction(signature);
+    }
+
     localMintPubkey = localMint.publicKey;
     console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
 
@@ -113,7 +121,9 @@ describe("shortx-contract", () => {
           marketStart.toNumber() * 1000
         ).toISOString()})`
       );
-      const marketId = new anchor.BN(6);
+      // Generate a random market ID
+      const marketId = new anchor.BN(Math.floor(Math.random() * 1000000));
+      console.log("Using market ID:", marketId.toString());
       const question = Array.from(Buffer.from("Will BTC reach $100k in 2024?"));
 
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -133,28 +143,91 @@ describe("shortx-contract", () => {
 
       console.log("Config PDA:", configPda.toString());
 
-      await program.methods
-        .createMarket({
-          marketId,
-          question,
-          marketStart,
-          marketEnd,
-        })
-        .accountsPartial({
-          signer: admin.publicKey,
-          feeVault: feeVault.publicKey,
-          market: marketPda,
-          usdcMint: localMintPubkey,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          config: configPda,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .signers([admin])
-        .rpc({
-          skipPreflight: true,
-          commitment: "confirmed",
-        });
+      // Use devnet oracle for testing
+      const oraclePubkey = new PublicKey("CYkBEhDgvVHutGKXafAg1gki92SGWDT4MnCxX8KLed6i");
+
+      const [collectionPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("collection")],
+        program.programId
+      );
+      console.log("Collection PDA:", collectionPda.toString());
+
+      // Create a new keypair for the collection mint
+      const collectionMintKeypair = Keypair.generate();
+      console.log("Collection Mint:", collectionMintKeypair.publicKey.toString());
+
+      // Initialize the collection mint using SPL Token program
+      await createMint(
+        provider.connection,
+        admin, // Payer
+        admin.publicKey, // Mint Authority
+        admin.publicKey, // Freeze Authority (optional)
+        0, // Decimals (NFTs have 0 decimals)
+        collectionMintKeypair // Mint Keypair
+      );
+      console.log("Created collection mint account");
+
+      const [collectionMetadataPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("metadata"),
+          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+          collectionMintKeypair.publicKey.toBuffer(),
+        ],
+        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+      );
+      console.log("Collection Metadata PDA:", collectionMetadataPda.toString());
+
+      const [collectionMasterEditionPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("metadata"),
+          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+          collectionMintKeypair.publicKey.toBuffer(),
+          Buffer.from("edition"),
+        ],
+        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+      );
+      console.log("Collection Master Edition PDA:", collectionMasterEditionPda.toString());
+
+      // Create metadata URI for the collection
+      const metadataUri = "https://arweave.net/your-metadata-uri"; // Replace with your actual metadata URI
+
+      try {
+        const tx = await program.methods
+          .createMarket({
+            marketId,
+            question,
+            marketStart,
+            marketEnd,
+            metadataUri
+          })
+          .accountsPartial({
+            signer: admin.publicKey,
+            feeVault: feeVault.publicKey,
+            market: marketPda,
+            oraclePubkey: oraclePubkey,
+            usdcMint: localMintPubkey,
+            collectionMint: collectionMintKeypair.publicKey,
+            collectionMetadata: collectionMetadataPda,
+            collectionMasterEdition: collectionMasterEditionPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            config: configPda,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
+            tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+          })
+          .signers([admin])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        console.log("Transaction signature:", tx);
+      } catch (error) {
+        console.error("Full error:", error);
+        if (error.logs) {
+          console.error("Program logs:", error.logs);
+        }
+        throw error;
+      }
 
       const marketAccount = await program.account.marketState.fetch(marketPda);
       console.log("Market Account:", marketAccount);

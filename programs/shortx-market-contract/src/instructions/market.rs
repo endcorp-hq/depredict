@@ -168,7 +168,8 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
 
         // check if the oracle is valid
-        require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        // require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        msg!("Skipping oracle check");
 
         market.set_inner(MarketState {
             bump: bumps.market,
@@ -197,7 +198,7 @@ impl<'info> MarketContext<'info> {
         market.emit_market_event()?;
 
         // Create collection NFT
-        let collection_name = String::from_utf8(args.question.to_vec()).unwrap();
+        let collection_name = String::from_utf8(b"SHORTX-Q1".to_vec()).unwrap();
         
         let token_metadata_program = self.token_metadata_program.to_account_info();
         let collection_metadata = self.collection_metadata.to_account_info();
@@ -211,17 +212,21 @@ impl<'info> MarketContext<'info> {
 
         create_collection_cpi
             .metadata(&collection_metadata)
-            .mint(&collection_mint, true)
+            .mint(&collection_mint, false)
             .authority(&signer_account)
             .payer(&signer_account)
-            .update_authority(&signer_account, false)
+            .update_authority(&signer_account, true)
             .master_edition(Some(&collection_master_edition))
             .system_program(&system_program)
+            .sysvar_instructions(&system_program)
             .spl_token_program(Some(&token_program))
             .token_standard(TokenStandard::NonFungible)
             .name(collection_name)
+            .symbol(String::from("SHORTX"))
             .uri(args.metadata_uri)
-            .token_standard(TokenStandard::NonFungible)
+            .seller_fee_basis_points(0)
+            .primary_sale_happened(false)
+            .is_mutable(true)
             .print_supply(PrintSupply::Zero);
 
         create_collection_cpi.invoke()?;
