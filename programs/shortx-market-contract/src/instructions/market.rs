@@ -210,6 +210,14 @@ impl<'info> MarketContext<'info> {
         let system_program = self.system_program.to_account_info();
         let token_program = self.token_program.to_account_info();
 
+        let market_id = market.market_id;
+        let market_bump = market.bump;
+        let market_signer: &[&[&[u8]]] = &[&[
+            MARKET.as_bytes(),
+            &market_id.to_le_bytes(),
+            &[market_bump]
+        ]];
+
         let mut create_collection_cpi = CreateV1CpiBuilder::new(&token_metadata_program);
 
         create_collection_cpi
@@ -231,7 +239,7 @@ impl<'info> MarketContext<'info> {
             .is_mutable(true)
             .print_supply(PrintSupply::Zero);
 
-        create_collection_cpi.invoke()?;
+        create_collection_cpi.invoke_signed(market_signer)?;
 
         // Store collection mint in market state
         market.collection_mint = Some(self.collection_mint.key());
@@ -305,9 +313,12 @@ impl<'info> CloseMarketContext<'info> {
         let market_id = self.market.market_id;
         require!(market_id == args.market_id, ShortxError::InvalidMarketId);
 
-        let market_id_bytes = args.market_id.to_le_bytes();
-        let seeds = &[MARKET.as_bytes(), &market_id_bytes, &[self.market.bump]];
-        let signer_seeds = &[&seeds[..]];
+        let market_bump = self.market.bump;
+        let market_signer: &[&[&[u8]]] = &[&[
+            MARKET.as_bytes(),
+            &market_id.to_le_bytes(),
+            &[market_bump]
+        ]];
 
         // 1. Transfer remaining token liquidity (if any) from market vault to fee vault ATA
         if self.market_vault.amount > 0 {
@@ -321,7 +332,7 @@ impl<'info> CloseMarketContext<'info> {
                         authority: self.market.to_account_info(), // Market PDA is authority
                         mint: self.usdc_mint.to_account_info(),
                     },
-                    signer_seeds,
+                    market_signer,
                 ),
                 self.market_vault.amount,
                 self.usdc_mint.decimals,
@@ -338,7 +349,7 @@ impl<'info> CloseMarketContext<'info> {
                     destination: self.fee_vault.to_account_info(), // Lamport destination
                     authority: self.market.to_account_info(), // Market PDA is authority
                 },
-                signer_seeds
+                market_signer
             )
         )?;
 
