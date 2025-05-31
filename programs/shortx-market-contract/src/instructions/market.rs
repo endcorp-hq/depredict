@@ -197,6 +197,8 @@ impl<'info> MarketContext<'info> {
 
         market.emit_market_event()?;
 
+        msg!("Creating collection NFT");
+
         // Create collection NFT
         let collection_name = String::from_utf8(b"SHORTX-Q1".to_vec()).unwrap();
         

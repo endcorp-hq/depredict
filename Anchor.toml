@@ -6,13 +6,13 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-shortx_market_contract = "shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ"
+shortx_market_contract = "BWbCJnhhafrC69hCdFTqj7L7yJtjP9is6Lykzaq7euaV"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
@@ -24,3 +24,5 @@ test-create-user = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/c
 test-order-flow = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/order-flow.ts"
 test-update-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/update-market.ts"
 test-user-trade = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user-trade.ts"
+test-create-order = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/create-order.ts"
+test-mint-pos = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/mint-existing-position.ts"

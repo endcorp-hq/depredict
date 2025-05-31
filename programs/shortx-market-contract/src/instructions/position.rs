@@ -1,18 +1,14 @@
 use crate::{
     constants::POSITION,
     errors::ShortxError,
-    state::{MarketState, MintPositionArgs, Position, PositionAccount, PositionStatus},
+    state::{ MarketState, MintPositionArgs, Position, PositionAccount, PositionStatus},
 };
 use anchor_lang::prelude::*;
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token_2022::Token2022,
-};
-use anchor_spl::{
-    metadata::{mpl_token_metadata, Metadata},
-};
+use anchor_spl::metadata::{mpl_token_metadata, Metadata};
+use anchor_spl::{associated_token::AssociatedToken, token_2022::Token2022};
 use mpl_token_metadata::{
-     instructions::CreateV1CpiBuilder, types::{Collection, PrintSupply, TokenStandard}
+    instructions::CreateV1CpiBuilder,
+    types::{Collection, PrintSupply, TokenStandard},
 };
 
 use mpl_token_metadata::instructions::MintV1CpiBuilder;
@@ -36,9 +32,9 @@ pub struct MintPositionContext<'info> {
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
-    /// CHECK: We create it using metaplex
+    /// CHECK: mint needs to be a signer to create the NFT
     #[account(mut)]
-    pub nft_mint: AccountInfo<'info>,
+    pub nft_mint: Signer<'info>,
 
     /// CHECK: We create it using anchor-spl
     #[account(mut)]
@@ -133,14 +129,13 @@ impl<'info> MintPositionContext<'info> {
             .ok_or(ShortxError::OrderNotFound)?;
 
         let mut position = position_account.positions[position_index];
-
         // Update position state
         position.is_nft = true;
         position.mint = Some(self.nft_mint.key());
         position.authority = None;
 
-        let nft_name = String::from_utf8(self.market.question.to_vec()).unwrap();
-
+        let nft_name = format!("SHORTX - {}", self.market.market_id);
+        msg!("psoition accounts modified");
         //Mint NFT operations
 
         let token_metadata_program = self.token_metadata_program.to_account_info();
@@ -152,32 +147,55 @@ impl<'info> MintPositionContext<'info> {
         let token_program = self.token_program.to_account_info();
         let nft_token_account = self.nft_token_account.to_account_info();
         let associated_token_program = self.associated_token_program.to_account_info();
-        let market = self.market.to_account_info();
 
         // Get collection mint from market
-        let collection_mint = self.market.collection_mint.ok_or(ShortxError::InvalidCollection)?;
+        let collection_mint = self
+            .market
+            .collection_mint
+            .ok_or(ShortxError::InvalidCollection)?;
 
         let mut create_cpi = CreateV1CpiBuilder::new(&token_metadata_program);
 
-        create_cpi.metadata(&metadata_account)
+        create_cpi
+            .metadata(&metadata_account)
             .mint(&mint_account, true)
-            .authority(&market)
+            .authority(&signer_account)
             .payer(&signer_account)
-            .update_authority(&market, false)
+            .update_authority(&signer_account, true)
             .master_edition(Some(&master_edition_account))
             .system_program(&system_program)
             .spl_token_program(Some(&token_program))
             .token_standard(TokenStandard::NonFungible)
             .name(nft_name)
+            .seller_fee_basis_points(0)
+            .sysvar_instructions(&system_program)
             .uri(args.metadata_uri)
+            .is_mutable(false)
             .collection(Collection {
-                verified: true,
+                verified: false, //cannot set true in the same instruction
                 key: collection_mint,
             })
             .token_standard(TokenStandard::NonFungible)
             .print_supply(PrintSupply::Zero);
 
         create_cpi.invoke()?;
+        msg!("NFT created");
+
+        // let mut update_cpi = UpdateV1CpiBuilder::new(&token_metadata_program);
+
+        // update_cpi.metadata(&metadata_account)
+        // .mint(&mint_account)
+        // .authority(&signer_account)
+        // .payer(&signer_account)
+        // .system_program(&system_program)
+        // .sysvar_instructions(&system_program)
+        // .is_mutable(false)
+        // .primary_sale_happened(false)
+        // .collection(CollectionToggle::Set(Collection { verified: true, key: collection_mint }));
+
+        // update_cpi.invoke()?;
+
+        // msg!("Updated NFT to collection");
 
         let mut mint_cpi = MintV1CpiBuilder::new(&token_metadata_program);
 
@@ -188,14 +206,16 @@ impl<'info> MintPositionContext<'info> {
             .master_edition(Some(&master_edition_account))
             .mint(&mint_account)
             .payer(&signer_account)
-            .authority(&market)
+            .authority(&signer_account)
             .system_program(&system_program)
             .spl_token_program(&token_program)
             .spl_ata_program(&associated_token_program)
+            .sysvar_instructions(&system_program)
             .amount(1);
 
         mint_cpi.invoke()?;
 
+        msg!("Minted NFT");
         Ok(())
     }
 }

@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("3AhNo8g3CQ5EdLjYurtAodG7Zrbkv3aj94L1yiw8m9s6");
+declare_id!("BWbCJnhhafrC69hCdFTqj7L7yJtjP9is6Lykzaq7euaV");
 
 #[program]
 pub mod shortx_contract {
@@ -60,6 +60,11 @@ pub mod shortx_contract {
 
     pub fn settle_order(ctx: Context<OrderContext>, order_id: u64) -> Result<()> {
         ctx.accounts.payout_order(order_id)?;
+        Ok(())
+    }
+
+    pub fn mint_position(ctx: Context<MintPositionContext>, args: MintPositionArgs) -> Result<()> {
+        ctx.accounts.mint_position(args)?;
         Ok(())
     }
 }
