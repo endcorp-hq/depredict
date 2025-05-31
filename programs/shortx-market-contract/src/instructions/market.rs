@@ -212,17 +212,21 @@ impl<'info> MarketContext<'info> {
 
         create_collection_cpi
             .metadata(&collection_metadata)
-            .mint(&collection_mint, true)
+            .mint(&collection_mint, false)
             .authority(&signer_account)
             .payer(&signer_account)
-            .update_authority(&signer_account, false)
+            .update_authority(&signer_account, true)
             .master_edition(Some(&collection_master_edition))
             .system_program(&system_program)
+            .sysvar_instructions(&system_program)
             .spl_token_program(Some(&token_program))
             .token_standard(TokenStandard::NonFungible)
             .name(collection_name)
+            .symbol(String::from("SHORTX"))
             .uri(args.metadata_uri)
-            .token_standard(TokenStandard::NonFungible)
+            .seller_fee_basis_points(0)
+            .primary_sale_happened(false)
+            .is_mutable(true)
             .print_supply(PrintSupply::Zero);
 
         create_collection_cpi.invoke()?;
