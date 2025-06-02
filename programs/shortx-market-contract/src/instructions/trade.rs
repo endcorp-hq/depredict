@@ -102,12 +102,17 @@ impl<'info> OrderContext<'info> {
             .unwrap();
         msg!("markets liquidity {:?}", markets_liquidity);
         
+        // Add debug logging for positions
+        msg!("Checking position slots:");
+        for (i, pos) in position_account.positions.iter().enumerate() {
+            msg!("Position {}: status = {:?}", i, pos.position_status);
+        }
     
         let position_index = position_account.positions
             .iter()
             .position(
                 |order|
-                    order.position_status != PositionStatus::Open
+                    order.position_status == PositionStatus::Init
             )
             .ok_or(ShortxError::NoAvailableOrderSlot)?;
     

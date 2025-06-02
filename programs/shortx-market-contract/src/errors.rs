@@ -95,4 +95,7 @@ ShortxError {
 
     #[msg("Invalid collection mint")]
     InvalidCollectionMint,
+
+    #[msg("Invalid collection authority")]
+    InvalidAuthority,
 }

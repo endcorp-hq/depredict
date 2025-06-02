@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey, Keypair, Transaction, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -10,6 +10,7 @@ import {
   mintTo,
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
@@ -35,6 +36,9 @@ describe("shortx-contract", () => {
     Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
   );
 
+  // Use the same admin keypair that created the market
+  const marketAuthority = admin;
+
   before(async () => {
     // Get network configuration
     const { isDevnet, connectionUrl } = await getNetworkConfig();
@@ -59,7 +63,7 @@ describe("shortx-contract", () => {
   describe("Trade", () => {
     it("Mints an NFT for an existing position", async () => {
       // Use the same market ID as in create-order.ts
-      const marketId = new anchor.BN(579963);
+      const marketId = new anchor.BN(374517); // Using market ID 
       
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -108,16 +112,32 @@ describe("shortx-contract", () => {
       );
       console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
 
-      const [nftTokenAccountAddress] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("token"),
-          new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").toBuffer(),
-          nftMintKeypair.publicKey.toBuffer(),
-          user.publicKey.toBuffer(),
-        ],
-        new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+      // Create the NFT token account using ATA program
+      console.log("Creating NFT token account...");
+      const nftTokenAccount = await getAssociatedTokenAddressSync(
+        nftMintKeypair.publicKey,
+        admin.publicKey,  // Create token account for admin since they own the position
+        true, // allowOwnerOffCurve
+        TOKEN_2022_PROGRAM_ID
       );
-      console.log("NFT Token Account address:", nftTokenAccountAddress.toString());
+      console.log("NFT Token Account:", nftTokenAccount.toString());
+
+      // Create the token account if it doesn't exist
+      try {
+        await provider.connection.getAccountInfo(nftTokenAccount);
+      } catch (error) {
+        const createAtaIx = createAssociatedTokenAccountInstruction(
+          admin.publicKey, // payer - admin pays for the account creation
+          nftTokenAccount, // ata
+          admin.publicKey, // owner - admin owns the token account
+          nftMintKeypair.publicKey, // mint
+          TOKEN_2022_PROGRAM_ID
+        );
+        
+        const tx = new Transaction().add(createAtaIx);
+        await provider.sendAndConfirm(tx, [admin]);  // Admin signs for account creation
+        console.log("Created new token account");
+      }
 
       // Get the position ID from the position account
       const positionAccount = await program.account.positionAccount.fetch(positionAccountPda);
@@ -132,25 +152,84 @@ describe("shortx-contract", () => {
       const metadataUri = "https://arweave.net/your-metadata-uri"; // Replace with your actual metadata URI
 
       try {
+        // Get the market account to access collection details
+        const marketAccount = await program.account.marketState.fetch(marketPda);
+        console.log("\n=== Market State Details ===");
+        console.log("Market ID:", marketAccount.marketId.toString());
+        console.log("Market Authority:", marketAccount.authority.toString());
+        console.log("Market Authority Wallet:", marketAuthority.publicKey.toString());
+        console.log("Collection Mint:", marketAccount.collectionMint?.toString());
+        console.log("Collection Metadata:", marketAccount.collectionMetadata?.toString());
+        console.log("Collection Master Edition:", marketAccount.collectionMasterEdition?.toString());
+        console.log("Market Vault:", marketAccount.marketVault?.toString());
+        console.log("=== End Market State Details ===\n");
+
+        // Define account roles clearly
+        const accounts = {
+            // The position owner who is minting the NFT (using admin since they own the position)
+            signer: admin.publicKey,  // This account will:
+            // 1. Pay for the NFT creation
+            // 2. Own the NFT
+            // 3. Be the authority for minting
+            
+            // Market accounts
+            market: marketPda,  // The market PDA that contains collection info
+            marketPositionsAccount: positionAccountPda,  // The position account PDA for this market
+            
+            // NFT accounts
+            nftMint: nftMintKeypair.publicKey,  // The new NFT mint being created
+            nftTokenAccount: nftTokenAccount,  // The token account that will hold the NFT (owned by admin)
+            metadataAccount: nftMetadataPda,  // The metadata account for the NFT
+            masterEdition: nftMasterEditionPda,  // The master edition account for the NFT
+            
+            // Collection accounts
+            collectionMint: marketAccount.collectionMint,
+            collectionMetadata: marketAccount.collectionMetadata,
+            collectionMasterEdition: marketAccount.collectionMasterEdition,
+            collectionAuthority: admin.publicKey,
+            
+            // Program accounts
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
+            sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        };
+
+        // Verify account relationships before transaction
+        console.log("\n=== Verifying Account Relationships ===");
+        console.log("1. Market Authority Check:");
+        console.log("   Market Authority in State:", marketAccount.authority.toString());
+        console.log("   Collection Authority:", accounts.collectionAuthority.toString());
+        assert.ok(
+            marketAccount.authority.equals(accounts.collectionAuthority),
+            "Market authority must match collection authority"
+        );
+
+        console.log("\n2. Position Owner Check:");
+        console.log("   Position Account Authority:", positionAccount.authority.toString());
+        console.log("   Signer (Position Owner):", accounts.signer.toString());
+        assert.ok(
+            positionAccount.authority.equals(accounts.signer),
+            "Position account authority must match signer"
+        );
+
+        console.log("\n3. Collection Accounts Check:");
+        console.log("   Collection Mint:", accounts.collectionMint?.toString());
+        console.log("   Collection Metadata:", accounts.collectionMetadata?.toString());
+        console.log("   Collection Master Edition:", accounts.collectionMasterEdition?.toString());
+        console.log("=== End Account Verification ===\n");
+        
         const tx = await program.methods
           .mintPosition({
             positionId,
             metadataUri,
           })
-          .accountsPartial({
-            signer: user.publicKey,
-            market: marketPda,
-            marketPositionsAccount: positionAccountPda,
-            nftMint: nftMintKeypair.publicKey,
-            nftTokenAccount: nftTokenAccountAddress,
-            metadataAccount: nftMetadataPda,
-            masterEdition: nftMasterEditionPda,
-            tokenProgram: TOKEN_2022_PROGRAM_ID,
-            tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: anchor.web3.SystemProgram.programId,
-          })
-          .signers([user, nftMintKeypair])
+          .accountsPartial(accounts)
+          .preInstructions([
+            anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })
+          ])
+          .signers([admin, nftMintKeypair])  // Signers: market authority (position owner), NFT mint
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
@@ -160,9 +239,27 @@ describe("shortx-contract", () => {
 
         console.log("NFT minting transaction signature:", tx);
 
+        // Wait for confirmation
+        await provider.connection.confirmTransaction(tx);
+
         // Verify the position was updated to be an NFT
         const updatedPositionAccount = await program.account.positionAccount.fetch(positionAccountPda);
-        const updatedPosition = updatedPositionAccount.positions.find(p => p.positionId === positionId);
+        console.log("Updated position account:", {
+          positions: updatedPositionAccount.positions.map(p => ({
+            positionId: p.positionId.toString(),
+            isNft: p.isNft,
+            mint: p.mint?.toString()
+          }))
+        });
+        
+        const updatedPosition = updatedPositionAccount.positions.find(p => 
+          p.positionId.eq(positionId)
+        );
+        
+        if (!updatedPosition) {
+          throw new Error("Could not find updated position");
+        }
+
         assert.ok(updatedPosition.isNft, "Position should be marked as NFT");
         assert.ok(updatedPosition.mint.equals(nftMintKeypair.publicKey), "Position should have the correct NFT mint");
 
