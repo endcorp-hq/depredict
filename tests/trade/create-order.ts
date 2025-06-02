@@ -9,7 +9,7 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
-import { getUsdcMint } from "../helpers";
+import { getUsdcMint, getNetworkConfig } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
@@ -30,6 +30,10 @@ describe("shortx-contract", () => {
   let usdcMint: PublicKey;
   
   before(async () => {
+    // Get network configuration
+    const { isDevnet, connectionUrl } = await getNetworkConfig();
+    console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
+
     // Devnet USDC mint address
     const { mint } = await getUsdcMint();
     usdcMint = mint;
@@ -70,7 +74,9 @@ describe("shortx-contract", () => {
     );
 
     // Note: You'll need to get USDC from the faucet: https://spl-token-faucet.com/?token-name=USDC
-    console.log("Please ensure you have USDC in your wallet from the faucet");
+    if (isDevnet) {
+      console.log("Please ensure you have USDC in your wallet from the faucet");
+    }
   });
 
   describe("Trade", () => {
@@ -239,7 +245,12 @@ describe("shortx-contract", () => {
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([user])
-          .rpc( { commitment: "confirmed" } );
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+            maxRetries: 3,
+            preflightCommitment: "confirmed"
+          });
 
         console.log("Order creation transaction signature:", tx);
 

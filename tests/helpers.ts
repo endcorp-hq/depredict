@@ -6,6 +6,23 @@ import * as anchor from "@coral-xyz/anchor";
 const DEVNET_USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 
 /**
+ * Gets the network configuration and connection URL based on Anchor.toml
+ * @returns {Promise<{isDevnet: boolean, connectionUrl: string}>} Network configuration
+ */
+export async function getNetworkConfig(): Promise<{ isDevnet: boolean; connectionUrl: string }> {
+  const provider = anchor.AnchorProvider.env();
+  const isDevnet = provider.connection.rpcEndpoint.includes("devnet");
+  const connectionUrl = isDevnet 
+    ? "https://api.devnet.solana.com"
+    : "http://localhost:8899";
+
+  console.log(`Using ${isDevnet ? "devnet" : "localnet"} configuration`);
+  console.log(`Connection URL: ${connectionUrl}`);
+
+  return { isDevnet, connectionUrl };
+}
+
+/**
  * Gets the appropriate USDC mint based on the environment
  * @returns {Promise<{mint: PublicKey, keypair?: Keypair}>} The USDC mint public key and optional keypair for local testing
  */

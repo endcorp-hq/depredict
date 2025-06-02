@@ -13,6 +13,7 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
+import { getNetworkConfig } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
@@ -34,77 +35,26 @@ describe("shortx-contract", () => {
     Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
   );
 
-  // let localMintPubkey: PublicKey;
+  before(async () => {
+    // Get network configuration
+    const { isDevnet, connectionUrl } = await getNetworkConfig();
+    console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
 
-  // before(async () => {
-  //   // Request airdrop for admin and user if needed
-  //   const balance = await provider.connection.getBalance(admin.publicKey);
-  //   if (balance < 1_000_000_000) { // Less than 1 SOL
-  //     console.log("Requesting airdrop for admin...");
-  //     const signature = await provider.connection.requestAirdrop(admin.publicKey, 2_000_000_000); // 2 SOL
-  //     await provider.connection.confirmTransaction(signature);
-  //   }
+    // Request airdrop for admin and user if needed
+    const balance = await provider.connection.getBalance(admin.publicKey);
+    if (balance < 1_000_000_000) { // Less than 1 SOL
+      console.log("Requesting airdrop for admin...");
+      const signature = await provider.connection.requestAirdrop(admin.publicKey, 2_000_000_000); // 2 SOL
+      await provider.connection.confirmTransaction(signature);
+    }
 
-  //   const userBalance = await provider.connection.getBalance(user.publicKey);
-  //   if (userBalance < 1_000_000_000) {
-  //     console.log("Requesting airdrop for user...");
-  //     const signature = await provider.connection.requestAirdrop(user.publicKey, 2_000_000_000);
-  //     await provider.connection.confirmTransaction(signature);
-  //   }
-
-  //   localMintPubkey = localMint.publicKey;
-  //   console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
-
-  //   try {
-  //     await createMint(
-  //       provider.connection,
-  //       admin, // Payer
-  //       admin.publicKey, // Mint Authority
-  //       null, // Freeze Authority (optional)
-  //       6, // Decimals (like USDC)
-  //       localMint // Mint Keypair
-  //     );
-  //     console.log(
-  //       `Initialized mint account ${localMintPubkey.toString()} on-chain.`
-  //     );
-  //   } catch (error) {
-  //     // Log error if mint already exists
-  //     if (error.message.includes("already in use")) {
-  //       console.log(
-  //         `Mint account ${localMintPubkey.toString()} already exists.`
-  //       );
-  //     } else {
-  //       throw error;
-  //     }
-  //   }
-
-  //   try {
-  //     const userTokenAccount = (
-  //       await getOrCreateAssociatedTokenAccount(
-  //         provider.connection,
-  //         user, // Payer
-  //         localMintPubkey,
-  //         user.publicKey
-  //       )
-  //     ).address;
-  //     console.log(
-  //       `User ATA (${localMintPubkey.toString()}): ${userTokenAccount.toString()}`
-  //     );
-
-  //     const mintAmount = new anchor.BN(1_000_000 * 10 ** 6); // 1 Million tokens with 6 decimals
-  //     await mintTo(
-  //       provider.connection,
-  //       admin, // Payer
-  //       localMintPubkey,
-  //       userTokenAccount,
-  //       admin.publicKey, // Mint Authority
-  //       mintAmount.toNumber()
-  //     );
-  //     console.log(`Minted ${mintAmount.toString()} tokens to user ATA`);
-  //   } catch (error) {
-  //     console.error("Error minting tokens:", error);
-  //   }
-  // });
+    const userBalance = await provider.connection.getBalance(user.publicKey);
+    if (userBalance < 1_000_000_000) {
+      console.log("Requesting airdrop for user...");
+      const signature = await provider.connection.requestAirdrop(user.publicKey, 2_000_000_000);
+      await provider.connection.confirmTransaction(signature);
+    }
+  });
 
   describe("Trade", () => {
     it("Mints an NFT for an existing position", async () => {
@@ -134,7 +84,6 @@ describe("shortx-contract", () => {
       const nftMintKeypair = Keypair.generate();
       
       console.log("NFT Mint:", nftMintKeypair.publicKey.toString());
-
 
       // Get the NFT metadata PDA
       const [nftMetadataPda] = PublicKey.findProgramAddressSync(
@@ -200,11 +149,13 @@ describe("shortx-contract", () => {
             tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
-            sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
           })
           .signers([user, nftMintKeypair])
           .rpc({
-            skipPreflight: true,
+            skipPreflight: false,
+            commitment: "confirmed",
+            maxRetries: 3,
+            preflightCommitment: "confirmed"
           });
 
         console.log("NFT minting transaction signature:", tx);

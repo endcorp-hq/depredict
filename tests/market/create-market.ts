@@ -11,7 +11,7 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
-import { getUsdcMint } from "../helpers";
+import { getUsdcMint, getNetworkConfig } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
@@ -29,7 +29,11 @@ describe("shortx-contract", () => {
   let collectionMintKeypair: Keypair;
 
   before(async () => {
-    const { mint, keypair } = await getUsdcMint();
+    // Get network configuration
+    const { isDevnet, connectionUrl } = await getNetworkConfig();
+    console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
+
+    const { mint } = await getUsdcMint();
     usdcMint = mint;
     collectionMintKeypair = Keypair.generate();
   });
@@ -218,6 +222,8 @@ describe("shortx-contract", () => {
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
+            maxRetries: 3,
+            preflightCommitment: "confirmed"
           });
         console.log("Transaction signature:", tx);
       } catch (error) {
