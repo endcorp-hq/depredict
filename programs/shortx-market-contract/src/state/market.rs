@@ -8,12 +8,17 @@ use crate::{
 #[derive(InitSpace)]
 pub struct MarketState {
     pub bump: u8,
-    pub authority: Pubkey,
     pub market_id: u64,
+    pub authority: Pubkey,
+    pub oracle_pubkey: Option<Pubkey>,
+    pub collection_mint: Option<Pubkey>,
+    pub collection_metadata: Option<Pubkey>,
+    pub collection_master_edition: Option<Pubkey>,
+    pub market_vault: Option<Pubkey>,
     pub yes_liquidity: u64,
     pub no_liquidity: u64,
     pub volume: u64,
-    pub update_ts: i64,
+    pub update_ts: i64, // TODO: Rename this
     pub padding_1: [u8; 8],
     pub next_position_id: u64,
     pub market_state: MarketStates,
@@ -22,13 +27,11 @@ pub struct MarketState {
     pub question: [u8; 80],
     pub winning_direction: WinningDirection,
     pub version: u64,
-    pub oracle_pubkey: Pubkey,
-    pub collection_mint: Option<Pubkey>,
     // pub pool_id: u64,
     pub padding: [u8; 72],
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[derive(InitSpace)]
 pub enum WinningDirection {
     None,
@@ -37,7 +40,7 @@ pub enum WinningDirection {
     Draw,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct CreateMarketArgs {
     pub market_id: u64,
     pub question: [u8; 80],
@@ -57,7 +60,7 @@ pub struct CloseMarketArgs {
     pub market_id: u64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, PartialEq)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, PartialEq, Eq, Debug)]
 pub enum MarketStates {
     //market is active and can be voted on by users
     Active,
@@ -75,7 +78,11 @@ impl Default for MarketState {
         Self {
             bump: 0,
             authority: Pubkey::default(),
-            oracle_pubkey: Pubkey::default(),
+            oracle_pubkey: None,
+            collection_mint: None,
+            collection_metadata: None,
+            collection_master_edition: None,
+            market_vault: None,
             market_id: 0,
             yes_liquidity: 0,
             no_liquidity: 0,
@@ -89,7 +96,6 @@ impl Default for MarketState {
             winning_direction: WinningDirection::None,
             question: [0; 80],
             version: 0,
-            collection_mint: None,
             padding: [0; 72],
         }
     }

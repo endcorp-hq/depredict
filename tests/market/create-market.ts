@@ -11,6 +11,7 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
+import { getUsdcMint } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
@@ -24,11 +25,14 @@ describe("shortx-contract", () => {
     Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
   );
 
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
+  let usdcMint: PublicKey;
+  let collectionMintKeypair: Keypair;
 
-  let localMintPubkey: PublicKey;
+  before(async () => {
+    const { mint, keypair } = await getUsdcMint();
+    usdcMint = mint;
+    collectionMintKeypair = Keypair.generate();
+  });
 
   before(async () => {
     // Request airdrop for admin if needed
@@ -39,26 +43,23 @@ describe("shortx-contract", () => {
       await provider.connection.confirmTransaction(signature);
     }
 
-    localMintPubkey = localMint.publicKey;
-    console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
-
     try {
       await createMint(
         provider.connection,
         admin, // Payer
         admin.publicKey, // Mint Authority
-        null, // Freeze Authority (optional)
-        6, // Decimals (like USDC)
-        localMint // Mint Keypair
+        admin.publicKey, // Freeze Authority (optional)
+        0, // Decimals
+        collectionMintKeypair // Mint Keypair
       );
       console.log(
-        `Initialized mint account ${localMintPubkey.toString()} on-chain.`
+        `Initialized mint account ${usdcMint.toString()} on-chain.`
       );
     } catch (error) {
       // Log error if mint already exists (might happen in specific test setups, though unlikely with anchor test)
       if (error.message.includes("already in use")) {
         console.log(
-          `Mint account ${localMintPubkey.toString()} already exists.`
+          `Mint account ${usdcMint.toString()} already exists.`
         );
       } else {
         throw error; // Re-throw other errors
@@ -69,30 +70,28 @@ describe("shortx-contract", () => {
         await getOrCreateAssociatedTokenAccount(
           provider.connection,
           admin, // Payer
-          localMintPubkey,
+          collectionMintKeypair.publicKey,
           admin.publicKey
         )
       ).address;
       console.log(
-        `Admin ATA (${localMintPubkey.toString()}): ${adminTokenAccount.toString()}`
+        `Admin ATA (${collectionMintKeypair.publicKey.toString()}): ${adminTokenAccount.toString()}`
       );
 
       const mintAmount = new anchor.BN(1_000_000 * 10 ** 6); // 1 Million tokens with 6 decimals
       await mintTo(
         provider.connection,
         admin, // Payer
-        localMintPubkey,
+        collectionMintKeypair.publicKey,
         adminTokenAccount,
         admin.publicKey, // Mint Authority
-        mintAmount.toNumber() // Amount (beware of JS number limits for large amounts)
+        mintAmount.toNumber() 
       );
       console.log(`Minted ${mintAmount.toString()} tokens to admin ATA`);
     } catch (error) {
       console.error("Error minting tokens:", error);
     }
   });
-
-
 
   describe("Market", () => {
     
@@ -205,7 +204,7 @@ describe("shortx-contract", () => {
             feeVault: feeVault.publicKey,
             market: marketPda,
             oraclePubkey: oraclePubkey,
-            usdcMint: localMintPubkey,
+            usdcMint: usdcMint,
             collectionMint: collectionMintKeypair.publicKey,
             collectionMetadata: collectionMetadataPda,
             collectionMasterEdition: collectionMasterEditionPda,
@@ -230,7 +229,21 @@ describe("shortx-contract", () => {
       }
 
       const marketAccount = await program.account.marketState.fetch(marketPda);
-      console.log("Market Account:", marketAccount);
+      console.log("\n=== Market State Details ===");
+      console.log("Market ID:", marketAccount.marketId.toString());
+      console.log("Authority:", marketAccount.authority.toString());
+      console.log("Market Start:", new Date(marketAccount.marketStart.toNumber() * 1000).toISOString());
+      console.log("Market End:", new Date(marketAccount.marketEnd.toNumber() * 1000).toISOString());
+      console.log("Question:", Buffer.from(marketAccount.question).toString());
+      console.log("Update Timestamp:", new Date(marketAccount.updateTs.toNumber() * 1000).toISOString());
+      console.log("Oracle Pubkey:", marketAccount.oraclePubkey?.toString() || "None");
+      console.log("Collection Mint:", marketAccount.collectionMint?.toString() || "None");
+      console.log("Collection Metadata:", marketAccount.collectionMetadata?.toString() || "None");
+      console.log("Collection Master Edition:", marketAccount.collectionMasterEdition?.toString() || "None");
+      console.log("Market State:", marketAccount.marketState);
+      console.log("Winning Direction:", marketAccount.winningDirection);
+      console.log("=== End Market State Details ===\n");
+      
       assert.ok(marketAccount.marketId.eq(marketId));
       assert.ok(marketAccount.authority.equals(admin.publicKey));
     });
