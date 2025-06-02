@@ -12,8 +12,8 @@ shortx_market_contract = "shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
-wallet = "~/.config/solana/wba-wallet.json"
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 test-close-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/close-market.ts"

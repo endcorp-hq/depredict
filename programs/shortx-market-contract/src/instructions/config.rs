@@ -5,16 +5,11 @@ use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct InitConfigContext<'info> {
-    #[account(mut, 
-        // constraint = signer.key() == Pubkey::from_str(ADMIN).unwrap() -- commenting out for now, as I think we want to allow any admin to init the config, then handle authority in the update config instruction
-        )]
+    #[account(mut)]
     pub signer: Signer<'info>,
 
     /// CHECK: This is safe because the fee vault is a multisig account that already exists
-    #[account(
-        mut, 
-        // constraint = fee_vault.key() == Pubkey::from_str(FEE_VAULT_SQUADS_MULTISIG).unwrap() -- commenting out for now, as I think we want to allow any admin to init the config, then handle fee vault in the update config instruction
-    )]
+    #[account(mut)]
     pub fee_vault: AccountInfo<'info>,
 
     #[account(
@@ -32,11 +27,16 @@ pub struct InitConfigContext<'info> {
 #[derive(Accounts)]
 pub struct UpdateConfigContext<'info> {
 
+    #[account(
+        mut,
+        constraint = signer.key() == config.authority
+    )]
     pub signer: Signer<'info>,
 
     /// CHECK: This is safe because the fee vault is a multisig account that already exists
     #[account(
-        mut
+        mut,
+        constraint = fee_vault.key() == config.fee_vault
     )]
     pub fee_vault: AccountInfo<'info>,
 
@@ -60,7 +60,6 @@ impl<'info> InitConfigContext<'info> {
         config.version = 1;
         Ok(())
     }
-
 }
 
 impl<'info> UpdateConfigContext<'info> {
