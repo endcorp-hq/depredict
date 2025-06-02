@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey, Keypair, Transaction, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -10,6 +10,7 @@ import {
   mintTo,
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
@@ -59,7 +60,7 @@ describe("shortx-contract", () => {
   describe("Trade", () => {
     it("Mints an NFT for an existing position", async () => {
       // Use the same market ID as in create-order.ts
-      const marketId = new anchor.BN(579963);
+      const marketId = new anchor.BN(216267); // Using market ID 216267
       
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -108,16 +109,32 @@ describe("shortx-contract", () => {
       );
       console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
 
-      const [nftTokenAccountAddress] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("token"),
-          new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").toBuffer(),
-          nftMintKeypair.publicKey.toBuffer(),
-          user.publicKey.toBuffer(),
-        ],
-        new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+      // Create the NFT token account using ATA program
+      console.log("Creating NFT token account...");
+      const nftTokenAccount = await getAssociatedTokenAddressSync(
+        nftMintKeypair.publicKey,
+        user.publicKey,
+        true, // allowOwnerOffCurve
+        TOKEN_2022_PROGRAM_ID
       );
-      console.log("NFT Token Account address:", nftTokenAccountAddress.toString());
+      console.log("NFT Token Account:", nftTokenAccount.toString());
+
+      // Create the token account if it doesn't exist
+      try {
+        await provider.connection.getAccountInfo(nftTokenAccount);
+      } catch (error) {
+        const createAtaIx = createAssociatedTokenAccountInstruction(
+          user.publicKey, // payer
+          nftTokenAccount, // ata
+          user.publicKey, // owner
+          nftMintKeypair.publicKey, // mint
+          TOKEN_2022_PROGRAM_ID
+        );
+        
+        const tx = new Transaction().add(createAtaIx);
+        await provider.sendAndConfirm(tx, [user]);
+        console.log("Created new token account");
+      }
 
       // Get the position ID from the position account
       const positionAccount = await program.account.positionAccount.fetch(positionAccountPda);
@@ -142,13 +159,14 @@ describe("shortx-contract", () => {
             market: marketPda,
             marketPositionsAccount: positionAccountPda,
             nftMint: nftMintKeypair.publicKey,
-            nftTokenAccount: nftTokenAccountAddress,
+            nftTokenAccount: nftTokenAccount,
             metadataAccount: nftMetadataPda,
             masterEdition: nftMasterEditionPda,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
+            sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
           })
           .signers([user, nftMintKeypair])
           .rpc({
@@ -162,7 +180,22 @@ describe("shortx-contract", () => {
 
         // Verify the position was updated to be an NFT
         const updatedPositionAccount = await program.account.positionAccount.fetch(positionAccountPda);
-        const updatedPosition = updatedPositionAccount.positions.find(p => p.positionId === positionId);
+        console.log("Updated position account:", {
+          positions: updatedPositionAccount.positions.map(p => ({
+            positionId: p.positionId.toString(),
+            isNft: p.isNft,
+            mint: p.mint?.toString()
+          }))
+        });
+        
+        const updatedPosition = updatedPositionAccount.positions.find(p => 
+          p.positionId.eq(positionId)
+        );
+        
+        if (!updatedPosition) {
+          throw new Error("Could not find updated position");
+        }
+
         assert.ok(updatedPosition.isNft, "Position should be marked as NFT");
         assert.ok(updatedPosition.mint.equals(nftMintKeypair.publicKey), "Position should have the correct NFT mint");
 

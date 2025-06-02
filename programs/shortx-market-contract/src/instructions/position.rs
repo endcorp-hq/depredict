@@ -52,6 +52,8 @@ pub struct MintPositionContext<'info> {
     pub token_metadata_program: Program<'info, Metadata>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+    /// CHECK: This is the instructions sysvar
+    pub sysvar_instructions: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -133,6 +135,9 @@ impl<'info> MintPositionContext<'info> {
         position.is_nft = true;
         position.mint = Some(self.nft_mint.key());
         position.authority = None;
+        
+        // Update the position in the account
+        position_account.positions[position_index] = position;
 
         let nft_name = format!("SHORTX - {}", self.market.market_id);
         msg!("psoition accounts modified");
@@ -149,37 +154,52 @@ impl<'info> MintPositionContext<'info> {
         let associated_token_program = self.associated_token_program.to_account_info();
 
         // Get collection mint from market
-        let collection_mint = self
-            .market
-            .collection_mint
-            .ok_or(ShortxError::InvalidCollection)?;
-
+        let collection_mint = self.market.collection_mint.ok_or(ShortxError::InvalidCollection)?;
+        msg!("Collection mint: {}", collection_mint.to_string());
         let mut create_cpi = CreateV1CpiBuilder::new(&token_metadata_program);
-
         create_cpi
-            .metadata(&metadata_account)
-            .mint(&mint_account, true)
-            .authority(&signer_account)
-            .payer(&signer_account)
-            .update_authority(&signer_account, true)
-            .master_edition(Some(&master_edition_account))
-            .system_program(&system_program)
-            .spl_token_program(Some(&token_program))
-            .token_standard(TokenStandard::NonFungible)
-            .name(nft_name)
-            .seller_fee_basis_points(0)
-            .sysvar_instructions(&system_program)
-            .uri(args.metadata_uri)
-            .is_mutable(false)
-            .collection(Collection {
-                verified: false, //cannot set true in the same instruction
-                key: collection_mint,
-            })
-            .token_standard(TokenStandard::NonFungible)
-            .print_supply(PrintSupply::Zero);
+        .metadata(&metadata_account)
+        .mint(&mint_account, true)
+        .authority(&signer_account)
+        .payer(&signer_account)
+        .update_authority(&signer_account, false)
+        .master_edition(Some(&master_edition_account))
+        .system_program(&system_program)
+        .sysvar_instructions(&self.sysvar_instructions)
+        .spl_token_program(Some(&token_program))
+        .token_standard(TokenStandard::NonFungible)
+        .name(nft_name)
+        .uri(args.metadata_uri)
+        .seller_fee_basis_points(550)
+        .token_standard(TokenStandard::NonFungible)
+        .print_supply(PrintSupply::Zero)
+        .collection(Collection {
+            verified: false, //cannot set true in the same instruction
+            key: self.market.collection_mint.ok_or(ShortxError::InvalidCollection)?,
+        });
 
         create_cpi.invoke()?;
+
         msg!("NFT created");
+        let mut mint_cpi = MintV1CpiBuilder::new(&token_metadata_program);
+        msg!("Minting NFT");
+        mint_cpi
+            .token(&nft_token_account)
+            .token_owner(Some(&signer_account))
+            .metadata(&metadata_account)
+            .master_edition(Some(&master_edition_account))
+            .mint(&mint_account)
+            .payer(&signer_account)
+            .authority(&signer_account)
+            .system_program(&system_program)
+            .spl_token_program(&token_program)
+            .spl_ata_program(&associated_token_program)
+            .sysvar_instructions(&self.sysvar_instructions)
+            .amount(1);
+
+        mint_cpi.invoke()?;
+
+        msg!("Minted NFT");
 
         // let mut update_cpi = UpdateV1CpiBuilder::new(&token_metadata_program);
 
@@ -197,25 +217,7 @@ impl<'info> MintPositionContext<'info> {
 
         // msg!("Updated NFT to collection");
 
-        let mut mint_cpi = MintV1CpiBuilder::new(&token_metadata_program);
 
-        mint_cpi
-            .token(&nft_token_account)
-            .token_owner(Some(&signer_account))
-            .metadata(&metadata_account)
-            .master_edition(Some(&master_edition_account))
-            .mint(&mint_account)
-            .payer(&signer_account)
-            .authority(&signer_account)
-            .system_program(&system_program)
-            .spl_token_program(&token_program)
-            .spl_ata_program(&associated_token_program)
-            .sysvar_instructions(&system_program)
-            .amount(1);
-
-        mint_cpi.invoke()?;
-
-        msg!("Minted NFT");
         Ok(())
     }
 }
