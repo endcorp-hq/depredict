@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("3AhNo8g3CQ5EdLjYurtAodG7Zrbkv3aj94L1yiw8m9s6");
+declare_id!("shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ");
 
 #[program]
 pub mod shortx_contract {
@@ -46,17 +46,13 @@ pub mod shortx_contract {
         Ok(())
     }
 
-    pub fn create_user_trade(ctx: Context<UserTradeContext>) -> Result<()> {
-        ctx.accounts.create_user_trade(&ctx.bumps)?;
+
+    pub fn create_sub_position_account(ctx: Context<SubPositionContext>, sub_position_key: Pubkey) -> Result<()> {
+        ctx.accounts.create_sub_position_account(sub_position_key, &ctx.bumps)?;
         Ok(())
     }
 
-    pub fn create_sub_user_trade(ctx: Context<SubUserTradeContext>, sub_user_key: Pubkey) -> Result<()> {
-        ctx.accounts.create_sub_user_trade(sub_user_key, &ctx.bumps)?;
-        Ok(())
-    }
-
-    pub fn create_order(ctx: Context<OrderContext>, args: OpenOrderArgs) -> Result<()> {
+    pub fn create_order(ctx: Context<OrderContext>, args: OpenPositionArgs) -> Result<()> {
         ctx.accounts.open_order(args)?;
         Ok(())
     }
@@ -64,6 +60,11 @@ pub mod shortx_contract {
 
     pub fn settle_order(ctx: Context<OrderContext>, order_id: u64) -> Result<()> {
         ctx.accounts.payout_order(order_id)?;
+        Ok(())
+    }
+
+    pub fn mint_position(ctx: Context<MintPositionContext>, args: MintPositionArgs) -> Result<()> {
+        ctx.accounts.mint_position(args)?;
         Ok(())
     }
 }

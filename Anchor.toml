@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-shortx_market_contract = "3AhNo8g3CQ5EdLjYurtAodG7Zrbkv3aj94L1yiw8m9s6"
+shortx_market_contract = "shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ"
 
 [registry]
 url = "https://api.apr.dev"
@@ -16,11 +16,13 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
+test-close-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/close-market.ts"
 test-config = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/config.ts"
 test-create-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/create-market.ts"
-test-close-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/close-market.ts"
-test-update-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/update-market.ts"
-test-create-user = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user.ts"
-test-user-trade = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user-trade.ts"
 test-create-sub-trade = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-subuser-trade.ts"
+test-create-user = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user.ts"
 test-order-flow = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/order-flow.ts"
+test-update-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/update-market.ts"
+test-user-trade = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user-trade.ts"
+test-create-order = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/create-order.ts"
+test-mint-pos = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/mint-existing-position.ts"

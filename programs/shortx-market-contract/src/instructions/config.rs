@@ -1,19 +1,15 @@
-use crate::constants::{ADMIN, CONFIG, FEE_VAULT_SQUADS_MULTISIG};
+use crate::constants::CONFIG;
 use crate::errors::ShortxError;
 use crate::state::Config;
 use anchor_lang::prelude::*;
-use std::str::FromStr;
 
 #[derive(Accounts)]
 pub struct InitConfigContext<'info> {
-    #[account(mut, constraint = signer.key() == Pubkey::from_str(ADMIN).unwrap())]
+    #[account(mut)]
     pub signer: Signer<'info>,
 
     /// CHECK: This is safe because the fee vault is a multisig account that already exists
-    #[account(
-        mut, 
-        constraint = fee_vault.key() == Pubkey::from_str(FEE_VAULT_SQUADS_MULTISIG).unwrap()
-    )]
+    #[account(mut)]
     pub fee_vault: AccountInfo<'info>,
 
     #[account(
@@ -23,28 +19,34 @@ pub struct InitConfigContext<'info> {
         seeds = [CONFIG.as_bytes()],
         bump
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     pub system_program: Program<'info, System>,
 }
 
 
 #[derive(Accounts)]
 pub struct UpdateConfigContext<'info> {
-    #[account(mut, constraint = signer.key() == config.authority)]
+
+    #[account(
+        mut,
+        constraint = signer.key() == config.authority
+    )]
     pub signer: Signer<'info>,
 
     /// CHECK: This is safe because the fee vault is a multisig account that already exists
     #[account(
-        mut
+        mut,
+        constraint = fee_vault.key() == config.fee_vault
     )]
     pub fee_vault: AccountInfo<'info>,
 
     #[account(
         mut,
         seeds = [CONFIG.as_bytes()],
-        bump = config.bump
+        bump = config.bump,
+        constraint = signer.key() == config.authority
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -58,13 +60,12 @@ impl<'info> InitConfigContext<'info> {
         config.version = 1;
         Ok(())
     }
-
 }
 
 impl<'info> UpdateConfigContext<'info> {
     pub fn update_config(
         &mut self,
-        fee_amount: Option<u64>,
+        fee_amount: Option<u64>, 
         authority: Option<Pubkey>,
         fee_vault: Option<Pubkey>,
     ) -> Result<()> {

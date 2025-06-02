@@ -8,14 +8,19 @@ use crate::{
 #[derive(InitSpace)]
 pub struct MarketState {
     pub bump: u8,
-    pub authority: Pubkey,
     pub market_id: u64,
+    pub authority: Pubkey,
+    pub oracle_pubkey: Option<Pubkey>,
+    pub collection_mint: Option<Pubkey>,
+    pub collection_metadata: Option<Pubkey>,
+    pub collection_master_edition: Option<Pubkey>,
+    pub market_vault: Option<Pubkey>,
     pub yes_liquidity: u64,
     pub no_liquidity: u64,
     pub volume: u64,
-    pub update_ts: i64,
+    pub update_ts: i64, // TODO: Rename this
     pub padding_1: [u8; 8],
-    pub next_order_id: u64,
+    pub next_position_id: u64,
     pub market_state: MarketStates,
     pub market_start: i64,
     pub market_end: i64,
@@ -26,7 +31,7 @@ pub struct MarketState {
     pub padding: [u8; 72],
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[derive(InitSpace)]
 pub enum WinningDirection {
     None,
@@ -35,20 +40,19 @@ pub enum WinningDirection {
     Draw,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct CreateMarketArgs {
     pub market_id: u64,
     pub question: [u8; 80],
     pub market_start: i64,
     pub market_end: i64,
+    pub metadata_uri: String,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct UpdateMarketArgs {
     pub market_id: u64,
-    pub market_end: Option<i64>,
-    pub winning_direction: Option<WinningDirection>,
-    pub state: Option<MarketStates>,
+    pub market_end: i64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -56,7 +60,7 @@ pub struct CloseMarketArgs {
     pub market_id: u64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, PartialEq)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, PartialEq, Eq, Debug)]
 pub enum MarketStates {
     //market is active and can be voted on by users
     Active,
@@ -74,11 +78,16 @@ impl Default for MarketState {
         Self {
             bump: 0,
             authority: Pubkey::default(),
+            oracle_pubkey: None,
+            collection_mint: None,
+            collection_metadata: None,
+            collection_master_edition: None,
+            market_vault: None,
             market_id: 0,
             yes_liquidity: 0,
             no_liquidity: 0,
             update_ts: 0,
-            next_order_id: 1,
+            next_position_id: 1,
             market_state: MarketStates::Active,
             market_start: 0,
             market_end: 0,
@@ -94,9 +103,9 @@ impl Default for MarketState {
 
 
 impl MarketState {
-    pub fn next_order_id(&mut self) -> u64 {
-        let id: u64 = self.next_order_id;
-        self.next_order_id = self.next_order_id.checked_add(1).unwrap();
+    pub fn next_position_id(&mut self) -> u64 {
+        let id: u64 = self.next_position_id;
+        self.next_position_id = self.next_position_id.checked_add(1).unwrap();
         id
     }
 
@@ -220,7 +229,7 @@ impl MarketState {
             no_liquidity: self.no_liquidity,
             volume: self.volume,
             update_ts: self.update_ts,
-            next_order_id: self.next_order_id,
+            next_position_id: self.next_position_id,
             winning_direction: self.winning_direction,
             market_start: self.market_start,
             market_end: self.market_end,

@@ -1,13 +1,12 @@
 use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
+    associated_token::AssociatedToken, metadata::Metadata, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
 };
-use crate::{constants::{ MARKET, USDC_MINT}, state::{CloseMarketArgs, Config, MarketStates}};
-use crate::{
-    errors::ShortxError,
-    state::{CreateMarketArgs, UpdateMarketArgs, MarketState},
-};
+use mpl_token_metadata::{instructions::CreateV1CpiBuilder, types::{PrintSupply, TokenStandard}};
+use switchboard_on_demand::{prelude::rust_decimal::Decimal};
+use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, UpdateMarketArgs, WinningDirection}};
+use crate::errors::ShortxError;
 
 #[derive(Accounts)]
 #[instruction(args: CreateMarketArgs)]
@@ -22,7 +21,13 @@ pub struct MarketContext<'info> {
     )]
     pub fee_vault: AccountInfo<'info>,
 
-    pub config: Account<'info, Config>,
+    /// CHECK: oracle is checked in the implementation function
+    #[account(
+        mut
+    )]
+    pub oracle_pubkey: AccountInfo<'info>,
+
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         init,
@@ -32,6 +37,15 @@ pub struct MarketContext<'info> {
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
+
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + PositionAccount::INIT_SPACE,
+        seeds = [POSITION.as_bytes(), &args.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
     #[account(
         mut, 
@@ -48,9 +62,22 @@ pub struct MarketContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    /// CHECK: We create it using metaplex
+    #[account(mut)]
+    pub collection_mint: AccountInfo<'info>,
+
+    /// CHECK: We create it using metaplex
+    #[account(mut)]
+    pub collection_metadata: AccountInfo<'info>,
+
+    /// CHECK: We create it using metaplex
+    #[account(mut)]
+    pub collection_master_edition: UncheckedAccount<'info>,
+
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+    pub token_metadata_program: Program<'info, Metadata>,
 }
 
 // Create a separate context for the update_market instruction
@@ -62,6 +89,22 @@ pub struct UpdateMarketContext<'info> {
     #[account(mut)] // Market must exist already
     pub market: Box<Account<'info, MarketState>>,
     pub system_program: Program<'info, System>,
+}
+
+// Context for resolving the market
+#[derive(Accounts)]
+pub struct ResolveMarketContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    pub market: Box<Account<'info, MarketState>>,
+
+    /// CHECK: oracle is same as the market's oracle pubkey
+    #[account(
+        mut,
+        // constraint = oracle_pubkey.key() == market.oracle_pubkey @ ShortxError::InvalidOracle
+    )]
+    pub oracle_pubkey: AccountInfo<'info>,
 }
 
 // Context for closing the market
@@ -78,7 +121,7 @@ pub struct CloseMarketContext<'info> {
     )]
     pub fee_vault: AccountInfo<'info>,
 
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         init_if_needed,
@@ -122,22 +165,87 @@ impl<'info> MarketContext<'info> {
         let market = &mut self.market;
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
+        let market_positions = &mut self.market_positions_account;
 
-        // only the config authority can create a market
-        require!(self.config.authority == *signer.key, ShortxError::Unauthorized);
+        // check if the oracle is valid
+        // require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        msg!("Skipping oracle check");
 
         market.set_inner(MarketState {
             bump: bumps.market,
-            authority: self.signer.key(),
+            authority: signer.key(),
             market_id: args.market_id,
             market_start: args.market_start,
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
+            oracle_pubkey: Some(self.oracle_pubkey.key()),
+            collection_mint: Some(self.collection_mint.key()),
+            collection_metadata: Some(self.collection_metadata.key()),
+            collection_master_edition: Some(self.collection_master_edition.key()),
+            market_vault: Some(self.market_vault.key()),
             ..Default::default()
         });
+    
+        market_positions.set_inner(PositionAccount {
+            bump: bumps.market_positions_account,
+            authority: self.signer.key(),
+            version: 0,
+            positions: [Position::default(); 10],
+            nonce: 0,
+            market_id: args.market_id,
+            is_sub_position: false,
+        });
+    
 
         market.emit_market_event()?;
+
+        msg!("Creating collection NFT");
+
+        // Create collection NFT
+        let collection_name = String::from_utf8(b"SHORTX-Q1".to_vec()).unwrap();
+        
+        let token_metadata_program = self.token_metadata_program.to_account_info();
+        let collection_metadata = self.collection_metadata.to_account_info();
+        let collection_mint = self.collection_mint.to_account_info();
+        let signer_account = self.signer.to_account_info();
+        let collection_master_edition = self.collection_master_edition.to_account_info();
+        let system_program = self.system_program.to_account_info();
+        let token_program = self.token_program.to_account_info();
+
+        let market_id = market.market_id;
+        let market_bump = market.bump;
+        let market_signer: &[&[&[u8]]] = &[&[
+            MARKET.as_bytes(),
+            &market_id.to_le_bytes(),
+            &[market_bump]
+        ]];
+
+        let mut create_collection_cpi = CreateV1CpiBuilder::new(&token_metadata_program);
+
+        create_collection_cpi
+            .metadata(&collection_metadata)
+            .mint(&collection_mint, false)
+            .authority(&signer_account)
+            .payer(&signer_account)
+            .update_authority(&signer_account, true)
+            .master_edition(Some(&collection_master_edition))
+            .system_program(&system_program)
+            .sysvar_instructions(&system_program)
+            .spl_token_program(Some(&token_program))
+            .token_standard(TokenStandard::NonFungible)
+            .name(collection_name)
+            .symbol(String::from("SHORTX"))
+            .uri(args.metadata_uri)
+            .seller_fee_basis_points(0)
+            .primary_sale_happened(false)
+            .is_mutable(true)
+            .print_supply(PrintSupply::Zero);
+
+        create_collection_cpi.invoke_signed(market_signer)?;
+
+        // Store collection mint in market state
+        market.collection_mint = Some(self.collection_mint.key());
 
         Ok(())
     }
@@ -149,24 +257,50 @@ impl<'info> UpdateMarketContext<'info> {
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
 
-        require!(market.authority == *signer.key, ShortxError::Unauthorized);
+        // only the market creator can update the market end time
+         require!(market.authority == *signer.key, ShortxError::Unauthorized);
 
-        if let Some(market_end) = args.market_end {
-            market.market_end = market_end;
-        }
-
-        if let Some(winning_direction) = args.winning_direction {
-            market.winning_direction = winning_direction;
-        }
-
-        if let Some(market_state) = args.state {
-            market.market_state = market_state;
-        }
-
+        // update the market end time
+        market.market_end = args.market_end;
         market.update_ts = ts;
         Ok(())
     }
 }
+
+impl<'info> ResolveMarketContext<'info> {
+    pub fn resolve_market(&mut self) -> Result<()> {
+        let market = &mut self.market;
+        let signer = &self.signer;
+
+        let ts = Clock::get()?.unix_timestamp;
+
+        require!(market.authority == *signer.key, ShortxError::Unauthorized);
+        require!(market.market_state == MarketStates::Active || market.market_state == MarketStates::Ended, ShortxError::MarketAlreadyResolved);
+
+        // Get oracle price data
+        let direction = get_oracle_price(&self.oracle_pubkey)?;
+        // Determine winning direction based on price
+        let winning_direction = if direction == Decimal::from(0) {
+            WinningDirection::No
+        } else if direction == Decimal::from(1) {
+            WinningDirection::Yes
+        } else {
+            WinningDirection::None
+        };
+
+        require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
+
+        // Update market state
+        market.market_state = MarketStates::Resolved;
+        market.winning_direction = winning_direction;
+        market.update_ts = ts;
+
+        market.emit_market_event()?;
+
+        Ok(())
+    }
+}
+
 
 impl<'info> CloseMarketContext<'info> {
     pub fn close_market(&mut self, args: CloseMarketArgs) -> Result<()> {
@@ -182,9 +316,12 @@ impl<'info> CloseMarketContext<'info> {
         let market_id = self.market.market_id;
         require!(market_id == args.market_id, ShortxError::InvalidMarketId);
 
-        let market_id_bytes = args.market_id.to_le_bytes();
-        let seeds = &[MARKET.as_bytes(), &market_id_bytes, &[self.market.bump]];
-        let signer_seeds = &[&seeds[..]];
+        let market_bump = self.market.bump;
+        let market_signer: &[&[&[u8]]] = &[&[
+            MARKET.as_bytes(),
+            &market_id.to_le_bytes(),
+            &[market_bump]
+        ]];
 
         // 1. Transfer remaining token liquidity (if any) from market vault to fee vault ATA
         if self.market_vault.amount > 0 {
@@ -198,7 +335,7 @@ impl<'info> CloseMarketContext<'info> {
                         authority: self.market.to_account_info(), // Market PDA is authority
                         mint: self.usdc_mint.to_account_info(),
                     },
-                    signer_seeds,
+                    market_signer,
                 ),
                 self.market_vault.amount,
                 self.usdc_mint.decimals,
@@ -215,7 +352,7 @@ impl<'info> CloseMarketContext<'info> {
                     destination: self.fee_vault.to_account_info(), // Lamport destination
                     authority: self.market.to_account_info(), // Market PDA is authority
                 },
-                signer_seeds
+                market_signer
             )
         )?;
 

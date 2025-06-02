@@ -1,44 +1,55 @@
 use anchor_lang::prelude::*;
 
-use crate::events::OrderEvent;
+use crate::events::PositionEvent;
 
 #[account]
 #[derive(InitSpace)]
-pub struct UserTrade {
+pub struct PositionAccount {
     pub bump: u8,
     pub authority: Pubkey,
-    pub total_deposits: u64,
-    pub total_withdraws: u64,
     pub version: u64,
-    pub orders: [Order; 10],
+    pub positions: [Position; 10],
+    pub market_id: u64,
     pub nonce: u32,
-    pub is_sub_user: bool,
-    pub padding: [u8; 25],
+    pub is_sub_position: bool,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, InitSpace)]
-pub struct Order {
-    pub ts: i64,
-    pub order_id: u64,
-    pub market_id: u64,
-    pub order_status: OrderStatus,
-    pub price: u64,
-    pub version: u64,
-    pub order_direction: OrderDirection,
-    pub user_nonce: u32,
+#[account]
+#[derive(Copy, Default, InitSpace)]
+pub struct Position {
+    pub position_id: u64,          // Unique ID in the market
+    pub market_id: u64,         // Which market this position is for
+    pub amount: u64,               // Bet amount
+    pub direction: PositionDirection, // YES/NO
     pub created_at: i64,
-    pub padding: [u8; 3],
+    pub ts: i64,                   // Timestamp
+    pub is_nft: bool,              // Whether this position is represented as NFT
+    pub mint: Option<Pubkey>,      // NFT mint address (None if not NFT)
+    pub authority: Option<Pubkey>, // Original bettor (None if converted to NFT)
+    pub position_status: PositionStatus,
+    pub padding: [u8; 10],
+    pub version: u64,
+}
+
+
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct OpenPositionArgs {
+    pub amount: u64,
+    pub direction: PositionDirection,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct OpenOrderArgs {
-    pub amount: u64,
-    pub direction: OrderDirection,
+pub struct MintPositionArgs {
+    pub position_id: u64,
+    pub metadata_uri: String,
 }
 
 
-#[derive(Clone, Copy, AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Debug, Default, InitSpace)]
-pub enum OrderStatus {
+
+#[derive(
+    Clone, Copy, AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Debug, Default, InitSpace,
+)]
+pub enum PositionStatus {
     /// The order is not in use
     #[default]
     Init,
@@ -50,35 +61,37 @@ pub enum OrderStatus {
     Claimed,
 }
 
-#[derive(Clone, Copy, AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Debug, Default, InitSpace)]
-pub enum OrderDirection {
+#[derive(
+    Clone, Copy, AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Debug, Default, InitSpace,
+)]
+pub enum PositionDirection {
     #[default]
     Yes,
     No,
 }
 
+impl PositionAccount {
 
-impl UserTrade {
-
-    pub fn get_user_nonce(&self) -> u32 {
-        if self.is_sub_user { self.nonce } else { 0 }
+    pub fn get_position_nonce(&self) -> u32 {
+        if self.is_sub_position { self.nonce } else { 0 }
     }
+
 
     pub fn next_version(&mut self) {
         self.version = self.version.checked_add(1).unwrap();
     }
 
-    pub fn emit_order_event(&self, order: Order, user_nonce: u32) -> Result<()> {
-        emit!(OrderEvent {
+    pub fn emit_position_event(&self, order: Position) -> Result<()> {
+        emit!(PositionEvent {
             ts: order.ts,
-            authority: self.authority,
+            authority: order.authority,
             market_id: order.market_id,
-            order_id: order.order_id,
-            price: order.price,
-            order_direction: order.order_direction,
-            order_status: order.order_status,
+            amount: order.amount,
+            direction: order.direction,
             created_at: order.created_at,
-            user_nonce,
+            is_nft: order.is_nft,
+            mint: order.mint,
+            position_status: order.position_status,
         });
 
         Ok(())
