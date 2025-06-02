@@ -263,6 +263,21 @@ describe("shortx-contract", () => {
         assert.ok(updatedPosition.isNft, "Position should be marked as NFT");
         assert.ok(updatedPosition.mint.equals(nftMintKeypair.publicKey), "Position should have the correct NFT mint");
 
+        // Verify NFT collection status
+        console.log("\n=== Verifying NFT Collection Status ===");
+        const nftMetadata = await provider.connection.getAccountInfo(nftMetadataPda);
+        if (!nftMetadata) {
+          throw new Error("NFT metadata account not found");
+        }
+
+        // Get the collection details from the market
+        const marketState = await program.account.marketState.fetch(marketPda);
+        console.log("NFT Mint:", nftMintKeypair.publicKey.toString());
+        console.log("Collection Mint:", marketState.collectionMint?.toString());
+        console.log("Collection Metadata:", marketState.collectionMetadata?.toString());
+        console.log("Collection Master Edition:", marketState.collectionMasterEdition?.toString());
+        console.log("=== End NFT Collection Verification ===\n");
+
       } catch (error) {
         console.error("Error minting NFT:", error);
         if (error.logs) {
