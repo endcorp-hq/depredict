@@ -15,7 +15,7 @@ pub struct PositionAccount {
 }
 
 #[account]
-#[derive(Copy, Default, InitSpace)]
+#[derive(Copy, InitSpace)]
 pub struct Position {
     pub position_id: u64,          // Unique ID in the market
     pub market_id: u64,         // Which market this position is for
@@ -31,6 +31,24 @@ pub struct Position {
     pub version: u64,
 }
 
+impl Default for Position {
+    fn default() -> Self {
+        Self {
+            position_id: 0,
+            market_id: 0,
+            amount: 0,
+            direction: PositionDirection::default(),
+            created_at: 0,
+            ts: 0,
+            is_nft: false,
+            mint: None,
+            authority: None,
+            position_status: PositionStatus::Init,
+            padding: [0; 10],
+            version: 0,
+        }
+    }
+}
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct OpenPositionArgs {
@@ -43,8 +61,6 @@ pub struct MintPositionArgs {
     pub position_id: u64,
     pub metadata_uri: String,
 }
-
-
 
 #[derive(
     Clone, Copy, AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Debug, Default, InitSpace,

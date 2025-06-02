@@ -28,6 +28,7 @@ describe("shortx-contract", () => {
   );
 
   let usdcMint: PublicKey;
+  const marketId = new anchor.BN(374517); // Using market ID 
   
   before(async () => {
     // Get network configuration
@@ -39,7 +40,7 @@ describe("shortx-contract", () => {
     usdcMint = mint;
 
     // Get the market PDA for mint authority
-    const marketId = new anchor.BN(216267); // Using market ID 216267
+    global.marketId = marketId;
     const [marketPda] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("market"),
@@ -81,9 +82,7 @@ describe("shortx-contract", () => {
 
   describe("Trade", () => {
     it("Creates an order in an existing market", async () => {
-      // Use market ID 216267
-      const marketId = new anchor.BN(216267);
-      
+
       // Ensure user has enough SOL for fee and rent
       const userBalance = await provider.connection.getBalance(user.publicKey);
       const requiredBalance = 2_000_000_000; // 2 SOL for fee and rent

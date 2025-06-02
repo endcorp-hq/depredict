@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 use mpl_token_metadata::{instructions::CreateV1CpiBuilder, types::{PrintSupply, TokenStandard}};
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
-use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, UpdateMarketArgs, WinningDirection}};
+use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, PositionStatus, UpdateMarketArgs, WinningDirection}};
 use crate::errors::ShortxError;
 
 #[derive(Accounts)]
@@ -187,17 +187,27 @@ impl<'info> MarketContext<'info> {
             ..Default::default()
         });
     
+        let mut positions = [Position::default(); 10];
+        for pos in positions.iter_mut() {
+            pos.position_status = PositionStatus::Init;
+        }
+
         market_positions.set_inner(PositionAccount {
             bump: bumps.market_positions_account,
             authority: self.signer.key(),
             version: 0,
-            positions: [Position::default(); 10],
+            positions,
             nonce: 0,
             market_id: args.market_id,
             is_sub_position: false,
         });
-    
 
+        // Add debug logging for positions
+        msg!("Initializing position slots:");
+        for (i, pos) in market_positions.positions.iter().enumerate() {
+            msg!("Position {}: status = {:?}", i, pos.position_status);
+        }
+    
         market.emit_market_event()?;
 
         msg!("Creating collection NFT");
