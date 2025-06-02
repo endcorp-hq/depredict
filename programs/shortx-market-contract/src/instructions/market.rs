@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 use mpl_token_metadata::{instructions::CreateV1CpiBuilder, types::{PrintSupply, TokenStandard}};
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
-use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price, is_valid_oracle}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, UpdateMarketArgs, WinningDirection}};
+use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, UpdateMarketArgs, WinningDirection}};
 use crate::errors::ShortxError;
 
 #[derive(Accounts)]
@@ -102,7 +102,7 @@ pub struct ResolveMarketContext<'info> {
     /// CHECK: oracle is same as the market's oracle pubkey
     #[account(
         mut,
-        constraint = oracle_pubkey.key() == market.oracle_pubkey @ ShortxError::InvalidOracle
+        // constraint = oracle_pubkey.key() == market.oracle_pubkey @ ShortxError::InvalidOracle
     )]
     pub oracle_pubkey: AccountInfo<'info>,
 }
@@ -179,8 +179,11 @@ impl<'info> MarketContext<'info> {
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
-            oracle_pubkey: self.oracle_pubkey.key(),
-            collection_mint: None,
+            oracle_pubkey: Some(self.oracle_pubkey.key()),
+            collection_mint: Some(self.collection_mint.key()),
+            collection_metadata: Some(self.collection_metadata.key()),
+            collection_master_edition: Some(self.collection_master_edition.key()),
+            market_vault: Some(self.market_vault.key()),
             ..Default::default()
         });
     

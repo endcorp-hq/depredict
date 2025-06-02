@@ -230,7 +230,21 @@ describe("shortx-contract", () => {
       }
 
       const marketAccount = await program.account.marketState.fetch(marketPda);
-      console.log("Market Account:", marketAccount);
+      console.log("\n=== Market State Details ===");
+      console.log("Market ID:", marketAccount.marketId.toString());
+      console.log("Authority:", marketAccount.authority.toString());
+      console.log("Market Start:", new Date(marketAccount.marketStart.toNumber() * 1000).toISOString());
+      console.log("Market End:", new Date(marketAccount.marketEnd.toNumber() * 1000).toISOString());
+      console.log("Question:", Buffer.from(marketAccount.question).toString());
+      console.log("Update Timestamp:", new Date(marketAccount.updateTs.toNumber() * 1000).toISOString());
+      console.log("Oracle Pubkey:", marketAccount.oraclePubkey?.toString() || "None");
+      console.log("Collection Mint:", marketAccount.collectionMint?.toString() || "None");
+      console.log("Collection Metadata:", marketAccount.collectionMetadata?.toString() || "None");
+      console.log("Collection Master Edition:", marketAccount.collectionMasterEdition?.toString() || "None");
+      console.log("Market State:", marketAccount.marketState);
+      console.log("Winning Direction:", marketAccount.winningDirection);
+      console.log("=== End Market State Details ===\n");
+      
       assert.ok(marketAccount.marketId.eq(marketId));
       assert.ok(marketAccount.authority.equals(admin.publicKey));
     });

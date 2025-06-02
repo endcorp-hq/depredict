@@ -1,4 +1,4 @@
-use crate::constants::{ADMIN, CONFIG, FEE_VAULT_SQUADS_MULTISIG};
+use crate::constants::CONFIG;
 use crate::errors::ShortxError;
 use crate::state::Config;
 use anchor_lang::prelude::*;

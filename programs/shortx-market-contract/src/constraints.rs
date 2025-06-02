@@ -39,10 +39,9 @@ pub fn get_oracle_price(oracle_account: &AccountInfo) -> anchor_lang::Result<Dec
     Ok(price)
 }
 
-
-pub fn is_valid_oracle(oracle_account: &AccountInfo) -> anchor_lang::Result<bool> {
-    let price = get_oracle_price(oracle_account)?;
-    // initial price should be 2 as 0 is regarded as no and 1 is regarded as yes. 2 is considered a null value
-    Ok(price == Decimal::from(2))
-
-}
+// Refactor this to check if the oracle is valid
+// pub fn is_valid_oracle(oracle_account: &AccountInfo) -> anchor_lang::Result<bool> {
+//     let price = get_oracle_price(oracle_account)?;
+//     // initial price should be 2 as 0 is regarded as no and 1 is regarded as yes. 2 is considered a null value
+//     Ok(price == Decimal::from(2))
+// }
