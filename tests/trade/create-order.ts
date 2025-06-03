@@ -16,9 +16,9 @@ describe("shortx-contract", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
+  // const admin = Keypair.fromSecretKey(
+  //   Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
+  // );
   const feeVault = Keypair.fromSecretKey(
     Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
   );
@@ -27,8 +27,12 @@ describe("shortx-contract", () => {
     Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
   );
 
+  const localMint = Keypair.fromSecretKey(
+    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
+  );
+
   let usdcMint: PublicKey;
-  const marketId = new anchor.BN(59583); // Using market ID 
+  const marketId = new anchor.BN(605252); // Using market ID 
   
   before(async () => {
     // Get network configuration
@@ -65,7 +69,7 @@ describe("shortx-contract", () => {
     const userTokenAccount = (
       await getOrCreateAssociatedTokenAccount(
         provider.connection,
-        admin, // Payer
+        user, // Payer
         usdcMint,
         user.publicKey
       )
@@ -112,112 +116,25 @@ describe("shortx-contract", () => {
         program.programId
       );
 
-      // Get the user trade PDA
+      // Get the position account PDA
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
-      console.log("Using admin wallet:", admin.publicKey.toString());
       console.log("Position account PDA:", positionAccountPda.toString());
-
-      // Ensure position account has enough SOL for rent
-      const positionRentExemptAmount = await provider.connection.getMinimumBalanceForRentExemption(
-        8 + // discriminator
-        1 + // bump
-        32 + // authority (Pubkey)
-        8 + // version (u64)
-        (10 * ( // positions array of 10 Position structs
-          8 + // position_id (u64)
-          8 + // market_id (u64)
-          8 + // amount (u64)
-          1 + // direction (enum)
-          8 + // created_at (i64)
-          8 + // ts (i64)
-          1 + // is_nft (bool)
-          33 + // mint (Option<Pubkey>)
-          33 + // authority (Option<Pubkey>)
-          1 + // position_status (enum)
-          10 + // padding [u8; 10]
-          8 // version (u64)
-        )) +
-        8 + // market_id (u64)
-        4 + // nonce (u32)
-        1 // is_sub_position (bool)
-      );
-      console.log("Position account size:", positionRentExemptAmount, "bytes");
-      console.log("Required rent-exempt amount for position account:", positionRentExemptAmount, "lamports");
-
-      const positionAccountInfo = await provider.connection.getAccountInfo(positionAccountPda);
-      console.log("Position account exists:", !!positionAccountInfo);
-      if (positionAccountInfo) {
-        console.log("Position account current balance:", positionAccountInfo.lamports, "lamports");
-        console.log("Position account owner:", positionAccountInfo.owner.toString());
-        console.log("Position account executable:", positionAccountInfo.executable);
-        console.log("Position account data length:", positionAccountInfo.data.length);
-      }
-
-      if (!positionAccountInfo || positionAccountInfo.lamports < positionRentExemptAmount) {
-        console.log(`Funding position account with ${positionRentExemptAmount} lamports`);
-        const transferTx = new anchor.web3.Transaction().add(
-          anchor.web3.SystemProgram.transfer({
-            fromPubkey: admin.publicKey,
-            toPubkey: positionAccountPda,
-            lamports: positionRentExemptAmount + 1000000 // Add extra for safety
-          })
-        );
-        const signature = await provider.sendAndConfirm(transferTx, [admin]);
-        console.log("Position account funding transaction:", signature);
-        
-        // Verify the funding
-        const updatedPositionInfo = await provider.connection.getAccountInfo(positionAccountPda);
-        console.log("Position account balance after funding:", updatedPositionInfo?.lamports, "lamports");
-      }
-
-      // Create market vault with enough rent
-      console.log("Creating market vault...");
-      const marketVault = (await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        admin, // Use admin as payer
-        usdcMint, // Use devnet USDC mint
-        marketPda, // Owner
-        true // Allow owner off curve
-      )).address;
-      console.log("Created market vault:", marketVault.toString());
-
-      // Ensure the market vault has enough SOL for rent
-      const vaultRentExemptAmount = await provider.connection.getMinimumBalanceForRentExemption(165); // Size of token account
-      console.log("Required rent-exempt amount for market vault:", vaultRentExemptAmount, "lamports");
-      
-      const marketVaultInfo = await provider.connection.getAccountInfo(marketVault);
-      console.log("Market vault exists:", !!marketVaultInfo);
-      if (marketVaultInfo) {
-        console.log("Market vault current balance:", marketVaultInfo.lamports, "lamports");
-        console.log("Market vault owner:", marketVaultInfo.owner.toString());
-        console.log("Market vault executable:", marketVaultInfo.executable);
-        console.log("Market vault data length:", marketVaultInfo.data.length);
-      }
-
-      if (!marketVaultInfo || marketVaultInfo.lamports < vaultRentExemptAmount) {
-        console.log(`Funding market vault with ${vaultRentExemptAmount} lamports`);
-        const transferTx = new anchor.web3.Transaction().add(
-          anchor.web3.SystemProgram.transfer({
-            fromPubkey: admin.publicKey,
-            toPubkey: marketVault,
-            lamports: vaultRentExemptAmount + 1000000 // Add extra for safety
-          })
-        );
-        const signature = await provider.sendAndConfirm(transferTx, [admin]);
-        console.log("Market vault funding transaction:", signature);
-        
-        // Verify the funding
-        const updatedVaultInfo = await provider.connection.getAccountInfo(marketVault);
-        console.log("Market vault balance after funding:", updatedVaultInfo?.lamports, "lamports");
-      }
 
       // Create order parameters
       const amount = new anchor.BN(100); // 100 USDC (6 decimals)
       const direction = { yes: {} }; // Betting on "Yes"
+
+      const marketVault = (await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        user,
+        localMint.publicKey,
+        marketPda,
+        true
+      )).address;
 
       try {
         const tx = await program.methods
