@@ -63,7 +63,7 @@ describe("shortx-contract", () => {
   describe("Trade", () => {
     it("Mints an NFT for an existing position", async () => {
       // Use the same market ID as in create-order.ts
-      const marketId = new anchor.BN(374517); // Using market ID 
+      const marketId = new anchor.BN(59583); // Using market ID 
       
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -114,7 +114,7 @@ describe("shortx-contract", () => {
 
       // Create the NFT token account using ATA program
       console.log("Creating NFT token account...");
-      const nftTokenAccount = await getAssociatedTokenAddressSync(
+      const nftTokenAccount = getAssociatedTokenAddressSync(
         nftMintKeypair.publicKey,
         admin.publicKey,  // Create token account for admin since they own the position
         true, // allowOwnerOffCurve

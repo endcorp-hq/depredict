@@ -17,18 +17,18 @@ describe("shortx-contract", () => {
 
   const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
   const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("/Users/Andrew/.config/solana/wba-wallet.json", "utf-8")))
+    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
   );
   const feeVault = Keypair.fromSecretKey(
     Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
   );
 
   const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("/Users/Andrew/.config/solana/wba-wallet.json", "utf-8")))
+    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
   );
 
   let usdcMint: PublicKey;
-  const marketId = new anchor.BN(374517); // Using market ID 
+  const marketId = new anchor.BN(59583); // Using market ID 
   
   before(async () => {
     // Get network configuration

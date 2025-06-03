@@ -65,7 +65,7 @@ describe("shortx-contract", () => {
 
   describe("Market", () => {
     it("Closes market", async () => {
-      const marketId = new anchor.BN(4); //replace with marketId you created
+      const marketId = new anchor.BN(59583); //replace with marketId you created
 
       const [marketPda] = PublicKey.findProgramAddressSync(
         [

@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ");
+declare_id!("BWbCJnhhafrC69hCdFTqj7L7yJtjP9is6Lykzaq7euaV");
 
 #[program]
 pub mod shortx_contract {
@@ -41,6 +41,11 @@ pub mod shortx_contract {
         Ok(())
     }
 
+    pub fn resolve_market(ctx: Context<ResolveMarketContext>, args: ResolveMarketArgs) -> Result<()> {
+        ctx.accounts.resolve_market(args)?;
+        Ok(())
+    }
+
     pub fn create_user(ctx: Context<UserContext>, args: CreateUserArgs) -> Result<()> {
         ctx.accounts.create_user(args, &ctx.bumps)?;
         Ok(())
@@ -65,6 +70,11 @@ pub mod shortx_contract {
 
     pub fn mint_position(ctx: Context<MintPositionContext>, args: MintPositionArgs) -> Result<()> {
         ctx.accounts.mint_position(args)?;
+        Ok(())
+    }
+
+    pub fn payout_nft(ctx: Context<PayoutNftContext>, args: PayoutNftArgs) -> Result<()> {
+        ctx.accounts.payout_nft(args)?;
         Ok(())
     }
 }

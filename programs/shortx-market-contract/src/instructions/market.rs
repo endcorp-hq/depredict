@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 use mpl_token_metadata::{instructions::CreateV1CpiBuilder, types::{PrintSupply, TokenStandard}};
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
-use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, PositionStatus, UpdateMarketArgs, WinningDirection}};
+use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection}};
 use crate::errors::ShortxError;
 
 #[derive(Accounts)]
@@ -93,10 +93,15 @@ pub struct UpdateMarketContext<'info> {
 
 // Context for resolving the market
 #[derive(Accounts)]
+#[instruction(args: ResolveMarketArgs)]
 pub struct ResolveMarketContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
+    #[account(
+        mut,
+        constraint = market.market_id == args.market_id @ ShortxError::InvalidMarketId
+    )]
     pub market: Box<Account<'info, MarketState>>,
 
     /// CHECK: oracle is same as the market's oracle pubkey
@@ -278,7 +283,7 @@ impl<'info> UpdateMarketContext<'info> {
 }
 
 impl<'info> ResolveMarketContext<'info> {
-    pub fn resolve_market(&mut self) -> Result<()> {
+    pub fn resolve_market(&mut self, args: ResolveMarketArgs) -> Result<()> {
         let market = &mut self.market;
         let signer = &self.signer;
 
@@ -287,22 +292,22 @@ impl<'info> ResolveMarketContext<'info> {
         require!(market.authority == *signer.key, ShortxError::Unauthorized);
         require!(market.market_state == MarketStates::Active || market.market_state == MarketStates::Ended, ShortxError::MarketAlreadyResolved);
 
-        // Get oracle price data
-        let direction = get_oracle_price(&self.oracle_pubkey)?;
-        // Determine winning direction based on price
-        let winning_direction = if direction == Decimal::from(0) {
-            WinningDirection::No
-        } else if direction == Decimal::from(1) {
-            WinningDirection::Yes
-        } else {
-            WinningDirection::None
-        };
+        // // Get oracle price data
+        // let direction = get_oracle_price(&self.oracle_pubkey)?;
+        // // Determine winning direction based on price
+        // let winning_direction = if direction == Decimal::from(0) {
+        //     WinningDirection::No
+        // } else if direction == Decimal::from(1) {
+        //     WinningDirection::Yes
+        // } else {
+        //     WinningDirection::None
+        // };
 
-        require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
+        // require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
 
         // Update market state
         market.market_state = MarketStates::Resolved;
-        market.winning_direction = winning_direction;
+        market.winning_direction = args.winning_direction;
         market.update_ts = ts;
 
         market.emit_market_event()?;

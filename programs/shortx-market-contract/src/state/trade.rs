@@ -57,6 +57,14 @@ pub struct OpenPositionArgs {
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct PayoutNftArgs {
+    pub position_id: u64,
+    pub market_id: u64,
+    pub amount: u64,
+    pub direction: PositionDirection,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct MintPositionArgs {
     pub position_id: u64,
     pub metadata_uri: String,

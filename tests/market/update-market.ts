@@ -42,7 +42,7 @@ describe("shortx-contract", () => {
 
   describe("Market", () => {
     it("Updates market", async () => {
-      const marketId = new anchor.BN(4); //ID of market that exists
+      const marketId = new anchor.BN(59583); //ID of market that exists
 
       const newMarketEnd = new anchor.BN(
         Math.floor(Date.now() / 1000) + 172800
@@ -62,8 +62,6 @@ describe("shortx-contract", () => {
         .updateMarket({
           marketId,
           marketEnd: newMarketEnd,
-          winningDirection: { yes: {} },
-          state: { resolved: {} },
         })
         .accountsPartial({
           signer: admin.publicKey,
