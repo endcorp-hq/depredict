@@ -1,6 +1,4 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
 import { PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -10,20 +8,12 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-import { getUsdcMint, getNetworkConfig } from "../helpers";
+import { getUsdcMint, getNetworkConfig, admin, feeVault, program, marketId } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
 
   let usdcMint: PublicKey;
   let collectionMintKeypair: Keypair;
@@ -124,8 +114,7 @@ describe("shortx-contract", () => {
           marketStart.toNumber() * 1000
         ).toISOString()})`
       );
-      // Generate a random market ID
-      const marketId = new anchor.BN(Math.floor(Math.random() * 1000000));
+
       console.log("Using market ID:", marketId.toString());
       const question = Array.from(Buffer.from("Will BTC reach $100k in 2024?"));
 

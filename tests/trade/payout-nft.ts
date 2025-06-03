@@ -1,7 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
@@ -10,25 +8,11 @@ import {
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-import { getUsdcMint } from "../helpers";
+import { getUsdcMint, admin, program, user, marketId } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  
-  // Load keypairs
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-
-  const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
-  );
-
-  console.log("Admin:", admin.publicKey.toString());
   let usdcMint: PublicKey;
 
   before(async () => {
@@ -38,10 +22,7 @@ describe("shortx-contract", () => {
 
   describe("NFT Payout", () => {
     it("Checks market resolution and processes NFT payout", async () => {
-      // Use the market ID where you have minted NFT positions
-      const marketId = new anchor.BN(59583); // Replace with your actual market ID
 
-      // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("market"),

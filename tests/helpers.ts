@@ -1,9 +1,30 @@
 import { PublicKey, Keypair } from "@solana/web3.js";
 import * as fs from "fs";
 import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { ShortxContract } from "../target/types/shortx_contract";
 
 // Devnet USDC mint address
-const DEVNET_USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+const DEVNET_USDC_MINT = new PublicKey("Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr");
+
+export const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
+export const admin = Keypair.fromSecretKey(
+  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/admin.json", "utf-8")))
+);
+export const feeVault = Keypair.fromSecretKey(
+  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/fee-vault.json", "utf-8")))
+);
+
+export const localMint = Keypair.fromSecretKey(
+  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
+);
+
+export const user = Keypair.fromSecretKey(
+  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
+);
+
+export const marketId = new anchor.BN(235867);
+
 
 /**
  * Gets the network configuration and connection URL based on Anchor.toml
@@ -49,6 +70,7 @@ export async function getUsdcMint(): Promise<{ mint: PublicKey; keypair?: Keypai
  * @param account The account to check
  * @param requiredBalance The minimum required balance in lamports
  */
+
 export async function ensureAccountBalance(
   provider: anchor.AnchorProvider,
   account: PublicKey,

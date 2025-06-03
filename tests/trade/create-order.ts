@@ -1,34 +1,18 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-import { getUsdcMint, getNetworkConfig } from "../helpers";
+import { getUsdcMint, getNetworkConfig, marketId, admin, feeVault, program, user } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
-
-  const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
-  );
-
   let usdcMint: PublicKey;
-  const marketId = new anchor.BN(59583); // Using market ID 
   
   before(async () => {
     // Get network configuration
@@ -73,7 +57,9 @@ describe("shortx-contract", () => {
     console.log(
       `User USDC ATA: ${userTokenAccount.toString()}`
     );
-
+    console.log(
+      `User account:: ${user.publicKey.toString()}`
+    );
     // Note: You'll need to get USDC from the faucet: https://spl-token-faucet.com/?token-name=USDC
     if (isDevnet) {
       console.log("Please ensure you have USDC in your wallet from the faucet");

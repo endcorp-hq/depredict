@@ -1,7 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
-import { BN, Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { BN } from "@coral-xyz/anchor";
+import { PublicKey } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -10,29 +9,12 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-
+import { admin, feeVault, localMint, marketId, program, user } from "../helpers";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
-
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
-
-  const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
-  );
 
   let localMintPubkey: PublicKey;
   let feeVaultTokenAccount: PublicKey;
@@ -121,7 +103,6 @@ describe("shortx-contract", () => {
   });
 
   describe("Order Placement and Flow", () => {
-    const marketId = new anchor.BN(6); //replace with marketId from create-market.ts
 
     it("Creates order", async () => {
       //make sure userTradePda is created beforehand

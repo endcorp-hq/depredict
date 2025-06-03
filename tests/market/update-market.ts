@@ -1,9 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import * as fs from "fs";
+import { admin, program, marketId, localMint } from "../helpers";
 
 describe("shortx-contract", () => {
 
@@ -24,14 +22,6 @@ describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
 
   let localMintPubkey: PublicKey;
 
@@ -42,7 +32,6 @@ describe("shortx-contract", () => {
 
   describe("Market", () => {
     it("Updates market", async () => {
-      const marketId = new anchor.BN(59583); //ID of market that exists
 
       const newMarketEnd = new anchor.BN(
         Math.floor(Date.now() / 1000) + 172800

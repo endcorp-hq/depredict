@@ -1,25 +1,17 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
 import { PublicKey, Keypair } from "@solana/web3.js";
 import { assert } from "chai";
-import * as fs from "fs";
+import { admin, marketId, program } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  
-  // Load the admin keypair (market authority)
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
+
 
   describe("Market Resolution", () => {
     it("Resolves a market with winning direction", async () => {
       // Use an existing market ID
-      const marketId = new anchor.BN(59583); // Replace with your actual market ID
 
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -86,7 +78,6 @@ describe("shortx-contract", () => {
     });
 
     it("Fails to resolve an already resolved market", async () => {
-      const marketId = new anchor.BN(374517); // Same market ID as above
 
       const [marketPda] = PublicKey.findProgramAddressSync(
         [
@@ -122,8 +113,7 @@ describe("shortx-contract", () => {
       }
     });
 
-    it("Fails when non-authority tries to resolve market", async () => {
-      const marketId = new anchor.BN(374517);
+    it("Fails when non-authority tries to resolve market", async () => {  
       const nonAuthority = Keypair.generate();
 
       // Airdrop some SOL to non-authority for transaction fee

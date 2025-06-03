@@ -1,40 +1,19 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
 import { PublicKey, Keypair, Transaction, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createMint,
-  getOrCreateAssociatedTokenAccount,
-  mintTo,
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
   createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-import { getNetworkConfig } from "../helpers";
+import { getNetworkConfig, marketId, admin, program, user } from "../helpers";
+
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
-
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
-
-  const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
-  );
 
   // Use the same admin keypair that created the market
   const marketAuthority = admin;
@@ -62,8 +41,7 @@ describe("shortx-contract", () => {
 
   describe("Trade", () => {
     it("Mints an NFT for an existing position", async () => {
-      // Use the same market ID as in create-order.ts
-      const marketId = new anchor.BN(59583); // Using market ID 
+
       
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
