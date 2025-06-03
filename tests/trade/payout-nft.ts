@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey, Keypair, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
@@ -20,15 +20,16 @@ describe("shortx-contract", () => {
   const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
   
   // Load keypairs
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
+  // const admin = Keypair.fromSecretKey(
+  //   Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
+  // );
 
   const user = Keypair.fromSecretKey(
     Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
   );
 
-  console.log("Admin:", admin.publicKey.toString());
+  console.log("User:", user.publicKey.toString());
+
   let usdcMint: PublicKey;
 
   before(async () => {
@@ -39,10 +40,10 @@ describe("shortx-contract", () => {
   describe("NFT Payout", () => {
     it("Checks market resolution and processes NFT payout", async () => {
       // Use the market ID where you have minted NFT positions
-      const marketId = new anchor.BN(59583); // Replace with your actual market ID
+      const marketId = new anchor.BN(215102); // Replace with your actual market ID
 
       // Get the market PDA
-      const [marketPda] = PublicKey.findProgramAddressSync(
+      const [marketPda, marketBump] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("market"),
           marketId.toArrayLike(Buffer, "le", 8),
@@ -93,50 +94,61 @@ describe("shortx-contract", () => {
           mint: position.mint?.toString()
         });
 
-        // Get the NFT token account for admin (since admin owns the NFT)
+        // Get the NFT token account for user
         const nftTokenAccount = getAssociatedTokenAddressSync(
             position.mint,
-            admin.publicKey,  // Create token account for admin since they own the position
-            true, // allowOwnerOffCurve
+            user.publicKey,  // Create token account for user since they own the position
+            false, // allowOwnerOffCurve
             TOKEN_2022_PROGRAM_ID
           );
 
         console.log("NFT Token Account:", nftTokenAccount.toString());
 
-        // Get the market vault
-        const marketVault = await getOrCreateAssociatedTokenAccount(
-          provider.connection,
-          admin, // payer
+        // Get the market vault - should be owned by market PDA
+        const marketVault = getAssociatedTokenAddressSync(
           usdcMint,
           marketPda,
-          true // allowOwnerOffCurve
+          true, // allowOwnerOffCurve since marketPda is a PDA
+          TOKEN_PROGRAM_ID
         );
 
-        console.log("Market Vault:", marketVault.address.toString());
+        console.log("Market Vault:", marketVault.toString());
 
-        // Get admin's USDC token account (payout goes to NFT owner)
-        const adminUsdcAta = await getOrCreateAssociatedTokenAccount(
-          provider.connection,
-          admin,
+        // Get user's USDC token account (payout goes to NFT owner)
+        // Let the program create this if needed
+        const userUsdcAta = getAssociatedTokenAddressSync(
           usdcMint,
-          admin.publicKey
+          user.publicKey,
+          false,
+          TOKEN_PROGRAM_ID
         );
 
-        console.log("Admin USDC Token Account:", adminUsdcAta.address.toString());
+
 
         const [nftMetadataPda] = PublicKey.findProgramAddressSync(
-            [
-              Buffer.from("metadata"),
-              new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
-              position.mint.toBuffer(),
-            ],
-            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
-          );
-          console.log("NFT Metadata PDA:", nftMetadataPda.toString());
+          [
+            Buffer.from("metadata"),
+            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            position.mint.toBuffer(),
+          ],
+          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        );
+        console.log("NFT Metadata PDA:", nftMetadataPda.toString());
+
+        // Verify the market vault exists
+        const marketVaultInfo = await provider.connection.getAccountInfo(marketVault);
+        if (!marketVaultInfo) {
+          throw new Error("Market vault does not exist. Please ensure it was created during market initialization.");
+        }
+
+        // Verify the market vault is owned by the market PDA
+        if (marketVaultInfo.owner.toString() !== TOKEN_PROGRAM_ID.toString()) {
+          throw new Error("Market vault is not a token account");
+        }
 
         // Log balances before payout
-        const adminUsdcBalanceBefore = await provider.connection.getTokenAccountBalance(adminUsdcAta.address);
-        console.log("Admin USDC balance before payout:", adminUsdcBalanceBefore.value.uiAmount);
+        const userUsdcBalanceBefore = await provider.connection.getTokenAccountBalance(userUsdcAta);
+        console.log("User USDC balance before payout:", userUsdcBalanceBefore.value.uiAmount);
 
         // Debug checks
         console.log("\nVerifying accounts before transaction:");
@@ -152,18 +164,71 @@ describe("shortx-contract", () => {
         console.log("   Data length:", metadataAccountInfo?.data.length);
         console.log("   Executable:", metadataAccountInfo?.executable);
 
-        console.log("\n3. Master Edition Account:");
-        const masterEditionInfo = await provider.connection.getAccountInfo(marketAccount.collectionMasterEdition);
-        console.log("   Owner:", masterEditionInfo?.owner.toString());
-        console.log("   Data length:", masterEditionInfo?.data.length);
-        console.log("   Executable:", masterEditionInfo?.executable);
+        const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("metadata"),
+            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            position.mint.toBuffer(),
+            Buffer.from("edition"),
+          ],
+          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        );
+
+        // Add edition PDA derivation
+        const [nftEditionPda] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("metadata"),
+            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            position.mint.toBuffer(),
+          ],
+          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        );
+
+        console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
+        console.log("NFT Edition PDA:", nftEditionPda.toString());
 
         // Verify NFT ownership
         const tokenBalance = await provider.connection.getTokenAccountBalance(nftTokenAccount);
         console.log("\nNFT Token Account Balance:", tokenBalance.value.uiAmount);
 
+        // Additional debug info
+        console.log("\n=== Additional Debug Info ===");
+        console.log("Market PDA Authority:", marketPda.toString());
+        console.log("Market Vault Authority:", marketPda.toString());
+        console.log("User Public Key:", user.publicKey.toString());
+        console.log("NFT Mint:", position.mint.toString());
+        console.log("Token Program ID:", TOKEN_PROGRAM_ID.toString());
+        console.log("Token 2022 Program ID:", TOKEN_2022_PROGRAM_ID.toString());
+        console.log("Associated Token Program ID:", ASSOCIATED_TOKEN_PROGRAM_ID.toString());
+        console.log("Token Metadata Program ID:", new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toString());
+
+        // Add token record PDA derivation
+        const [tokenRecordPda] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("metadata"),
+            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            position.mint.toBuffer(),
+            Buffer.from("token_record"),
+            nftTokenAccount.toBuffer(),
+          ],
+          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        );
+
+        console.log("Token Record PDA:", tokenRecordPda.toString());
+
         try {
-          const tx = await program.methods
+          console.log("\n=== Executing Payout Transaction ===");
+          
+          // Log the instruction data we're about to send
+          console.log("Payout Arguments:", {
+            positionId: position.positionId.toString(),
+            marketId: marketId.toString(),
+            amount: position.amount.toString(),
+            direction: "yes"
+          });
+
+          // Update the program call
+          await program.methods
             .payoutNft({
               positionId: position.positionId,
               marketId: marketId,
@@ -171,28 +236,28 @@ describe("shortx-contract", () => {
               direction: { yes: {} },
             })
             .accountsPartial({
-              signer: admin.publicKey,
+              signer: user.publicKey,
               market: marketPda,
               positionAccount: positionAccountPda,
               nftMint: position.mint,
               nftTokenAccount: nftTokenAccount,
-              userAta: adminUsdcAta.address,
-              marketVault: marketVault.address,
+              userAta: userUsdcAta,
+              marketVault: marketVault,
               mint: usdcMint,
-              masterEdition: marketAccount.collectionMasterEdition,
-              collectionMetadataAccount: marketAccount.collectionMetadata,
+              masterEdition: nftMasterEditionPda,
               metadataAccount: nftMetadataPda,
               tokenProgram: TOKEN_PROGRAM_ID,
+              token2022Program: TOKEN_2022_PROGRAM_ID,
               tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
               associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
               systemProgram: anchor.web3.SystemProgram.programId,
-            })
-            .signers([admin])
+            }).signers([user])
             .rpc({
-              skipPreflight: true  // Add this to get more detailed error messages
+              skipPreflight: false,
+              commitment: "confirmed",
+              maxRetries: 3,
+              preflightCommitment: "confirmed"
             });
-
-          console.log("Payout transaction signature:", tx);
 
           // Verify position status after payout
           const updatedPositionAccount = await program.account.positionAccount.fetch(positionAccountPda);
@@ -201,21 +266,28 @@ describe("shortx-contract", () => {
           );
 
           assert.ok(
-            Object.keys(updatedPosition!.positionStatus)[0] === "settled",
-            "Position should be marked as settled after payout"
+            Object.keys(updatedPosition!.positionStatus)[0] === "closed",
+            "Position should be marked as closed after payout"
           );
 
           // Check USDC balance change
-          const adminUsdcBalanceAfter = await provider.connection.getTokenAccountBalance(adminUsdcAta.address);
-          console.log("Admin USDC balance after payout:", adminUsdcBalanceAfter.value.uiAmount);
+          const userUsdcBalanceAfter = await provider.connection.getTokenAccountBalance(userUsdcAta);
+          console.log("User USDC balance after payout:", userUsdcBalanceAfter.value.uiAmount);
           console.log("USDC balance change:", 
-            adminUsdcBalanceAfter.value.uiAmount! - adminUsdcBalanceBefore.value.uiAmount!
+            userUsdcBalanceAfter.value.uiAmount! - userUsdcBalanceBefore.value.uiAmount!
           );
 
         } catch (error) {
+          console.error("\n=== Error Details ===");
           console.error("Error processing payout for position", position.positionId.toString(), ":", error);
           if (error.logs) {
-            console.error("Program logs:", error.logs);
+            console.error("\nProgram Logs:");
+            error.logs.forEach((log: string, index: number) => {
+              console.error(`${index + 1}. ${log}`);
+            });
+          }
+          if (error.stack) {
+            console.error("\nStack Trace:", error.stack);
           }
           throw error;
         }

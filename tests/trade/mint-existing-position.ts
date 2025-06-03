@@ -63,7 +63,7 @@ describe("shortx-contract", () => {
   describe("Trade", () => {
     it("Mints an NFT for an existing position", async () => {
       // Use the same market ID as in create-order.ts
-      const marketId = new anchor.BN(59583); // Using market ID 
+      const marketId = new anchor.BN(605252); // Using market ID 
       
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -116,28 +116,28 @@ describe("shortx-contract", () => {
       console.log("Creating NFT token account...");
       const nftTokenAccount = getAssociatedTokenAddressSync(
         nftMintKeypair.publicKey,
-        admin.publicKey,  // Create token account for admin since they own the position
-        true, // allowOwnerOffCurve
+        user.publicKey,  // Create token account for admin since they own the position
+        false, // allowOwnerOffCurve
         TOKEN_2022_PROGRAM_ID
-      );
+        );
       console.log("NFT Token Account:", nftTokenAccount.toString());
 
       // Create the token account if it doesn't exist
-      try {
-        await provider.connection.getAccountInfo(nftTokenAccount);
-      } catch (error) {
-        const createAtaIx = createAssociatedTokenAccountInstruction(
-          admin.publicKey, // payer - admin pays for the account creation
-          nftTokenAccount, // ata
-          admin.publicKey, // owner - admin owns the token account
-          nftMintKeypair.publicKey, // mint
-          TOKEN_2022_PROGRAM_ID
-        );
+      // try {
+      //   await provider.connection.getAccountInfo(nftTokenAccount);
+      // } catch (error) {
+      //   const createAtaIx = createAssociatedTokenAccountInstruction(
+      //     admin.publicKey, // payer - admin pays for the account creation
+      //     nftTokenAccount, // ata
+      //     admin.publicKey, // owner - admin owns the token account
+      //     nftMintKeypair.publicKey, // mint
+      //     TOKEN_2022_PROGRAM_ID
+      //   );
         
-        const tx = new Transaction().add(createAtaIx);
-        await provider.sendAndConfirm(tx, [admin]);  // Admin signs for account creation
-        console.log("Created new token account");
-      }
+      //   const tx = new Transaction().add(createAtaIx);
+      //   await provider.sendAndConfirm(tx, [admin]);  // Admin signs for account creation
+      //   console.log("Created new token account");
+      // }
 
       // Get the position ID from the position account
       const positionAccount = await program.account.positionAccount.fetch(positionAccountPda);
@@ -147,6 +147,7 @@ describe("shortx-contract", () => {
       }
       const positionId = position.positionId;
       console.log("Position ID:", positionId.toString());
+      console.log("Position:", position);
 
       // Create metadata URI for the NFT
       const metadataUri = "https://arweave.net/your-metadata-uri"; // Replace with your actual metadata URI
@@ -166,11 +167,10 @@ describe("shortx-contract", () => {
 
         // Define account roles clearly
         const accounts = {
-            // The position owner who is minting the NFT (using admin since they own the position)
-            signer: admin.publicKey,  // This account will:
+            // The position owner who is minting the NFT (using user since they own the position)
+            signer: user.publicKey,  // This account will:
             // 1. Pay for the NFT creation
             // 2. Own the NFT
-            // 3. Be the authority for minting
             
             // Market accounts
             market: marketPda,  // The market PDA that contains collection info
@@ -186,7 +186,7 @@ describe("shortx-contract", () => {
             collectionMint: marketAccount.collectionMint,
             collectionMetadata: marketAccount.collectionMetadata,
             collectionMasterEdition: marketAccount.collectionMasterEdition,
-            collectionAuthority: admin.publicKey,
+            collectionAuthority: admin.publicKey, //this will also be a signer for the minting instruction
             
             // Program accounts
             tokenProgram: TOKEN_2022_PROGRAM_ID,
@@ -207,10 +207,10 @@ describe("shortx-contract", () => {
         );
 
         console.log("\n2. Position Owner Check:");
-        console.log("   Position Account Authority:", positionAccount.authority.toString());
-        console.log("   Signer (Position Owner):", accounts.signer.toString());
+        console.log("   Position Account Authority:", position.authority.toBase58());
+        console.log("   Signer (Position Owner):", accounts.signer.toBase58());
         assert.ok(
-            positionAccount.authority.equals(accounts.signer),
+            position.authority.equals(accounts.signer),
             "Position account authority must match signer"
         );
 
@@ -229,7 +229,7 @@ describe("shortx-contract", () => {
           .preInstructions([
             anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })
           ])
-          .signers([admin, nftMintKeypair])  // Signers: market authority (position owner), NFT mint
+          .signers([user, admin, nftMintKeypair])  // Signers: market authority (position owner), NFT mint
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
