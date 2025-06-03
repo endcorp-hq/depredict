@@ -1,42 +1,20 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-import { getUsdcMint, getNetworkConfig } from "../helpers";
+import { getUsdcMint, getNetworkConfig, ADMIN, FEE_VAULT, program, provider, USER, MARKET_ID } from "../helpers";
 
-describe("shortx-contract", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  // const admin = Keypair.fromSecretKey(
-  //   Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  // );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
-
-  const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
-  );
-
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
+describe("shortx-contract", () => { 
 
   let usdcMint: PublicKey;
-  const marketId = new anchor.BN(605252); // Using market ID 
-  
+
   before(async () => {
     // Get network configuration
-    const { isDevnet, connectionUrl } = await getNetworkConfig();
+    const { isDevnet } = await getNetworkConfig();
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
 
     // Devnet USDC mint address
@@ -44,11 +22,11 @@ describe("shortx-contract", () => {
     usdcMint = mint;
 
     // Get the market PDA for mint authority
-    global.marketId = marketId;
+    global.MARKET_ID = MARKET_ID;
     const [marketPda] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("market"),
-        marketId.toArrayLike(Buffer, "le", 8),
+        MARKET_ID.toArrayLike(Buffer, "le", 8),
       ],
       program.programId
     );
@@ -69,9 +47,9 @@ describe("shortx-contract", () => {
     const userTokenAccount = (
       await getOrCreateAssociatedTokenAccount(
         provider.connection,
-        user, // Payer
+        USER, // Payer
         usdcMint,
-        user.publicKey
+        USER.publicKey
       )
     ).address;
     console.log(
@@ -88,11 +66,11 @@ describe("shortx-contract", () => {
     it("Creates an order in an existing market", async () => {
 
       // Ensure user has enough SOL for fee and rent
-      const userBalance = await provider.connection.getBalance(user.publicKey);
+      const userBalance = await provider.connection.getBalance(USER.publicKey);
       const requiredBalance = 2_000_000_000; // 2 SOL for fee and rent
       if (userBalance < requiredBalance) {
         console.log("Requesting airdrop for user...");
-        const signature = await provider.connection.requestAirdrop(user.publicKey, requiredBalance);
+        const signature = await provider.connection.requestAirdrop(USER.publicKey, requiredBalance);
         await provider.connection.confirmTransaction(signature);
         console.log("Airdrop successful");
       }
@@ -101,7 +79,7 @@ describe("shortx-contract", () => {
       const [marketPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("market"),
-          marketId.toArrayLike(Buffer, "le", 8),
+          MARKET_ID.toArrayLike(Buffer, "le", 8),
         ],
         program.programId
       );
@@ -118,7 +96,7 @@ describe("shortx-contract", () => {
 
       // Get the position account PDA
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from("position"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
@@ -130,8 +108,8 @@ describe("shortx-contract", () => {
 
       const marketVault = (await getOrCreateAssociatedTokenAccount(
         provider.connection,
-        user,
-        localMint.publicKey,
+        USER,
+        usdcMint,
         marketPda,
         true
       )).address;
@@ -143,16 +121,16 @@ describe("shortx-contract", () => {
             direction,
           })
           .accountsPartial({
-            signer: user.publicKey,
-            feeVault: feeVault.publicKey,
+            signer: USER.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             positionAccount: positionAccountPda,
             market: marketPda,
             mint: usdcMint, // Use devnet USDC mint
             userAta: (await getOrCreateAssociatedTokenAccount(
               provider.connection,
-              user,
+              USER,
               usdcMint,
-              user.publicKey
+              USER.publicKey
             )).address,
             marketVault: marketVault,
             config: configPda,
@@ -160,7 +138,7 @@ describe("shortx-contract", () => {
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
-          .signers([user])
+          .signers([USER])
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",

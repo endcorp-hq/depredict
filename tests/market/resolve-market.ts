@@ -1,29 +1,17 @@
-import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+
+import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import * as fs from "fs";
+import { ADMIN, MARKET_ID, program } from "../helpers";
 
 describe("shortx-contract", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-
-  // Load the admin keypair (market authority)
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
 
   describe("Market Resolution", () => {
     it("Resolves a market with winning direction", async () => {
       // Use an existing market ID
-      const marketId = new anchor.BN(605252); // Replace with your actual market ID
 
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from("market"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
@@ -40,15 +28,15 @@ describe("shortx-contract", () => {
         // Resolve the market with a "Yes" outcome
         const tx = await program.methods
           .resolveMarket({
-            marketId,
+            marketId: MARKET_ID,
             winningDirection: { yes: {} }, // Can be { yes: {} } or { no: {} }
           })
           .accounts({
-            signer: admin.publicKey,
+            signer: ADMIN.publicKey,
             market: marketPda,
             oraclePubkey: marketAccountBefore.oraclePubkey,
           })
-          .signers([admin])
+          .signers([ADMIN])
           .rpc();
 
         console.log("Market resolution transaction signature:", tx);

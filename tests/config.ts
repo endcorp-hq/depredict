@@ -1,42 +1,21 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../target/types/shortx_contract";
-import { PublicKey, Keypair, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey, Keypair } from "@solana/web3.js";
 import { assert } from "chai";
-import * as fs from "fs";
+import { ADMIN, FEE_VAULT, program, ensureAccountBalance } from "./helpers";
 
 describe("shortx-contract", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
-
   const [configPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
     program.programId
   );
 
   before(async () => {
-    console.log("Admin public key:", admin.publicKey.toString());
-    console.log("Fee vault public key:", feeVault.publicKey.toString());
+    console.log("Admin public key:", ADMIN.publicKey.toString());
+    console.log("Fee vault public key:", FEE_VAULT.publicKey.toString());
     console.log("Config PDA:", configPda.toString());
 
-    // Request airdrop for admin if needed
-    const cluster = process.env.ANCHOR_WALLET_CLUSTER || "localnet";
-    let connectionUrl = cluster === "localnet" ? "http://localhost:8899" : `https://${cluster}.solana.com`;
-    const connection = new Connection(connectionUrl, "confirmed");
-    const balance = await connection.getBalance(admin.publicKey);
-    if (balance < LAMPORTS_PER_SOL) {
-      console.log("Requesting airdrop for admin...");
-      const signature = await connection.requestAirdrop(admin.publicKey, LAMPORTS_PER_SOL);
-      await connection.confirmTransaction(signature, "confirmed");
-    }
+    // Ensure admin has enough SOL
+    await ensureAccountBalance(ADMIN.publicKey);
   });
 
   describe("Config", () => {
@@ -49,12 +28,12 @@ describe("shortx-contract", () => {
         const tx = await program.methods
           .initializeConfig(feeAmount)
           .accountsPartial({
-            signer: admin.publicKey,
-            feeVault: feeVault.publicKey,
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
-          .signers([admin])
+          .signers([ADMIN])
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
@@ -69,8 +48,8 @@ describe("shortx-contract", () => {
       }
 
       const configAccount = await program.account.config.fetch(configPda);
-      assert.ok(configAccount.authority.equals(admin.publicKey));
-      assert.ok(configAccount.feeVault.equals(feeVault.publicKey));
+      assert.ok(configAccount.authority.equals(ADMIN.publicKey));
+      assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
       assert.ok(configAccount.feeAmount.eq(feeAmount));
     });
 
@@ -81,12 +60,12 @@ describe("shortx-contract", () => {
         const tx = await program.methods
           .updateConfig(newFeeAmount, null, null)
           .accountsPartial({
-            signer: admin.publicKey,
-            feeVault: feeVault.publicKey,
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
-          .signers([admin])
+          .signers([ADMIN])
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
@@ -113,7 +92,7 @@ describe("shortx-contract", () => {
           .updateConfig(newFeeAmount, null, null)
           .accountsPartial({
             signer: wrongAdmin.publicKey,
-            feeVault: feeVault.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
@@ -139,12 +118,12 @@ describe("shortx-contract", () => {
         await program.methods
           .updateConfig(newFeeAmount, null, wrongFeeVault.publicKey)
           .accountsPartial({
-            signer: admin.publicKey,
+            signer: ADMIN.publicKey,
             feeVault: wrongFeeVault.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
-          .signers([admin])
+          .signers([ADMIN])
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
@@ -164,14 +143,14 @@ describe("shortx-contract", () => {
 
       try {
         const tx = await program.methods
-          .updateConfig(newFeeAmount, null, feeVault.publicKey)
+          .updateConfig(newFeeAmount, null, FEE_VAULT.publicKey)
           .accountsPartial({
-            signer: admin.publicKey,
-            feeVault: feeVault.publicKey,
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
-          .signers([admin])
+          .signers([ADMIN])
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
@@ -196,12 +175,12 @@ describe("shortx-contract", () => {
         const tx = await program.methods
           .updateConfig(null, newAuthority.publicKey, null)
           .accountsPartial({
-            signer: admin.publicKey,
-            feeVault: feeVault.publicKey,
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
-          .signers([admin])
+          .signers([ADMIN])
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
@@ -224,10 +203,10 @@ describe("shortx-contract", () => {
 
       try {
         const tx = await program.methods
-          .updateConfig(initialFeeAmount, admin.publicKey, feeVault.publicKey)
+          .updateConfig(initialFeeAmount, ADMIN.publicKey, FEE_VAULT.publicKey)
           .accountsPartial({
             signer: newAuthority.publicKey,
-            feeVault: feeVault.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
@@ -246,8 +225,8 @@ describe("shortx-contract", () => {
       }
 
       const configAccount = await program.account.config.fetch(configPda);
-      assert.ok(configAccount.authority.equals(admin.publicKey));
-      assert.ok(configAccount.feeVault.equals(feeVault.publicKey));
+      assert.ok(configAccount.authority.equals(ADMIN.publicKey));
+      assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
       assert.ok(configAccount.feeAmount.eq(initialFeeAmount));
     });
   });

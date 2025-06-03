@@ -1,6 +1,4 @@
-import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
+import * as anchor from "@coral-xyz/anchor";  
 import { PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -10,49 +8,39 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-import { getUsdcMint, getNetworkConfig } from "../helpers";
+import { getUsdcMint, getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID } from "../helpers";
 
 describe("shortx-contract", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
-
   let usdcMint: PublicKey;
   let collectionMintKeypair: Keypair;
 
   before(async () => {
     // Get network configuration
-    const { isDevnet, connectionUrl } = await getNetworkConfig();
+    const { isDevnet } = await getNetworkConfig();
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
 
     const { mint } = await getUsdcMint();
     usdcMint = mint;
+    console.log("USDC Mint:", usdcMint.toString());
     collectionMintKeypair = Keypair.generate();
   });
 
   before(async () => {
     // Request airdrop for admin if needed
-    const balance = await provider.connection.getBalance(admin.publicKey);
+    const balance = await provider.connection.getBalance(ADMIN.publicKey);
     if (balance < 1_000_000_000) { // Less than 1 SOL
       console.log("Requesting airdrop for admin...");
-      const signature = await provider.connection.requestAirdrop(admin.publicKey, 2_000_000_000); // 2 SOL
-      await provider.connection.confirmTransaction(signature);
+      const signature = await provider.connection.requestAirdrop(ADMIN.publicKey, 2_000_000_000); // 2 SOL
+      const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
+      await provider.connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
     }
 
     try {
       await createMint(
         provider.connection,
-        admin, // Payer
-        admin.publicKey, // Mint Authority
-        admin.publicKey, // Freeze Authority (optional)
+        ADMIN, // Payer
+        ADMIN.publicKey, // Mint Authority
+        ADMIN.publicKey, // Freeze Authority (optional)
         0, // Decimals
         collectionMintKeypair // Mint Keypair
       );
@@ -73,22 +61,37 @@ describe("shortx-contract", () => {
       const adminTokenAccount = (
         await getOrCreateAssociatedTokenAccount(
           provider.connection,
-          admin, // Payer
-          collectionMintKeypair.publicKey,
-          admin.publicKey
+          ADMIN, // Payer
+          usdcMint,
+          ADMIN.publicKey
         )
       ).address;
       console.log(
-        `Admin ATA (${collectionMintKeypair.publicKey.toString()}): ${adminTokenAccount.toString()}`
+        `Admin ATA (${usdcMint.toString()}): ${adminTokenAccount.toString()}`
       );
+
+      // Mint USDC to admin if needed
+      const adminUsdcBalance = await provider.connection.getTokenAccountBalance(adminTokenAccount);
+      if (Number(adminUsdcBalance.value.amount) < 1000) {
+        console.log("Minting USDC to admin...");
+        const { keypair: usdcMintKeypair } = await getUsdcMint();
+        await mintTo(
+          provider.connection,
+          ADMIN,
+          usdcMint,
+          adminTokenAccount,
+          usdcMintKeypair, // Use USDC mint keypair as mint authority
+          1000_000_000 // 1000 USDC with 6 decimals
+        );
+      }
 
       const mintAmount = new anchor.BN(1_000_000 * 10 ** 6); // 1 Million tokens with 6 decimals
       await mintTo(
         provider.connection,
-        admin, // Payer
-        collectionMintKeypair.publicKey,
+        ADMIN, // Payer
+        usdcMint,
         adminTokenAccount,
-        admin.publicKey, // Mint Authority
+        ADMIN.publicKey, // Mint Authority
         mintAmount.toNumber() 
       );
       console.log(`Minted ${mintAmount.toString()} tokens to admin ATA`);
@@ -162,9 +165,9 @@ describe("shortx-contract", () => {
       // Initialize the collection mint using SPL Token program
       await createMint(
         provider.connection,
-        admin, // Payer
-        admin.publicKey, // Mint Authority
-        admin.publicKey, // Freeze Authority (optional)
+        ADMIN, // Payer
+        ADMIN.publicKey, // Mint Authority
+        ADMIN.publicKey, // Freeze Authority (optional)
         0, // Decimals (NFTs have 0 decimals)
         collectionMintKeypair // Mint Keypair
       );
@@ -173,21 +176,21 @@ describe("shortx-contract", () => {
       const [collectionMetadataPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("metadata"),
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+          METAPLEX_ID.toBuffer(),
           collectionMintKeypair.publicKey.toBuffer(),
         ],
-        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        METAPLEX_ID
       );
       console.log("Collection Metadata PDA:", collectionMetadataPda.toString());
 
       const [collectionMasterEditionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("metadata"),
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+          METAPLEX_ID.toBuffer(),
           collectionMintKeypair.publicKey.toBuffer(),
           Buffer.from("edition"),
         ],
-        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        METAPLEX_ID
       );
       console.log("Collection Master Edition PDA:", collectionMasterEditionPda.toString());
 
@@ -204,8 +207,8 @@ describe("shortx-contract", () => {
             metadataUri
           })
           .accountsPartial({
-            signer: admin.publicKey,
-            feeVault: feeVault.publicKey,
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             market: marketPda,
             oraclePubkey: oraclePubkey,
             usdcMint: usdcMint,
@@ -216,9 +219,9 @@ describe("shortx-contract", () => {
             config: configPda,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
-            tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+            tokenMetadataProgram: METAPLEX_ID,
           })
-          .signers([admin])
+          .signers([ADMIN])
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
@@ -251,7 +254,7 @@ describe("shortx-contract", () => {
       console.log("=== End Market State Details ===\n");
       
       assert.ok(marketAccount.marketId.eq(marketId));
-      assert.ok(marketAccount.authority.equals(admin.publicKey));
+      assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
     });
   });
 });
