@@ -3,10 +3,11 @@ use anchor_lang::system_program::{ transfer, Transfer };
 use anchor_spl::token::Token;
 use anchor_spl::token_2022::{ transfer_checked, Token2022, TransferChecked };
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
-use mpl_token_metadata::instructions::BurnNftCpiBuilder;
+use anchor_spl::{metadata::BurnNft};
+
 use std::str::FromStr;
 
-use crate::constants::{MARKET, USDC_MINT};
+use crate::constants::{USDC_MINT};
 use crate::state::{Config, MarketStates, OpenPositionArgs, PayoutNftArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
     errors::ShortxError,
@@ -84,12 +85,6 @@ pub struct PayoutNftContext<'info> {
     )]
     pub mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// CHECK: Check by CPI
-    pub master_edition: AccountInfo<'info>,
-
-    /// CHECK: Check by CPI
-    pub collection_metadata_account: AccountInfo<'info>,
-
     #[account(
         init_if_needed,
         payer = signer,
@@ -112,14 +107,16 @@ pub struct PayoutNftContext<'info> {
     pub nft_mint: AccountInfo<'info>,
 
     /// CHECK: Burn expects type of accountInfo so I guess checking happens in the CPI
-    #[account(
-        mut
-    )]
+    #[account(mut)]
     pub nft_token_account: AccountInfo<'info>,
 
     /// CHECK: Verified by CPI
     #[account(mut)]
     pub metadata_account: AccountInfo<'info>,
+
+    /// CHECK: Check by CPI
+    #[account(mut)]
+    pub master_edition: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub token_2022_program: Program<'info, Token2022>,
@@ -293,7 +290,7 @@ impl<'info> OrderContext<'info> {
     
         
         if payout > 0 && is_winner {
-            let signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
+            let market_signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
     
             
                 transfer_checked(
@@ -305,7 +302,7 @@ impl<'info> OrderContext<'info> {
                             to: self.user_ata.to_account_info(),
                             authority: market.to_account_info(),
                         },
-                        signer
+                        market_signer
                     ),
                     payout,
                     self.mint.decimals
@@ -338,13 +335,19 @@ impl<'info> PayoutNftContext<'info> {
         let position_account = &mut self.position_account;
         let ts = Clock::get()?.unix_timestamp;
 
+        msg!("Starting NFT payout for position {}", args.position_id);
+        msg!("Market ID: {}", market.market_id);
+        msg!("Market bump: {}", market.bump);
+        msg!("Market authority: {}", market.authority);
+        msg!("Market vault: {}", self.market_vault.key());
+        msg!("Market vault owner: {}", self.market_vault.owner);
+
         // Check market is resolved
         require!(
             market.winning_direction != WinningDirection::None,
             ShortxError::MarketStillActive
         );
         require!(market.market_state == MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
-
 
         // Verify market ID matches
         require!(args.market_id == market.market_id, ShortxError::InvalidMarketId);
@@ -362,6 +365,9 @@ impl<'info> PayoutNftContext<'info> {
             .ok_or(ShortxError::OrderNotFound)?;
 
         let position = position_account.positions[position_index];
+        msg!("Found position at index {}", position_index);
+        msg!("Position direction: {:?}", position.direction);
+        msg!("Market winning direction: {:?}", market.winning_direction);
 
         // Check if position won
         let is_winner = match (position.direction, market.winning_direction) {
@@ -370,7 +376,7 @@ impl<'info> PayoutNftContext<'info> {
             _ => false,
         };
 
-        
+
         let mut payout = 0;
         if is_winner {
 
@@ -385,7 +391,11 @@ impl<'info> PayoutNftContext<'info> {
 
         if payout > 0 && is_winner {
             // Transfer payout
-            let signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
+            let market_signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
+            msg!("Using signer seeds: {:?}", market_signer);
+            msg!("Market vault amount before transfer: {}", self.market_vault.amount);
+            msg!("User ATA amount before transfer: {}", self.user_ata.amount);
+
             transfer_checked(
                 CpiContext::new_with_signer(
                     self.token_program.to_account_info(),
@@ -395,23 +405,42 @@ impl<'info> PayoutNftContext<'info> {
                         to: self.user_ata.to_account_info(),
                         authority: market.to_account_info(),
                     },
-                    signer
+                    market_signer
                 ),
                 payout,
                 self.mint.decimals
             )?;
 
             // Burn the NFT
-            BurnNftCpiBuilder::new(&self.token_metadata_program)
-            .metadata(&self.metadata_account)
-            // if your NFT is part of a collection you will need to pass in the collection metadata address.
-            .collection_metadata(Some(&self.collection_metadata_account))
-            .owner(&self.signer)
-            .mint(&self.nft_mint)
-            .token_account(&self.nft_token_account)
-            .master_edition_account(&self.master_edition)
-            .spl_token_program(&self.token_2022_program)
-            .invoke()?;
+            msg!("Starting NFT burn");
+            msg!("NFT token account: {}", self.nft_token_account.key());
+            msg!("NFT token account owner: {}", self.nft_token_account.owner);
+            msg!("NFT mint: {}", self.nft_mint.key());
+            msg!("Master edition: {}", self.master_edition.key());
+            msg!("Metadata account: {}", self.metadata_account.key());
+
+
+            let owner = self.signer.to_account_info();
+            let metadata = self.metadata_account.to_account_info();
+            let mint = self.nft_mint.to_account_info();
+            let token = self.nft_token_account.to_account_info();
+            let edition = self.master_edition.to_account_info();
+            let spl_token = self.token_2022_program.to_account_info();
+            let metadata_program_id = self.token_metadata_program.to_account_info();
+    
+            CpiContext::new(
+                metadata_program_id,
+                BurnNft {
+                    metadata,
+                    owner,
+                    mint,
+                    token,
+                    edition,
+                    spl_token,
+                },
+            );
+
+            msg!("NFT burn successful");
         }
 
         // Update position status
@@ -423,6 +452,7 @@ impl<'info> PayoutNftContext<'info> {
         market.update_ts = ts;
         market.emit_market_event()?;
 
+        msg!("Payout completed successfully");
         Ok(())
     }
 }
