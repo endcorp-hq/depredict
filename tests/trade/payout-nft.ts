@@ -1,23 +1,17 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
+import { PublicKey, Keypair } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
-  getOrCreateAssociatedTokenAccount,
+  METADATA_POINTER_SIZE,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
-import { getUsdcMint } from "../helpers";
+import { getUsdcMint, MARKET_ID, METAPLEX_ID, program, provider, USER } from "../helpers";
 
 describe("shortx-contract", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
   
   // Load keypairs
   // const admin = Keypair.fromSecretKey(
@@ -39,21 +33,20 @@ describe("shortx-contract", () => {
 
   describe("NFT Payout", () => {
     it("Checks market resolution and processes NFT payout", async () => {
-      // Use the market ID where you have minted NFT positions
-      const marketId = new anchor.BN(215102); // Replace with your actual market ID
+
 
       // Get the market PDA
       const [marketPda, marketBump] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("market"),
-          marketId.toArrayLike(Buffer, "le", 8),
+          MARKET_ID.toArrayLike(Buffer, "le", 8),
         ],
         program.programId
       );
 
       // Get the position account PDA
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from("position"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
@@ -128,10 +121,10 @@ describe("shortx-contract", () => {
         const [nftMetadataPda] = PublicKey.findProgramAddressSync(
           [
             Buffer.from("metadata"),
-            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            METAPLEX_ID.toBuffer(),
             position.mint.toBuffer(),
           ],
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+          METAPLEX_ID
         );
         console.log("NFT Metadata PDA:", nftMetadataPda.toString());
 
@@ -167,21 +160,21 @@ describe("shortx-contract", () => {
         const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
           [
             Buffer.from("metadata"),
-            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            METAPLEX_ID.toBuffer(),
             position.mint.toBuffer(),
             Buffer.from("edition"),
           ],
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+          METAPLEX_ID
         );
 
         // Add edition PDA derivation
         const [nftEditionPda] = PublicKey.findProgramAddressSync(
           [
             Buffer.from("metadata"),
-            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            METAPLEX_ID.toBuffer(),
             position.mint.toBuffer(),
           ],
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+          METAPLEX_ID
         );
 
         console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
@@ -200,18 +193,18 @@ describe("shortx-contract", () => {
         console.log("Token Program ID:", TOKEN_PROGRAM_ID.toString());
         console.log("Token 2022 Program ID:", TOKEN_2022_PROGRAM_ID.toString());
         console.log("Associated Token Program ID:", ASSOCIATED_TOKEN_PROGRAM_ID.toString());
-        console.log("Token Metadata Program ID:", new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toString());
+        console.log("Token Metadata Program ID:", METAPLEX_ID.toString());
 
         // Add token record PDA derivation
         const [tokenRecordPda] = PublicKey.findProgramAddressSync(
           [
             Buffer.from("metadata"),
-            new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+            METAPLEX_ID.toBuffer(),
             position.mint.toBuffer(),
             Buffer.from("token_record"),
             nftTokenAccount.toBuffer(),
           ],
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+          METAPLEX_ID
         );
 
         console.log("Token Record PDA:", tokenRecordPda.toString());
@@ -222,7 +215,7 @@ describe("shortx-contract", () => {
           // Log the instruction data we're about to send
           console.log("Payout Arguments:", {
             positionId: position.positionId.toString(),
-            marketId: marketId.toString(),
+            marketId: MARKET_ID.toString(),
             amount: position.amount.toString(),
             direction: "yes"
           });
@@ -231,12 +224,12 @@ describe("shortx-contract", () => {
           await program.methods
             .payoutNft({
               positionId: position.positionId,
-              marketId: marketId,
+              marketId: MARKET_ID,
               amount: position.amount,
               direction: { yes: {} },
             })
             .accountsPartial({
-              signer: user.publicKey,
+              signer: USER.publicKey,
               market: marketPda,
               positionAccount: positionAccountPda,
               nftMint: position.mint,
@@ -248,10 +241,10 @@ describe("shortx-contract", () => {
               metadataAccount: nftMetadataPda,
               tokenProgram: TOKEN_PROGRAM_ID,
               token2022Program: TOKEN_2022_PROGRAM_ID,
-              tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+              tokenMetadataProgram: METAPLEX_ID,
               associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
               systemProgram: anchor.web3.SystemProgram.programId,
-            }).signers([user])
+            }).signers([USER])
             .rpc({
               skipPreflight: false,
               commitment: "confirmed",

@@ -1,75 +1,50 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair, Transaction, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
+import { PublicKey, Keypair, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
 import {
-  TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createMint,
-  getOrCreateAssociatedTokenAccount,
-  mintTo,
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
-  createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
-import { getNetworkConfig } from "../helpers";
+import { getNetworkConfig, ADMIN, program, provider, USER, MARKET_ID, METAPLEX_ID } from "../helpers";
 
 describe("shortx-contract", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
-
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
-
-  const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
-  );
 
   // Use the same admin keypair that created the market
-  const marketAuthority = admin;
+  const marketAuthority = ADMIN;
 
   before(async () => {
     // Get network configuration
-    const { isDevnet, connectionUrl } = await getNetworkConfig();
+    const { isDevnet } = await getNetworkConfig();
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
 
     // Request airdrop for admin and user if needed
-    const balance = await provider.connection.getBalance(admin.publicKey);
+    const balance = await provider.connection.getBalance(ADMIN.publicKey);
     if (balance < 1_000_000_000) { // Less than 1 SOL
       console.log("Requesting airdrop for admin...");
-      const signature = await provider.connection.requestAirdrop(admin.publicKey, 2_000_000_000); // 2 SOL
-      await provider.connection.confirmTransaction(signature);
+      const signature = await provider.connection.requestAirdrop(ADMIN.publicKey, 2_000_000_000); // 2 SOL
+      const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
+      await provider.connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
     }
 
-    const userBalance = await provider.connection.getBalance(user.publicKey);
+    const userBalance = await provider.connection.getBalance(USER.publicKey);
     if (userBalance < 1_000_000_000) {
       console.log("Requesting airdrop for user...");
-      const signature = await provider.connection.requestAirdrop(user.publicKey, 2_000_000_000);
-      await provider.connection.confirmTransaction(signature);
+      const signature = await provider.connection.requestAirdrop(USER.publicKey, 2_000_000_000);
+      const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
+        await provider.connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
     }
   });
 
   describe("Trade", () => {
     it("Mints an NFT for an existing position", async () => {
-      // Use the same market ID as in create-order.ts
-      const marketId = new anchor.BN(605252); // Using market ID 
+
       
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("market"),
-          marketId.toArrayLike(Buffer, "le", 8),
+          MARKET_ID.toArrayLike(Buffer, "le", 8),
         ],
         program.programId
       );
@@ -78,7 +53,7 @@ describe("shortx-contract", () => {
 
       // Get the position account PDA
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from("position"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
@@ -93,10 +68,10 @@ describe("shortx-contract", () => {
       const [nftMetadataPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("metadata"),
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+          METAPLEX_ID.toBuffer(),
           nftMintKeypair.publicKey.toBuffer(),
         ],
-        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        METAPLEX_ID
       );
       console.log("NFT Metadata PDA:", nftMetadataPda.toString());
 
@@ -104,11 +79,11 @@ describe("shortx-contract", () => {
       const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("metadata"),
-          new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+          METAPLEX_ID.toBuffer(),
           nftMintKeypair.publicKey.toBuffer(),
           Buffer.from("edition"),
         ],
-        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+        METAPLEX_ID
       );
       console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
 
@@ -116,28 +91,11 @@ describe("shortx-contract", () => {
       console.log("Creating NFT token account...");
       const nftTokenAccount = getAssociatedTokenAddressSync(
         nftMintKeypair.publicKey,
-        user.publicKey,  // Create token account for admin since they own the position
+        USER.publicKey,  // Create token account for admin since they own the position
         false, // allowOwnerOffCurve
         TOKEN_2022_PROGRAM_ID
         );
       console.log("NFT Token Account:", nftTokenAccount.toString());
-
-      // Create the token account if it doesn't exist
-      // try {
-      //   await provider.connection.getAccountInfo(nftTokenAccount);
-      // } catch (error) {
-      //   const createAtaIx = createAssociatedTokenAccountInstruction(
-      //     admin.publicKey, // payer - admin pays for the account creation
-      //     nftTokenAccount, // ata
-      //     admin.publicKey, // owner - admin owns the token account
-      //     nftMintKeypair.publicKey, // mint
-      //     TOKEN_2022_PROGRAM_ID
-      //   );
-        
-      //   const tx = new Transaction().add(createAtaIx);
-      //   await provider.sendAndConfirm(tx, [admin]);  // Admin signs for account creation
-      //   console.log("Created new token account");
-      // }
 
       // Get the position ID from the position account
       const positionAccount = await program.account.positionAccount.fetch(positionAccountPda);
@@ -168,7 +126,7 @@ describe("shortx-contract", () => {
         // Define account roles clearly
         const accounts = {
             // The position owner who is minting the NFT (using user since they own the position)
-            signer: user.publicKey,  // This account will:
+            signer: USER.publicKey,  // This account will:
             // 1. Pay for the NFT creation
             // 2. Own the NFT
             
@@ -186,11 +144,11 @@ describe("shortx-contract", () => {
             collectionMint: marketAccount.collectionMint,
             collectionMetadata: marketAccount.collectionMetadata,
             collectionMasterEdition: marketAccount.collectionMasterEdition,
-            collectionAuthority: admin.publicKey, //this will also be a signer for the minting instruction
+            collectionAuthority: ADMIN.publicKey, //this will also be a signer for the minting instruction
             
             // Program accounts
             tokenProgram: TOKEN_2022_PROGRAM_ID,
-            tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+            tokenMetadataProgram: METAPLEX_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
             sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -229,7 +187,7 @@ describe("shortx-contract", () => {
           .preInstructions([
             anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })
           ])
-          .signers([user, admin, nftMintKeypair])  // Signers: market authority (position owner), NFT mint
+          .signers([USER, ADMIN, nftMintKeypair])  // Signers: market authority (position owner), NFT mint
           .rpc({
             skipPreflight: false,
             commitment: "confirmed",
