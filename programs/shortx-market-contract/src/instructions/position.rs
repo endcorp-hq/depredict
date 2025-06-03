@@ -227,7 +227,7 @@ impl<'info> MintPositionContext<'info> {
         msg!("Update authority: {}", signer_account.key());
         msg!("Market authority: {}", self.market.authority);
         
-        let collection_master_edition_info = self.market.collection_master_edition.ok_or(ShortxError::InvalidCollection)?;
+        // let collection_master_edition_info = self.market.collection_master_edition.ok_or(ShortxError::InvalidCollection)?;
         let mut verify_cpi = SetAndVerifyCollectionCpiBuilder::new(&token_metadata_program);
         verify_cpi
             .metadata(&metadata_account)
