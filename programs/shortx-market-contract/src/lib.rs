@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("HTEFvbxoG2qXgLybgpPpq9tFpub51ZLNUg5zsfqu98TS");
+declare_id!("BWbCJnhhafrC69hCdFTqj7L7yJtjP9is6Lykzaq7euaV");
 
 #[program]
 pub mod shortx_contract {
@@ -57,14 +57,14 @@ pub mod shortx_contract {
         Ok(())
     }
 
-    pub fn create_order(ctx: Context<OrderContext>, args: OpenPositionArgs) -> Result<()> {
-        ctx.accounts.open_order(args)?;
+    pub fn create_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
+        ctx.accounts.open_position(args)?;
         Ok(())
     }
 
 
-    pub fn settle_order(ctx: Context<OrderContext>, order_id: u64) -> Result<()> {
-        ctx.accounts.payout_order(order_id)?;
+    pub fn settle_position(ctx: Context<PositionContext>, position_id: u64) -> Result<()> {
+        ctx.accounts.payout_position(position_id)?;
         Ok(())
     }
 
@@ -73,8 +73,8 @@ pub mod shortx_contract {
         Ok(())
     }
 
-    pub fn payout_nft(ctx: Context<PayoutNftContext>, args: PayoutNftArgs) -> Result<()> {
-        ctx.accounts.payout_nft(args)?;
+    pub fn settle_nft_position(ctx: Context<PayoutNftContext>, args: PayoutNftArgs) -> Result<()> {
+        ctx.accounts.payout_nft_position(args)?;
         Ok(())
     }
 }

@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
-pub struct OrderContext<'info> {
+pub struct PositionContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
@@ -28,35 +28,35 @@ pub struct OrderContext<'info> {
 
     #[account(
         mut,
-        constraint = position_account.market_id == market.market_id @ ShortxError::InvalidMarketId
+        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId
     )]
-    pub position_account: Box<Account<'info, PositionAccount>>,
+    pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
     #[account(mut)]
     pub market: Box<Account<'info, MarketState>>,
 
     #[account(
         mut, 
-        constraint = mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
+        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
     )]
-    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         init_if_needed,
         payer = signer,
-        associated_token::mint = mint,
+        associated_token::mint = usdc_mint,
         associated_token::authority = signer,
         associated_token::token_program = token_program
     )]
-    pub user_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_usdc_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
-        associated_token::mint = mint,
+        associated_token::mint = usdc_mint,
         associated_token::authority = market,
         associated_token::token_program = token_program
     )]
-    pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub config: Box<Account<'info, Config>>,
 
@@ -75,32 +75,32 @@ pub struct PayoutNftContext<'info> {
 
     #[account(
         mut,
-        constraint = position_account.market_id == market.market_id @ ShortxError::InvalidMarketId
+        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId
     )]
-    pub position_account: Box<Account<'info, PositionAccount>>,
+    pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
     #[account(
         mut, 
-        constraint = mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
+        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
     )]
-    pub mint: Box<InterfaceAccount<'info, Mint>>,
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         init_if_needed,
         payer = signer,
-        associated_token::mint = mint,
+        associated_token::mint = usdc_mint,
         associated_token::authority = signer,
         associated_token::token_program = token_program
     )]
-    pub user_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_usdc_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
-        associated_token::mint = mint,
+        associated_token::mint = usdc_mint,
         associated_token::authority = market,
         associated_token::token_program = token_program
     )]
-    pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: We verify ownership through token account
     #[account(mut)]
@@ -108,15 +108,15 @@ pub struct PayoutNftContext<'info> {
 
     /// CHECK: Burn expects type of accountInfo so I guess checking happens in the CPI
     #[account(mut)]
-    pub nft_token_account: AccountInfo<'info>,
+    pub user_nft_token_account: AccountInfo<'info>,
 
     /// CHECK: Verified by CPI
     #[account(mut)]
-    pub metadata_account: AccountInfo<'info>,
+    pub nft_metadata_account: AccountInfo<'info>,
 
     /// CHECK: Check by CPI
     #[account(mut)]
-    pub master_edition: AccountInfo<'info>,
+    pub nft_master_edition_account: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub token_2022_program: Program<'info, Token2022>,
@@ -128,17 +128,13 @@ pub struct PayoutNftContext<'info> {
 }
 
 
-impl<'info> OrderContext<'info> {
-    pub fn open_order(&mut self, args: OpenPositionArgs) -> Result<()> {
+impl<'info> PositionContext<'info> {
+    pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<()> {
         let market = &mut self.market;
-        let position_account = &mut self.position_account;
+        let market_positions_account = &mut self.market_positions_account;
     
         let ts = Clock::get()?.unix_timestamp;
     
-        // Add logs for timestamp comparison
-        msg!("Current cluster timestamp (ts): {}", ts);
-        msg!("Market start timestamp (market.market_start): {}", market.market_start);
-        msg!("Is ts > market.market_start? {}", ts > market.market_start);
 
         require!(ts > market.market_start, ShortxError::QuestionPeriodNotStarted);
         require!(market.market_end > ts, ShortxError::QuestionPeriodEnded);
@@ -169,24 +165,24 @@ impl<'info> OrderContext<'info> {
         
         // Add debug logging for positions
         msg!("Checking position slots:");
-        for (i, pos) in position_account.positions.iter().enumerate() {
+        for (i, pos) in market_positions_account.positions.iter().enumerate() {
             msg!("Position {}: status = {:?}", i, pos.position_status);
         }
     
-        let position_index = position_account.positions
+        let position_index = market_positions_account.positions
             .iter()
             .position(
-                |order|
-                    order.position_status == PositionStatus::Init
+                |position|
+                    position.position_status == PositionStatus::Init
             )
-            .ok_or(ShortxError::NoAvailableOrderSlot)?;
+            .ok_or(ShortxError::NoAvailablePositionSlot)?;
     
             
         msg!("Position Index {:?}", position_index);
 
-        let position_nonce = position_account.get_position_nonce();
+        let position_nonce = market_positions_account.get_position_nonce();
         msg!("Position Nonce {:?}", position_nonce);
-        position_account.positions[position_index] = Position {
+        market_positions_account.positions[position_index] = Position {
             ts,
             position_id: market.next_position_id(),
             market_id: market.market_id,
@@ -198,7 +194,8 @@ impl<'info> OrderContext<'info> {
             authority: Some(self.signer.key()),
             created_at: ts,
             version: 0,
-            padding: [0; 10],
+            position_nonce: position_nonce,
+            padding: [0; 3],
         };
     
         market.volume = market.volume.checked_add(net_amount).unwrap();
@@ -211,22 +208,21 @@ impl<'info> OrderContext<'info> {
                 market.no_liquidity = market.no_liquidity.checked_add(net_amount).unwrap();
             }
         }
-       
-        msg!("Transfer Checked, net_amount {:?}, mint {:?}, to {:?}, authority {:?}, balance {:?}, user balance {:?}", net_amount, self.mint.to_account_info(), self.market_vault.to_account_info(), self.signer.to_account_info(), self.market_vault.amount, self.user_ata.amount);
+
         transfer_checked(
             CpiContext::new(self.token_program.to_account_info(), TransferChecked {
-                from: self.user_ata.to_account_info(),
-                mint: self.mint.to_account_info(),
-                to: self.market_vault.to_account_info(),
+                from: self.user_usdc_ata.to_account_info(),
+                mint: self.usdc_mint.to_account_info(),
+                to: self.market_usdc_vault.to_account_info(),
                 authority: self.signer.to_account_info(),
             }),
             net_amount,
-            self.mint.decimals
+            self.usdc_mint.decimals
         )?;
     
-        let current_position = position_account.positions[position_index];
+        let current_position = market_positions_account.positions[position_index];
     
-        position_account.emit_position_event(current_position)?;
+        market_positions_account.emit_position_event(current_position)?;
     
         let fee = self.config.fee_amount;
     
@@ -252,9 +248,9 @@ impl<'info> OrderContext<'info> {
     }
 
 
-    pub fn payout_order(&mut self, position_id: u64) -> Result<()> {
+    pub fn payout_position(&mut self, position_id: u64) -> Result<()> {
         let market = &mut self.market;
-        let position_account = &mut self.position_account;
+        let market_positions_account = &mut self.market_positions_account;
         let ts = Clock::get()?.unix_timestamp;
     
         require!(
@@ -264,16 +260,16 @@ impl<'info> OrderContext<'info> {
         require!(market.market_state == MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
 
     
-        let position_index = position_account.positions
+        let position_index = market_positions_account.positions
             .iter()
-            .position(|order| {
-                order.position_id == position_id &&
-                    order.position_status == PositionStatus::Open &&
-                    order.market_id == market.market_id
+            .position(|position| {
+                position.position_id == position_id &&
+                    position.position_status == PositionStatus::Open &&
+                    position.market_id == market.market_id
             })
-            .ok_or(ShortxError::OrderNotFound)?;
+            .ok_or(ShortxError::PositionNotFound)?;
     
-        let position = position_account.positions[position_index];
+        let position = market_positions_account.positions[position_index];
     
         let is_winner = match (position.direction, market.winning_direction) {
             | (PositionDirection::Yes, WinningDirection::Yes)
@@ -297,26 +293,26 @@ impl<'info> OrderContext<'info> {
                     CpiContext::new_with_signer(
                         self.token_program.to_account_info(),
                         TransferChecked {
-                            from: self.market_vault.to_account_info(),
-                            mint: self.mint.to_account_info(),
-                            to: self.user_ata.to_account_info(),
+                            from: self.market_usdc_vault.to_account_info(),
+                            mint: self.usdc_mint.to_account_info(),
+                            to: self.user_usdc_ata.to_account_info(),
                             authority: market.to_account_info(),
                         },
                         market_signer
                     ),
                     payout,
-                    self.mint.decimals
+                    self.usdc_mint.decimals
                 )?;
                 
-            msg!("Market Liquidity {:?}", self.market_vault.amount);
+            msg!("Market Liquidity {:?}", self.market_usdc_vault.amount);
             msg!("Order Price {:?}", position.amount);
             msg!("Payout {:?}", payout);
         }
     
-        position_account.positions[position_index].position_status = PositionStatus::Closed;
-        position_account.positions[position_index].ts = ts;
+        market_positions_account.positions[position_index].position_status = PositionStatus::Closed;
+        market_positions_account.positions[position_index].ts = ts;
     
-        position_account.emit_position_event(position_account.positions[position_index])?;
+        market_positions_account.emit_position_event(market_positions_account.positions[position_index])?;
     
         require!(ts > market.update_ts, ShortxError::ConcurrentTransaction);
     
@@ -330,17 +326,17 @@ impl<'info> OrderContext<'info> {
 
 
 impl<'info> PayoutNftContext<'info> {
-    pub fn payout_nft(&mut self, args: PayoutNftArgs) -> Result<()> {
+    pub fn payout_nft_position(&mut self, args: PayoutNftArgs) -> Result<()> {
         let market = &mut self.market;
-        let position_account = &mut self.position_account;
+        let market_positions_account = &mut self.market_positions_account;
         let ts = Clock::get()?.unix_timestamp;
 
         msg!("Starting NFT payout for position {}", args.position_id);
         msg!("Market ID: {}", market.market_id);
         msg!("Market bump: {}", market.bump);
         msg!("Market authority: {}", market.authority);
-        msg!("Market vault: {}", self.market_vault.key());
-        msg!("Market vault owner: {}", self.market_vault.owner);
+        msg!("Market vault: {}", self.market_usdc_vault.key());
+        msg!("Market vault owner: {}", self.market_usdc_vault.owner);
 
         // Check market is resolved
         require!(
@@ -353,7 +349,7 @@ impl<'info> PayoutNftContext<'info> {
         require!(args.market_id == market.market_id, ShortxError::InvalidMarketId);
 
         // Find position with this position ID
-        let position_index = position_account.positions
+        let position_index = market_positions_account.positions
             .iter()
             .position(|pos| {
                 pos.position_id == args.position_id &&
@@ -362,9 +358,9 @@ impl<'info> PayoutNftContext<'info> {
                 pos.position_status == PositionStatus::Open &&
                 pos.amount == args.amount
             })
-            .ok_or(ShortxError::OrderNotFound)?;
+            .ok_or(ShortxError::PositionNotFound)?;
 
-        let position = position_account.positions[position_index];
+        let position = market_positions_account.positions[position_index];
         msg!("Found position at index {}", position_index);
         msg!("Position direction: {:?}", position.direction);
         msg!("Market winning direction: {:?}", market.winning_direction);
@@ -393,38 +389,38 @@ impl<'info> PayoutNftContext<'info> {
             // Transfer payout
             let market_signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
             msg!("Using signer seeds: {:?}", market_signer);
-            msg!("Market vault amount before transfer: {}", self.market_vault.amount);
-            msg!("User ATA amount before transfer: {}", self.user_ata.amount);
+            msg!("Market vault amount before transfer: {}", self.market_usdc_vault.amount);
+            msg!("User ATA amount before transfer: {}", self.user_usdc_ata.amount);
 
             transfer_checked(
                 CpiContext::new_with_signer(
                     self.token_program.to_account_info(),
                     TransferChecked {
-                        from: self.market_vault.to_account_info(),
-                        mint: self.mint.to_account_info(),
-                        to: self.user_ata.to_account_info(),
+                        from: self.market_usdc_vault.to_account_info(),
+                        mint: self.usdc_mint.to_account_info(),
+                        to: self.user_usdc_ata.to_account_info(),
                         authority: market.to_account_info(),
                     },
                     market_signer
                 ),
                 payout,
-                self.mint.decimals
+                self.usdc_mint.decimals
             )?;
 
             // Burn the NFT
             msg!("Starting NFT burn");
-            msg!("NFT token account: {}", self.nft_token_account.key());
-            msg!("NFT token account owner: {}", self.nft_token_account.owner);
+            msg!("NFT token account: {}", self.user_nft_token_account.key());
+            msg!("NFT token account owner: {}", self.user_nft_token_account.owner);
             msg!("NFT mint: {}", self.nft_mint.key());
-            msg!("Master edition: {}", self.master_edition.key());
-            msg!("Metadata account: {}", self.metadata_account.key());
+            msg!("Master edition: {}", self.nft_master_edition_account.key());
+            msg!("Metadata account: {}", self.nft_metadata_account.key());
 
 
             let owner = self.signer.to_account_info();
-            let metadata = self.metadata_account.to_account_info();
+            let metadata = self.nft_metadata_account.to_account_info();
             let mint = self.nft_mint.to_account_info();
-            let token = self.nft_token_account.to_account_info();
-            let edition = self.master_edition.to_account_info();
+            let token = self.user_nft_token_account.to_account_info();
+            let edition = self.nft_master_edition_account.to_account_info();
             let spl_token = self.token_2022_program.to_account_info();
             let metadata_program_id = self.token_metadata_program.to_account_info();
     
@@ -444,9 +440,9 @@ impl<'info> PayoutNftContext<'info> {
         }
 
         // Update position status
-        position_account.positions[position_index].position_status = PositionStatus::Closed;
-        position_account.positions[position_index].ts = ts;
-        position_account.emit_position_event(position_account.positions[position_index])?;
+        market_positions_account.positions[position_index].position_status = PositionStatus::Closed;
+        market_positions_account.positions[position_index].ts = ts;
+        market_positions_account.emit_position_event(market_positions_account.positions[position_index])?;
 
         require!(ts > market.update_ts, ShortxError::ConcurrentTransaction);
         market.update_ts = ts;

@@ -212,9 +212,9 @@ describe("shortx-contract", () => {
             market: marketPda,
             oraclePubkey: oraclePubkey,
             usdcMint: usdcMint,
-            collectionMint: collectionMintKeypair.publicKey,
-            collectionMetadata: collectionMetadataPda,
-            collectionMasterEdition: collectionMasterEditionPda,
+            nftCollectionMint: collectionMintKeypair.publicKey,
+            nftCollectionMetadata: collectionMetadataPda,
+            nftCollectionMasterEdition: collectionMasterEditionPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             config: configPda,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -246,9 +246,9 @@ describe("shortx-contract", () => {
       console.log("Question:", Buffer.from(marketAccount.question).toString());
       console.log("Update Timestamp:", new Date(marketAccount.updateTs.toNumber() * 1000).toISOString());
       console.log("Oracle Pubkey:", marketAccount.oraclePubkey?.toString() || "None");
-      console.log("Collection Mint:", marketAccount.collectionMint?.toString() || "None");
-      console.log("Collection Metadata:", marketAccount.collectionMetadata?.toString() || "None");
-      console.log("Collection Master Edition:", marketAccount.collectionMasterEdition?.toString() || "None");
+      console.log("Collection Mint:", marketAccount.nftCollectionMint?.toString() || "None");
+      console.log("Collection Metadata:", marketAccount.nftCollectionMetadata?.toString() || "None");
+      console.log("Collection Master Edition:", marketAccount.nftCollectionMasterEdition?.toString() || "None");
       console.log("Market State:", marketAccount.marketState);
       console.log("Winning Direction:", marketAccount.winningDirection);
       console.log("=== End Market State Details ===\n");

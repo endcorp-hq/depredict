@@ -6,7 +6,7 @@ import {
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getUsdcMint, getNetworkConfig, ADMIN, FEE_VAULT, program, provider, USER, MARKET_ID } from "../helpers";
+import { getUsdcMint, getNetworkConfig, FEE_VAULT, program, provider, USER, MARKET_ID } from "../helpers";
 
 describe("shortx-contract", () => { 
 
@@ -116,23 +116,23 @@ describe("shortx-contract", () => {
 
       try {
         const tx = await program.methods
-          .createOrder({
+          .createPosition({
             amount,
             direction,
           })
           .accountsPartial({
             signer: USER.publicKey,
             feeVault: FEE_VAULT.publicKey,
-            positionAccount: positionAccountPda,
+            marketPositionsAccount: positionAccountPda,
             market: marketPda,
-            mint: usdcMint, // Use devnet USDC mint
-            userAta: (await getOrCreateAssociatedTokenAccount(
+            usdcMint: usdcMint, // Use devnet USDC mint
+            userUsdcAta: (await getOrCreateAssociatedTokenAccount(
               provider.connection,
               USER,
               usdcMint,
               USER.publicKey
             )).address,
-            marketVault: marketVault,
+            marketUsdcVault: marketVault,
             config: configPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

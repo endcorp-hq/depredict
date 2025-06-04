@@ -122,6 +122,7 @@ impl<'info> SubPositionContext<'info> {
             nonce,
             market_id: market_positions.market_id,
             is_sub_position: true,
+            padding: [0; 25],
         });
 
         Ok(())
@@ -140,7 +141,7 @@ impl<'info> MintPositionContext<'info> {
                     && order.position_status == PositionStatus::Open
                     && order.market_id == self.market.market_id
             })
-            .ok_or(ShortxError::OrderNotFound)?;
+            .ok_or(ShortxError::PositionNotFound)?;
 
         let mut position = position_account.positions[position_index];
         // Update position state
@@ -165,7 +166,7 @@ impl<'info> MintPositionContext<'info> {
         let token_program = self.token_program.to_account_info();
         
         // Get collection mint from market
-        let collection_mint_info = self.market.collection_mint.ok_or(ShortxError::InvalidCollection)?;
+        let collection_mint_info = self.market.nft_collection_mint.ok_or(ShortxError::InvalidCollection)?;
 
         msg!("Collection mint: {}", collection_mint_info.to_string());
         msg!("Collection authority key: {}", self.collection_authority.key());

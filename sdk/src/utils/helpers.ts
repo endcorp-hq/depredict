@@ -1,16 +1,13 @@
 import {
   Market,
-  Order,
-  OrderDirection,
-  OrderStatus,
-  UserTrade,
   WinningDirection,
   MarketStates
 } from '../types/trade'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
-import { IdlAccounts } from '@coral-xyz/anchor'
+import { BN, IdlAccounts } from '@coral-xyz/anchor'
 import { ShortxContract } from '../types/shortx'
+import { PositionAccount, Position, PositionDirection, PositionStatus } from '../types/position'
 
 export const encodeString = (value: string, alloc = 32): number[] => {
   const buffer = Buffer.alloc(alloc, 32)
@@ -39,7 +36,7 @@ export const formatMarket = (
     volume: account.volume.toString(),
     marketState: getMarketState(account.marketState),
     updateTs: account.updateTs.toString(),
-    nextOrderId: account.nextOrderId.toString(),
+    nextPositionId: account.nextPositionId.toString(),
     marketStart: account.marketStart.toString(),
     marketEnd: account.marketEnd.toString(),
     question: Buffer.from(account.question).toString().replace(/\0+$/, ''),
@@ -47,37 +44,35 @@ export const formatMarket = (
   }
 }
 
-export const formatUserTrade = (
-  account: IdlAccounts<ShortxContract>['userTrade'],
-  publicKey: PublicKey
-): UserTrade => {
+export const formatPositionAccount = (
+  account: IdlAccounts<ShortxContract>['positionAccount'],
+  marketId: number
+): PositionAccount => {
   return {
-    user: publicKey.toString(),
-    totalDeposits: account.totalDeposits.toString(),
-    totalWithdraws: account.totalWithdraws.toString(),
-    orders: account.orders.map((order: any) =>
-      formatOrder(order, account.authority.toString())
+    marketId: marketId,
+    positions: account.positions.map((position: any) =>
+      formatPosition(position, account.authority.toString())
     ),
     nonce: account.nonce.toString(),
-    isSubUser: account.isSubUser
+    isSubPosition: account.isSubPosition
   }
 }
 
-export const formatOrder = (
-  order: IdlAccounts<ShortxContract>['userTrade']['orders'][number],
+export const formatPosition = (
+  position: IdlAccounts<ShortxContract>['positionAccount']['positions'][number],
   authority?: string
-): Order => {
+): Position => {
   return {
-    ts: order.ts.toString(),
+    ts: position.ts.toString(),
     authority: authority ? authority : '',
-    userNonce: order.userNonce.toString(),
-    createdAt: order.createdAt ? order.createdAt.toString() : '',
-    orderId: order.orderId.toString(),
-    marketId: order.marketId.toString(),
-    orderStatus: getOrderStatus(order.orderStatus),
-    orderDirection: getOrderDirection(order.orderDirection),
-    price: order.price.toString(),
-    version: order.version.toString(),
+    positionNonce: position.positionNonce.toString(),
+    createdAt: position.createdAt ? position.createdAt.toString() : '',
+    positionId: position.positionId.toString(),
+    marketId: position.marketId.toString(),
+    positionStatus: getPositionStatus(position.positionStatus),
+    direction: getPositionDirection(position.direction),
+    amount: position.amount.toString(),
+    version: position.version.toString(),
   }
 }
 
@@ -115,7 +110,7 @@ export const getTokenProgram = (mint: PublicKey): PublicKey => {
   return TOKEN_PROGRAM_ID
 }
 
-export const getOrderDirection = (
+export const getPositionDirection = (
   direction:
     | {
         yes: {}
@@ -123,15 +118,15 @@ export const getOrderDirection = (
     | {
         no: {}
       }
-): OrderDirection => {
+): PositionDirection => {
   if (Object.keys(direction)[0] === 'yes') {
-    return OrderDirection.YES
+    return PositionDirection.YES
   }
 
-  return OrderDirection.NO
+  return PositionDirection.NO
 }
 
-export const getOrderStatus = (
+export const getPositionStatus = (
   status:
     | {
         init: {}
@@ -151,22 +146,22 @@ export const getOrderStatus = (
     | {
         waiting: {}
       }
-): OrderStatus => {
+): PositionStatus => {
   let currentStatus = Object.keys(status)[0]
 
   switch (currentStatus) {
     case 'init':
-      return OrderStatus.INIT
+      return PositionStatus.INIT
     case 'open':
-      return OrderStatus.OPEN
+      return PositionStatus.OPEN
     case 'closed':
-      return OrderStatus.CLOSED
+      return PositionStatus.CLOSED
     case 'claimed':
-      return OrderStatus.CLAIMED
+      return PositionStatus.CLAIMED
     case 'liquidated':
-      return OrderStatus.LIQUIDATED
+      return PositionStatus.LIQUIDATED
     case 'waiting':
-      return OrderStatus.WAITING
+      return PositionStatus.WAITING
     default:
       throw new Error('Invalid order status')
   }

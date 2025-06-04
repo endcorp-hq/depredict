@@ -9,7 +9,7 @@ export type Market = {
   noLiquidity: string
   volume: string
   updateTs: string
-  nextOrderId: string
+  nextPositionId: string
   marketState: MarketStates
   marketStart: string
   marketEnd: string
@@ -23,27 +23,6 @@ export type MarketStates =
   | { resolving: {} }
   | { resolved: {} }
 
-export type UserTrade = {
-  user: string
-  totalDeposits: string
-  totalWithdraws: string
-  orders: Order[]
-  nonce: string
-  isSubUser: boolean
-}
-
-export type Order = {
-  ts: string
-  orderId: string
-  marketId: string
-  orderStatus: OrderStatus
-  price: string
-  version: string
-  orderDirection: OrderDirection
-  userNonce: string
-  authority: string
-  createdAt: string
-}
 
 export enum WinningDirection {
   NONE = 'None',
@@ -52,19 +31,6 @@ export enum WinningDirection {
   DRAW = 'Draw'
 }
 
-export enum OrderDirection {
-  YES = 'yes',
-  NO = 'no'
-}
-
-export enum OrderStatus {
-  INIT = 'init',
-  OPEN = 'open',
-  CLOSED = 'closed',
-  CLAIMED = 'claimed',
-  LIQUIDATED = 'liquidated',
-  WAITING = 'waiting'
-}
 
 export type InitializeMarketArgs = {
   marketId: number
@@ -101,9 +67,7 @@ export type CreateMarketArgs = {
   startTime: number
   endTime: number
   question: string
-  feeBps: number
-  customer: PublicKey | null
-  payoutFee: number
+  oraclePubkey: PublicKey
+  metadataUri: string
   mint: PublicKey
-  poolId?: number
 }

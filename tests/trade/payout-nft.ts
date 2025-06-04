@@ -8,19 +8,11 @@ import {
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import * as fs from "fs";
 import { getUsdcMint, MARKET_ID, METAPLEX_ID, program, provider, USER } from "../helpers";
 
 describe("shortx-contract", () => {
-  
-  // Load keypairs
-  // const admin = Keypair.fromSecretKey(
-  //   Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  // );
 
-  const user = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
-  );
+  const user = USER;
 
   console.log("User:", user.publicKey.toString());
 
@@ -36,7 +28,7 @@ describe("shortx-contract", () => {
 
 
       // Get the market PDA
-      const [marketPda, marketBump] = PublicKey.findProgramAddressSync(
+      const [marketPda,] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("market"),
           MARKET_ID.toArrayLike(Buffer, "le", 8),
@@ -90,7 +82,7 @@ describe("shortx-contract", () => {
         // Get the NFT token account for user
         const nftTokenAccount = getAssociatedTokenAddressSync(
             position.mint,
-            user.publicKey,  // Create token account for user since they own the position
+            user.publicKey,  // get the user's NFT token account address
             false, // allowOwnerOffCurve
             TOKEN_2022_PROGRAM_ID
           );
@@ -115,7 +107,6 @@ describe("shortx-contract", () => {
           false,
           TOKEN_PROGRAM_ID
         );
-
 
 
         const [nftMetadataPda] = PublicKey.findProgramAddressSync(
@@ -222,7 +213,7 @@ describe("shortx-contract", () => {
 
           // Update the program call
           await program.methods
-            .payoutNft({
+            .settleNftPosition({
               positionId: position.positionId,
               marketId: MARKET_ID,
               amount: position.amount,
@@ -231,14 +222,14 @@ describe("shortx-contract", () => {
             .accountsPartial({
               signer: USER.publicKey,
               market: marketPda,
-              positionAccount: positionAccountPda,
+              marketPositionsAccount: positionAccountPda,
               nftMint: position.mint,
-              nftTokenAccount: nftTokenAccount,
-              userAta: userUsdcAta,
-              marketVault: marketVault,
-              mint: usdcMint,
-              masterEdition: nftMasterEditionPda,
-              metadataAccount: nftMetadataPda,
+              userNftTokenAccount: nftTokenAccount,
+              userUsdcAta: userUsdcAta,
+              marketUsdcVault: marketVault,
+              usdcMint: usdcMint,
+              nftMasterEditionAccount: nftMasterEditionPda,
+              nftMetadataAccount: nftMetadataPda,
               tokenProgram: TOKEN_PROGRAM_ID,
               token2022Program: TOKEN_2022_PROGRAM_ID,
               tokenMetadataProgram: METAPLEX_ID,

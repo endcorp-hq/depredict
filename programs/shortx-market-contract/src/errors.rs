@@ -12,8 +12,8 @@ ShortxError {
     #[msg("Invalid price")]
     InvalidPrice,
 
-    #[msg("No available order slot")]
-    NoAvailableOrderSlot,
+    #[msg("No available position slot")]
+    NoAvailablePositionSlot,
 
     #[msg("Invalid oracle")]
     InvalidOracle,
@@ -24,8 +24,8 @@ ShortxError {
     #[msg("Market is inactive")]
     MarketInactive,
 
-    #[msg("Order not found")]
-    OrderNotFound,
+    #[msg("Position not found")]
+    PositionNotFound,
 
     #[msg("Question period not started")]
     QuestionPeriodNotStarted,

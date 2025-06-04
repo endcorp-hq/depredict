@@ -51,7 +51,7 @@ describe("shortx-contract", () => {
 
       console.log("Market PDA:", marketPda.toString());
 
-      // Get the position account PDA
+      // Get the market positions account PDA
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("position"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
@@ -87,7 +87,7 @@ describe("shortx-contract", () => {
       );
       console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
 
-      // Create the NFT token account using ATA program
+      // Create the user's NFT token account using ATA program
       console.log("Creating NFT token account...");
       const nftTokenAccount = getAssociatedTokenAddressSync(
         nftMintKeypair.publicKey,
@@ -117,10 +117,10 @@ describe("shortx-contract", () => {
         console.log("Market ID:", marketAccount.marketId.toString());
         console.log("Market Authority:", marketAccount.authority.toString());
         console.log("Market Authority Wallet:", marketAuthority.publicKey.toString());
-        console.log("Collection Mint:", marketAccount.collectionMint?.toString());
-        console.log("Collection Metadata:", marketAccount.collectionMetadata?.toString());
-        console.log("Collection Master Edition:", marketAccount.collectionMasterEdition?.toString());
-        console.log("Market Vault:", marketAccount.marketVault?.toString());
+        console.log("Collection Mint:", marketAccount.nftCollectionMint?.toString());
+        console.log("Collection Metadata:", marketAccount.nftCollectionMetadata?.toString());
+        console.log("Collection Master Edition:", marketAccount.nftCollectionMasterEdition?.toString());
+        console.log("Market Vault:", marketAccount.marketUsdcVault?.toString());
         console.log("=== End Market State Details ===\n");
 
         // Define account roles clearly
@@ -141,9 +141,9 @@ describe("shortx-contract", () => {
             masterEdition: nftMasterEditionPda,  // The master edition account for the NFT
             
             // Collection accounts
-            collectionMint: marketAccount.collectionMint,
-            collectionMetadata: marketAccount.collectionMetadata,
-            collectionMasterEdition: marketAccount.collectionMasterEdition,
+            collectionMint: marketAccount.nftCollectionMint,
+            collectionMetadata: marketAccount.nftCollectionMetadata,
+            collectionMasterEdition: marketAccount.nftCollectionMasterEdition,
             collectionAuthority: ADMIN.publicKey, //this will also be a signer for the minting instruction
             
             // Program accounts
@@ -231,9 +231,9 @@ describe("shortx-contract", () => {
         // Get the collection details from the market
         const marketState = await program.account.marketState.fetch(marketPda);
         console.log("NFT Mint:", nftMintKeypair.publicKey.toString());
-        console.log("Collection Mint:", marketState.collectionMint?.toString());
-        console.log("Collection Metadata:", marketState.collectionMetadata?.toString());
-        console.log("Collection Master Edition:", marketState.collectionMasterEdition?.toString());
+        console.log("Collection Mint:", marketState.nftCollectionMint?.toString());
+        console.log("Collection Metadata:", marketState.nftCollectionMetadata?.toString());
+        console.log("Collection Master Edition:", marketState.nftCollectionMasterEdition?.toString());
         console.log("=== End NFT Collection Verification ===\n");
 
       } catch (error) {

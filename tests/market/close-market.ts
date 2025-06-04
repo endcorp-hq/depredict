@@ -11,27 +11,22 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import * as fs from "fs";
+import { ADMIN, FEE_VAULT, getUsdcMint, MARKET_ID } from "../helpers";
 
 describe("shortx-contract", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
+    const admin = ADMIN;
+  const feeVault = FEE_VAULT;
 
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
 
   let localMintPubkey: PublicKey;
 
   before(async () => {
-    localMintPubkey = localMint.publicKey;
+    const { mint: localMintKey, } = await getUsdcMint();
+    localMintPubkey = localMintKey;
     console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
 
     try {
@@ -65,7 +60,7 @@ describe("shortx-contract", () => {
 
   describe("Market", () => {
     it("Closes market", async () => {
-      const marketId = new anchor.BN(59583); //replace with marketId you created
+      const marketId = MARKET_ID; //replace with marketId you created
 
       const [marketPda] = PublicKey.findProgramAddressSync(
         [

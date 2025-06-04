@@ -17,17 +17,21 @@ const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
 
 // Load keypairs
 const ADMIN = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/admin.json", "utf-8")))
+  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/keypair.json", "utf-8")))
 );
 const FEE_VAULT = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/fee-vault.json", "utf-8")))
 );
 
 const USER = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./user.json", "utf-8")))
+  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
 );
 
-export const MARKET_ID = new anchor.BN(593999);
+// const LOCAL_MINT = Keypair.fromSecretKey(
+//   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
+// );
+
+export const MARKET_ID = new anchor.BN(404048);
 
 
 // Export provider and program for use in tests
@@ -102,10 +106,11 @@ export async function getUsdcMint(): Promise<{ mint: PublicKey; keypair: Keypair
   if (isDevnet) {
     console.log("Using devnet USDC mint");
     return { mint: DEVNET_USDC_MINT.publicKey, keypair: DEVNET_USDC_MINT };
-  } else {
+  } else
+   {
     console.log("Using local USDC mint");
     const localMint = Keypair.fromSecretKey(
-      Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
+      Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
     );
     return { mint: localMint.publicKey, keypair: localMint };
   }

@@ -12,6 +12,7 @@ pub struct PositionAccount {
     pub market_id: u64,
     pub nonce: u32,
     pub is_sub_position: bool,
+    pub padding: [u8; 25],
 }
 
 #[account]
@@ -27,7 +28,8 @@ pub struct Position {
     pub mint: Option<Pubkey>,      // NFT mint address (None if not NFT)
     pub authority: Option<Pubkey>, // Original bettor (None if converted to NFT)
     pub position_status: PositionStatus,
-    pub padding: [u8; 10],
+    pub position_nonce: u32,
+    pub padding: [u8; 3],
     pub version: u64,
 }
 
@@ -44,7 +46,8 @@ impl Default for Position {
             mint: None,
             authority: None,
             position_status: PositionStatus::Init,
-            padding: [0; 10],
+            position_nonce: 0,
+            padding: [0; 3],
             version: 0,
         }
     }
@@ -105,17 +108,17 @@ impl PositionAccount {
         self.version = self.version.checked_add(1).unwrap();
     }
 
-    pub fn emit_position_event(&self, order: Position) -> Result<()> {
+    pub fn emit_position_event(&self, position: Position) -> Result<()> {
         emit!(PositionEvent {
-            ts: order.ts,
-            authority: order.authority,
-            market_id: order.market_id,
-            amount: order.amount,
-            direction: order.direction,
-            created_at: order.created_at,
-            is_nft: order.is_nft,
-            mint: order.mint,
-            position_status: order.position_status,
+            ts: position.ts,
+            authority: position.authority,
+            market_id: position.market_id,
+            amount: position.amount,
+            direction: position.direction,
+            created_at: position.created_at,
+            is_nft: position.is_nft,
+            mint: position.mint,
+            position_status: position.position_status,
         });
 
         Ok(())

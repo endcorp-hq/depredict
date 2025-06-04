@@ -60,19 +60,19 @@ pub struct MarketContext<'info> {
         associated_token::authority = market,
         associated_token::token_program = token_program
     )]
-    pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: We create it using metaplex
     #[account(mut)]
-    pub collection_mint: AccountInfo<'info>,
+    pub nft_collection_mint: AccountInfo<'info>,
 
     /// CHECK: We create it using metaplex
     #[account(mut)]
-    pub collection_metadata: AccountInfo<'info>,
+    pub nft_collection_metadata: AccountInfo<'info>,
 
     /// CHECK: We create it using metaplex
     #[account(mut)]
-    pub collection_master_edition: UncheckedAccount<'info>,
+    pub nft_collection_master_edition: UncheckedAccount<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -185,10 +185,10 @@ impl<'info> MarketContext<'info> {
             question: args.question,
             update_ts: ts,
             oracle_pubkey: Some(self.oracle_pubkey.key()),
-            collection_mint: Some(self.collection_mint.key()),
-            collection_metadata: Some(self.collection_metadata.key()),
-            collection_master_edition: Some(self.collection_master_edition.key()),
-            market_vault: Some(self.market_vault.key()),
+            nft_collection_mint: Some(self.nft_collection_mint.key()),
+            nft_collection_metadata: Some(self.nft_collection_metadata.key()),
+            nft_collection_master_edition: Some(self.nft_collection_master_edition.key()),
+            market_usdc_vault: Some(self.market_usdc_vault.key()),
             ..Default::default()
         });
     
@@ -205,6 +205,7 @@ impl<'info> MarketContext<'info> {
             nonce: 0,
             market_id: args.market_id,
             is_sub_position: false,
+            padding: [0; 25],
         });
 
         // Add debug logging for positions
@@ -221,10 +222,10 @@ impl<'info> MarketContext<'info> {
         let collection_name = String::from_utf8(b"SHORTX-Q1".to_vec()).unwrap();
         
         let token_metadata_program = self.token_metadata_program.to_account_info();
-        let collection_metadata = self.collection_metadata.to_account_info();
-        let collection_mint = self.collection_mint.to_account_info();
+        let collection_metadata = self.nft_collection_metadata.to_account_info();
+        let collection_mint = self.nft_collection_mint.to_account_info();
         let signer_account = self.signer.to_account_info();
-        let collection_master_edition = self.collection_master_edition.to_account_info();
+        let collection_master_edition = self.nft_collection_master_edition.to_account_info();
         let system_program = self.system_program.to_account_info();
         let token_program = self.token_program.to_account_info();
 
@@ -260,7 +261,7 @@ impl<'info> MarketContext<'info> {
         create_collection_cpi.invoke_signed(market_signer)?;
 
         // Store collection mint in market state
-        market.collection_mint = Some(self.collection_mint.key());
+        market.nft_collection_mint = Some(self.nft_collection_mint.key());
 
         Ok(())
     }

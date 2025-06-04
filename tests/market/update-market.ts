@@ -5,20 +5,6 @@ import { getNetworkConfig, ADMIN, program, MARKET_ID } from "../helpers";
 
 describe("shortx-contract", () => {
 
-  // const MarketStates = {
-  //   Active: { active: {} },
-  //   Ended: { ended: {} },
-  //   Resolving: { resolving: {} },
-  //   Resolved: { resolved: {} },
-  // }
-
-  // const WinningDirection = {
-  //   Yes: { yes: {} },
-  //   No: { no: {} },
-  //   Draw: { draw: {} },
-  //   None: { none: {} },
-  // }
-
 
   before(async () => {
     const { isDevnet } = await getNetworkConfig();

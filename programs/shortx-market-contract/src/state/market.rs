@@ -11,10 +11,10 @@ pub struct MarketState {
     pub market_id: u64,
     pub authority: Pubkey,
     pub oracle_pubkey: Option<Pubkey>,
-    pub collection_mint: Option<Pubkey>,
-    pub collection_metadata: Option<Pubkey>,
-    pub collection_master_edition: Option<Pubkey>,
-    pub market_vault: Option<Pubkey>,
+    pub nft_collection_mint: Option<Pubkey>,
+    pub nft_collection_metadata: Option<Pubkey>,
+    pub nft_collection_master_edition: Option<Pubkey>,
+    pub market_usdc_vault: Option<Pubkey>,
     pub yes_liquidity: u64,
     pub no_liquidity: u64,
     pub volume: u64,
@@ -85,10 +85,10 @@ impl Default for MarketState {
             bump: 0,
             authority: Pubkey::default(),
             oracle_pubkey: None,
-            collection_mint: None,
-            collection_metadata: None,
-            collection_master_edition: None,
-            market_vault: None,
+            nft_collection_mint: None,
+            nft_collection_metadata: None,
+            nft_collection_master_edition: None,
+            market_usdc_vault: None,
             market_id: 0,
             yes_liquidity: 0,
             no_liquidity: 0,
@@ -117,6 +117,12 @@ impl MarketState {
 
     pub fn next_version(&mut self) {
         self.version = self.version.checked_add(1).unwrap();
+    }
+
+    pub fn next_market_id(&mut self) -> u64 {
+        let id: u64 = self.market_id;
+        self.market_id = self.market_id.checked_add(1).unwrap();
+        id
     }
 
     // pub fn get_current_price(&self, direction: OrderDirection) -> u64 {
