@@ -4,6 +4,11 @@ export type Market = {
   address: string
   bump: number
   authority: string
+  oraclePubkey: string
+  nftCollectionMint: string
+  nftCollectionMetadata: string
+  nftCollectionMasterEdition: string
+  marketUsdcVault: string
   marketId: string
   yesLiquidity: string
   noLiquidity: string
@@ -16,6 +21,7 @@ export type Market = {
   question: string
   winningDirection: WinningDirection
 }
+
 
 export type MarketStates =
   | { active: {} }
@@ -59,7 +65,10 @@ export type OpenOrderArgs = {
     | {
         no: {}
       }
-  mint: PublicKey
+  mint: PublicKey,
+  payer: PublicKey,
+  feeVaultAccount: PublicKey,
+  usdcMintAddress: PublicKey
 }
 
 export type CreateMarketArgs = {
@@ -69,5 +78,7 @@ export type CreateMarketArgs = {
   question: string
   oraclePubkey: PublicKey
   metadataUri: string
-  mint: PublicKey
+  payer: PublicKey
+  feeVaultAccount: PublicKey
+  usdcMintAddress: PublicKey
 }

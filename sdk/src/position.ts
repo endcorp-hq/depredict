@@ -2,17 +2,23 @@ import { BN, Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "./types/shortx";
 import { formatPositionAccount } from "./utils/helpers";
 import {
+  Keypair,
   PublicKey,
   SystemProgram,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
   TransactionInstruction,
 } from "@solana/web3.js";
 import sendVersionedTransaction from "./utils/sendVersionedTransaction";
 import { getPositionAccountPDA, getSubPositionAccountPDA } from "./utils/pda";
 import { RpcOptions } from "./types";
 import { PositionAccount, PositionStatus } from "./types/position";
+import { METAPLEX_ID } from "./utils/constants";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 export default class Position {
-  constructor(private program: Program<ShortxContract>) {}
+  METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
+  constructor(private program: Program<ShortxContract>) {
+  }
 
   /**
    * Get all Position Accounts for a Market
@@ -46,23 +52,25 @@ export default class Position {
       (positionAccount) => positionAccount.positions
     );
 
-    return positions.filter((position) => position.authority === user.toBase58());
+    return positions.filter(
+      (position) => position.authority === user.toBase58()
+    );
   }
 
   /**
    * Get the PDA for a position account
    * @param marketId - Market ID
    * @param marketAddress - Market Address
-   * @param userNonce - The nonce of the user
+   * @param positionNonce - The nonce of the position account
    *
    */
-  async getPositionsAccountPda(marketId: number, userNonce = 0) {
+  async getPositionsAccountPda(marketId: number, positionNonce = 0) {
     let positionAccountPDA = getPositionAccountPDA(
       this.program.programId,
       marketId
     );
 
-    if (userNonce !== 0) {
+    if (positionNonce !== 0) {
       const marketAddress = PublicKey.findProgramAddressSync(
         [Buffer.from("market"), new BN(marketId).toArrayLike(Buffer, "le", 8)],
         this.program.programId
@@ -71,7 +79,7 @@ export default class Position {
         this.program.programId,
         marketId,
         marketAddress,
-        userNonce
+        positionNonce
       );
 
       positionAccountPDA = getPositionAccountPDA(
@@ -87,12 +95,13 @@ export default class Position {
   /**
    * Create Sub positions account
    * @param user - User PublicKey the main user
-   *
+   * @param payer - Payer PublicKey
    * @param options - RPC options
    *
    */
   async createSubPositionAccount(
     marketId: number,
+    payer: PublicKey,
     marketAddress: PublicKey,
     options?: RpcOptions
   ) {
@@ -116,7 +125,7 @@ export default class Position {
       await this.program.methods
         .createSubPositionAccount(subPositionAccountPDA)
         .accountsPartial({
-          signer: this.program.provider.publicKey,
+          signer: payer,
           market: marketAddress,
           marketPositionsAccount: marketPositionsAccount,
           subMarketPositions: subPositionAccountPDA,
@@ -124,6 +133,8 @@ export default class Position {
         })
         .instruction()
     );
+
+    return ixs;
 
     return sendVersionedTransaction(this.program, ixs, options);
   }
@@ -276,5 +287,121 @@ export default class Position {
         ixs,
       };
     }
+  }
+
+  async mintExistingPosition(
+    marketId: number,
+    positionId: number,
+    positionNonce: number,
+    payer: PublicKey,
+    metadataUri: string,
+    collectionAuthority: PublicKey,
+    options?: RpcOptions
+  ) {
+    const ixs: TransactionInstruction[] = [];
+
+    const marketIdBN = new BN(marketId);
+
+    const [marketPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("market"), marketIdBN.toArrayLike(Buffer, "le", 8)],
+      this.program.programId
+    );
+
+    let positionAccountPDA = getPositionAccountPDA(
+      this.program.programId,
+      marketId
+    );
+
+    if (positionNonce !== 0) {
+      const marketAddress = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("market"),
+          marketIdBN.toArrayLike(Buffer, "le", 8),
+        ],
+        this.program.programId
+      )[0];
+
+      const subPositionAccountPDA = getSubPositionAccountPDA(
+        this.program.programId,
+        marketId,
+        marketAddress,
+        positionNonce
+      );
+
+      positionAccountPDA = getPositionAccountPDA(
+        this.program.programId,
+        marketId,
+        subPositionAccountPDA
+      );
+    }
+
+    const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+
+    const nftMintKeypair = Keypair.generate();
+      
+      console.log("NFT Mint:", nftMintKeypair.publicKey.toString());
+
+      // Get the NFT metadata PDA
+      const [nftMetadataPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("metadata"),
+          this.METAPLEX_PROGRAM_ID.toBuffer(),
+          nftMintKeypair.publicKey.toBuffer(),
+        ],
+        this.METAPLEX_PROGRAM_ID
+      );
+      console.log("NFT Metadata PDA:", nftMetadataPda.toString());
+
+      // Get the NFT master edition PDA
+      const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("metadata"),
+          this.METAPLEX_PROGRAM_ID.toBuffer(),
+          nftMintKeypair.publicKey.toBuffer(),
+          Buffer.from("edition"),
+        ],
+        this.METAPLEX_PROGRAM_ID
+      );
+      console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
+
+      // Create the user's NFT token account using ATA program
+      console.log("Creating NFT token account...");
+      const nftTokenAccount = getAssociatedTokenAddressSync(
+        nftMintKeypair.publicKey,
+        payer,  // Create token account for admin since they own the position
+        false, // allowOwnerOffCurve
+        TOKEN_2022_PROGRAM_ID
+        );
+      console.log("NFT Token Account:", nftTokenAccount.toString());
+
+      if (!marketAccount.nftCollectionMint || !marketAccount.nftCollectionMetadata || !marketAccount.nftCollectionMasterEdition) {
+        throw new Error("Market account does not have a collection mint, metadata, or master edition");
+      }
+
+
+    ixs.push(
+      await this.program.methods.mintPosition({
+        positionId: new BN(positionId),
+        metadataUri: metadataUri,
+      })
+      .accountsPartial({
+        signer: payer,
+        market:marketPDA,
+        marketPositionsAccount: positionAccountPDA,
+        nftMint: nftMintKeypair.publicKey,
+        nftTokenAccount: nftTokenAccount,
+        metadataAccount: nftMetadataPda,
+        masterEdition: nftMasterEditionPda,
+        collectionMint: marketAccount.nftCollectionMint,
+        collectionMetadata: marketAccount.nftCollectionMetadata,
+        collectionMasterEdition: marketAccount.nftCollectionMasterEdition,
+        collectionAuthority: collectionAuthority, //needs to be the same as market creator and needs to sign.
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        tokenMetadataProgram: this.METAPLEX_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      }).instruction()
+    );
   }
 }

@@ -6,18 +6,19 @@ import {
   TransactionInstruction,
   ComputeBudgetProgram
 } from '@solana/web3.js'
-import { USDC_MINT } from './constants'
 
 export const swap = async ({
   connection,
   wallet,
   inToken,
-  amount
+  amount,
+  usdcMint
 }: {
   connection: Connection
   wallet: string
   inToken: string
   amount: number
+  usdcMint: string
 }) => {
   const token = TOKENS[inToken]
 
@@ -28,7 +29,7 @@ export const swap = async ({
   const formattedAmountIn = amount * 10 ** token.decimals
 
   const quoteResponse = await axios.get(
-    `https://quote-api.jup.ag/v6/quote?inputMint=${inToken}&outputMint=${USDC_MINT}&amount=${formattedAmountIn}&slippageBps=1000`
+    `https://quote-api.jup.ag/v6/quote?inputMint=${inToken}&outputMint=${usdcMint}&amount=${formattedAmountIn}&slippageBps=1000`
   )
 
   const { data: quoteData } = quoteResponse

@@ -5,7 +5,7 @@ import {
 } from '../types/trade'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
-import { BN, IdlAccounts } from '@coral-xyz/anchor'
+import { IdlAccounts } from '@coral-xyz/anchor'
 import { ShortxContract } from '../types/shortx'
 import { PositionAccount, Position, PositionDirection, PositionStatus } from '../types/position'
 
@@ -34,6 +34,11 @@ export const formatMarket = (
     yesLiquidity: account.yesLiquidity.toString(),
     noLiquidity: account.noLiquidity.toString(),
     volume: account.volume.toString(),
+    oraclePubkey: account.oraclePubkey ? account.oraclePubkey.toString() : '',
+    nftCollectionMint: account.nftCollectionMint ? account.nftCollectionMint.toString() : '',
+    nftCollectionMetadata: account.nftCollectionMetadata ? account.nftCollectionMetadata.toString() : '',
+    nftCollectionMasterEdition: account.nftCollectionMasterEdition ? account.nftCollectionMasterEdition.toString() : '',
+    marketUsdcVault: account.marketUsdcVault ? account.marketUsdcVault.toString() : '',
     marketState: getMarketState(account.marketState),
     updateTs: account.updateTs.toString(),
     nextPositionId: account.nextPositionId.toString(),
@@ -49,11 +54,12 @@ export const formatPositionAccount = (
   marketId: number
 ): PositionAccount => {
   return {
+    authority: account.authority,
     marketId: marketId,
     positions: account.positions.map((position: any) =>
       formatPosition(position, account.authority.toString())
     ),
-    nonce: account.nonce.toString(),
+    nonce: account.nonce,
     isSubPosition: account.isSubPosition
   }
 }
@@ -69,10 +75,11 @@ export const formatPosition = (
     createdAt: position.createdAt ? position.createdAt.toString() : '',
     positionId: position.positionId.toString(),
     marketId: position.marketId.toString(),
+    isNft: position.isNft,
+    mint: position.mint ? position.mint.toString() : '',
     positionStatus: getPositionStatus(position.positionStatus),
     direction: getPositionDirection(position.direction),
     amount: position.amount.toString(),
-    version: position.version.toString(),
   }
 }
 

@@ -10,7 +10,6 @@ import {
 import {
   CreateMarketArgs,
   OpenOrderArgs,
-  CreateCustomerArgs,
   MarketStates,
 } from "./types/trade";
 import { RpcOptions } from "./types/index";
@@ -33,9 +32,6 @@ import {
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import {
-  ADMIN_KEY,
-  FEE_VAULT,
-  USDC_MINT,
   USDC_DECIMALS,
   METAPLEX_ID,
 } from "./utils/constants";
@@ -44,7 +40,13 @@ import Position from "./position";
 export default class Trade {
   decimals: number = USDC_DECIMALS;
   position: Position;
-  constructor(private program: Program<ShortxContract>) {
+  ADMIN_KEY: PublicKey;
+  FEE_VAULT: PublicKey;
+  USDC_MINT: PublicKey;
+  constructor(private program: Program<ShortxContract>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
+    this.ADMIN_KEY = adminKey;
+    this.FEE_VAULT = feeVault;
+    this.USDC_MINT = usdcMint;
     this.position = new Position(this.program);
   }
 
@@ -75,7 +77,7 @@ export default class Trade {
 
   /**
    * Get Market By Address
-   * @param address - The address of the market
+   * @param address - The address of the market PDA
    *
    */
   async getMarketByAddress(address: PublicKey) {
@@ -90,9 +92,9 @@ export default class Trade {
    * @param args.startTime - start time
    * @param args.endTime - end time
    * @param args.question - question (max 80 characters)
-   * @param args.liquidityAtStart - liquidity at start
-   * @param args.payoutFee - payout fee (to add affiliate system)
-   *
+   * @param args.oraclePubkey - oracle pubkey
+   * @param args.metadataUri - metadata uri
+   * @param args.payer - payer
    * @param options - RPC options
    *
    */
@@ -104,6 +106,7 @@ export default class Trade {
       question,
       oraclePubkey,
       metadataUri,
+      payer,
     }: CreateMarketArgs,
     options?: RpcOptions
   ) {
@@ -139,8 +142,8 @@ export default class Trade {
     const mintIx = createInitializeMint2Instruction(
       collectionMintKeypair.publicKey,
       1,
-      new PublicKey(ADMIN_KEY), // payer
-      new PublicKey(ADMIN_KEY), // Mint Authority
+      payer, // payer
+      payer, // Mint Authority
       TOKEN_PROGRAM_ID
     );
     console.log("Add collection mint account instructions to transaction");
@@ -169,19 +172,18 @@ export default class Trade {
     ixs.push(
       await this.program.methods
         .createMarket({
-          marketId: new BN(marketId),
           question: encodeString(question, 80),
           marketStart: new BN(startTime),
           marketEnd: new BN(endTime),
           metadataUri: metadataUri,
         })
         .accountsPartial({
-          signer: new PublicKey(ADMIN_KEY),
-          feeVault: new PublicKey(FEE_VAULT),
+          signer: payer,
+          feeVault: this.FEE_VAULT,
           config: configPDA,
           oraclePubkey: oraclePubkey,
           market: marketPDA,
-          usdcMint: new PublicKey(USDC_MINT),
+          usdcMint: this.USDC_MINT,
           nftCollectionMint: collectionMintKeypair.publicKey,
           nftCollectionMetadata: collectionMetadataPda,
           nftCollectionMasterEdition: collectionMasterEditionPda,
@@ -192,7 +194,7 @@ export default class Trade {
         })
         .instruction()
     );
-
+    return ixs;
     return sendVersionedTransaction(this.program, ixs, options);
   }
 
@@ -203,20 +205,14 @@ export default class Trade {
    * @param args.direction - The direction of the Order
    * @param args.mint - The mint of the Order
    * @param args.token - The token to use for the Order
-   *
+   * @param args.payer - The payer of the Order
    * @param options - RPC options
    *
    */
   async openPosition(
-    { marketId, amount, direction, mint, token }: OpenOrderArgs,
+    { marketId, amount, direction, mint, token, payer }: OpenOrderArgs,
     options?: RpcOptions
   ) {
-    const payer = this.program.provider.publicKey;
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
-      );
-    }
 
     const ixs: TransactionInstruction[] = [];
     const addressLookupTableAccounts: AddressLookupTableAccount[] = [];
@@ -232,7 +228,7 @@ export default class Trade {
 
     let amountInTRD = amount * 10 ** USDC_DECIMALS;
 
-    if (token !== USDC_MINT) {
+    if (token !== this.USDC_MINT.toBase58()) {
       const {
         setupInstructions,
         swapIxs,
@@ -243,6 +239,7 @@ export default class Trade {
         wallet: payer.toBase58(),
         inToken: token,
         amount,
+        usdcMint: this.USDC_MINT.toBase58(),
       });
 
       amountInTRD = usdcAmount;
@@ -264,7 +261,7 @@ export default class Trade {
         })
         .accountsPartial({
           signer: payer,
-          feeVault: new PublicKey(FEE_VAULT),
+          feeVault: this.FEE_VAULT,
           marketPositionsAccount: positionAccountPDA,
           market: marketPDA,
           usdcMint: mint,
@@ -275,6 +272,8 @@ export default class Trade {
         })
         .instruction()
     );
+
+    return {ixs, addressLookupTableAccounts};
 
     return sendVersionedTransaction(
       this.program,
@@ -296,6 +295,7 @@ export default class Trade {
     {
       marketId,
       winningDirection,
+      payer,
     }: {
       marketId: number;
       winningDirection:
@@ -312,6 +312,7 @@ export default class Trade {
             draw: {};
           };
       state: MarketStates;
+      payer: PublicKey;
     },
     options?: RpcOptions
   ) {
@@ -330,7 +331,7 @@ export default class Trade {
           winningDirection: winningDirection,
         })
         .accountsPartial({
-          signer: new PublicKey(ADMIN_KEY),
+          signer: payer,
           market: marketPDA,
         })
         .instruction()
@@ -342,11 +343,11 @@ export default class Trade {
   /**
    * Collect Remaining Liquidity
    * @param marketId - The ID of the market
-   *
+   * @param payer - The payer of the Market
    * @param options - RPC options
    *
    */
-  async closeMarket(marketId: number, options?: RpcOptions) {
+  async closeMarket(marketId: number, payer: PublicKey, options?: RpcOptions) {
     try {
       console.log("entered close market");
       const ixs: TransactionInstruction[] = [];
@@ -366,10 +367,10 @@ export default class Trade {
             marketId: marketIdBN,
           })
           .accountsPartial({
-            signer: new PublicKey(ADMIN_KEY),
-            feeVault: new PublicKey(FEE_VAULT),
+            signer: payer,
+            feeVault: this.FEE_VAULT,
             market: marketPDA,
-            usdcMint: new PublicKey(USDC_MINT),
+            usdcMint: this.USDC_MINT,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
@@ -400,14 +401,10 @@ export default class Trade {
       userNonce: number;
       mint: PublicKey;
     }[],
+    payer: PublicKey,
     options?: RpcOptions
   ) {
-    const payer = this.program.provider.publicKey;
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
-      );
-    }
+    
 
     const ixs: TransactionInstruction[] = [];
 
@@ -461,10 +458,10 @@ export default class Trade {
           .settlePosition(new BN(order.orderId))
           .accountsPartial({
             signer: payer,
-            feeVault: new PublicKey(FEE_VAULT),
+            feeVault: this.FEE_VAULT,
             marketPositionsAccount: positionAccountPDA,
             market: marketPDA,
-            usdcMint: USDC_MINT,
+            usdcMint: this.USDC_MINT,
             config: configPDA,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -481,13 +478,13 @@ export default class Trade {
    * Update Market
    * @param marketId - The ID of the market
    * @param marketEnd - The end time of the market
-   *
    * @param options - RPC options
    *
    */
   async updateMarket(
     marketId: number,
     marketEnd: number,
+    payer: PublicKey,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
@@ -499,7 +496,7 @@ export default class Trade {
           marketEnd: new BN(marketEnd),
         })
         .accounts({
-          signer: this.program.provider.publicKey,
+          signer: payer,
           market: getMarketPDA(this.program.programId, marketId),
         })
         .instruction()
@@ -536,14 +533,14 @@ export default class Trade {
     );
 
     const userUsdcAta = getAssociatedTokenAddressSync(
-      new PublicKey(USDC_MINT),
+      this.USDC_MINT,
       payer,
       false,
       TOKEN_PROGRAM_ID
     );
 
     const marketVault = getAssociatedTokenAddressSync(
-      new PublicKey(USDC_MINT),
+      this.USDC_MINT,
       marketPda,
       true, // allowOwnerOffCurve since marketPda is a PDA
       TOKEN_PROGRAM_ID
@@ -597,7 +594,7 @@ export default class Trade {
             userNftTokenAccount: position.nftTokenAccount,
             userUsdcAta: userUsdcAta,
             marketUsdcVault: marketVault,
-            usdcMint: new PublicKey(USDC_MINT),
+            usdcMint: this.USDC_MINT,
             nftMetadataAccount: position.nftMetadata,
             nftMasterEditionAccount: position.nftMasterEdition,
             market: marketPda,
@@ -614,30 +611,30 @@ export default class Trade {
     return sendVersionedTransaction(this.program, ixs, options);
   }
 
-  /**
-   * Create Customer
-   * @param args.id - The ID of the customer
-   * @param args.name - The name of the customer
-   * @param args.authority - The authority of the customer
-   *
-   * @param options - RPC options
-   *
-   */
-  async createCustomer(
-    { id, name, authority, feeRecipient }: CreateCustomerArgs,
-    options?: RpcOptions
-  ) {
-    const ixs: TransactionInstruction[] = [];
+  // /**
+  //  * Create Customer
+  //  * @param args.id - The ID of the customer
+  //  * @param args.name - The name of the customer
+  //  * @param args.authority - The authority of the customer
+  //  *
+  //  * @param options - RPC options
+  //  *
+  //  */
+  // async createCustomer(
+  //   { id, name, authority, feeRecipient }: CreateCustomerArgs,
+  //   options?: RpcOptions
+  // ) {
+  //   const ixs: TransactionInstruction[] = [];
 
-    ixs.push(
-      await this.program.methods
-        .createUser({ id, authority })
-        .accounts({
-          signer: this.program.provider.publicKey,
-        })
-        .instruction()
-    );
+  //   ixs.push(
+  //     await this.program.methods
+  //       .createUser({ id, authority })
+  //       .accounts({
+  //         signer: this.program.provider.publicKey,
+  //       })
+  //       .instruction()
+  //   );
 
-    return sendVersionedTransaction(this.program, ixs, options);
-  }
+  //   return sendVersionedTransaction(this.program, ixs, options);
+  // }
 }

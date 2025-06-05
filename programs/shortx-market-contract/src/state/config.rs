@@ -8,5 +8,14 @@ pub struct Config {
     pub fee_vault: Pubkey,
     pub fee_amount: u64,
     pub version: u64,
+    pub num_markets: u64,
+}
+
+impl Config {
+    pub fn next_market_id(&mut self) -> u64 {
+        let id: u64 = self.num_markets;
+        self.num_markets = self.num_markets.checked_add(1).unwrap();
+        id
+    }
 }
 

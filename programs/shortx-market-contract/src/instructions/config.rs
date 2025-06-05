@@ -58,6 +58,7 @@ impl<'info> InitConfigContext<'info> {
         config.fee_vault = *self.fee_vault.key;
         config.fee_amount = fee_amount;
         config.version = 1;
+        config.num_markets = 0;
         Ok(())
     }
 }

@@ -42,7 +42,6 @@ pub enum WinningDirection {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct CreateMarketArgs {
-    pub market_id: u64,
     pub question: [u8; 80],
     pub market_start: i64,
     pub market_end: i64,
@@ -117,12 +116,6 @@ impl MarketState {
 
     pub fn next_version(&mut self) {
         self.version = self.version.checked_add(1).unwrap();
-    }
-
-    pub fn next_market_id(&mut self) -> u64 {
-        let id: u64 = self.market_id;
-        self.market_id = self.market_id.checked_add(1).unwrap();
-        id
     }
 
     // pub fn get_current_price(&self, direction: OrderDirection) -> u64 {

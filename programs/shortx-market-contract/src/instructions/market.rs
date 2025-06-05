@@ -33,7 +33,7 @@ pub struct MarketContext<'info> {
         init,
         payer = signer,
         space = 8 + MarketState::INIT_SPACE,
-        seeds = [MARKET.as_bytes(), &args.market_id.to_le_bytes()],
+        seeds = [MARKET.as_bytes(), &config.num_markets.to_le_bytes()],
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
@@ -42,7 +42,7 @@ pub struct MarketContext<'info> {
         init,
         payer = signer,
         space = 8 + PositionAccount::INIT_SPACE,
-        seeds = [POSITION.as_bytes(), &args.market_id.to_le_bytes()],
+        seeds = [POSITION.as_bytes(), &config.num_markets.to_le_bytes()],
         bump
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
@@ -171,6 +171,7 @@ impl<'info> MarketContext<'info> {
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
         let market_positions = &mut self.market_positions_account;
+        let config = &mut self.config;
 
         // check if the oracle is valid
         // require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
@@ -179,7 +180,7 @@ impl<'info> MarketContext<'info> {
         market.set_inner(MarketState {
             bump: bumps.market,
             authority: signer.key(),
-            market_id: args.market_id,
+            market_id: config.next_market_id(),
             market_start: args.market_start,
             market_end: args.market_end,
             question: args.question,
@@ -203,7 +204,7 @@ impl<'info> MarketContext<'info> {
             version: 0,
             positions,
             nonce: 0,
-            market_id: args.market_id,
+            market_id: config.next_market_id(),
             is_sub_position: false,
             padding: [0; 25],
         });

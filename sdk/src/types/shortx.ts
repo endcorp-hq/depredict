@@ -314,8 +314,9 @@ export type ShortxContract = {
                 ]
               },
               {
-                "kind": "arg",
-                "path": "args.market_id"
+                "kind": "account",
+                "path": "config.num_markets",
+                "account": "config"
               }
             ]
           }
@@ -339,8 +340,9 @@ export type ShortxContract = {
                 ]
               },
               {
-                "kind": "arg",
-                "path": "args.market_id"
+                "kind": "account",
+                "path": "config.num_markets",
+                "account": "config"
               }
             ]
           }
@@ -1722,6 +1724,10 @@ export type ShortxContract = {
           {
             "name": "version",
             "type": "u64"
+          },
+          {
+            "name": "numMarkets",
+            "type": "u64"
           }
         ]
       }
@@ -1731,10 +1737,6 @@ export type ShortxContract = {
       "type": {
         "kind": "struct",
         "fields": [
-          {
-            "name": "marketId",
-            "type": "u64"
-          },
           {
             "name": "question",
             "type": {
