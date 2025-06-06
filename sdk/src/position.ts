@@ -13,7 +13,7 @@ import { getPositionAccountPDA, getSubPositionAccountPDA } from "./utils/pda";
 import { RpcOptions } from "./types";
 import { PositionAccount, PositionStatus } from "./types/position";
 import { METAPLEX_ID } from "./utils/constants";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 export default class Position {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
@@ -370,7 +370,7 @@ export default class Position {
         nftMintKeypair.publicKey,
         payer,  // Create token account for admin since they own the position
         false, // allowOwnerOffCurve
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_PROGRAM_ID
         );
       console.log("NFT Token Account:", nftTokenAccount.toString());
 
@@ -396,7 +396,7 @@ export default class Position {
         collectionMetadata: marketAccount.nftCollectionMetadata,
         collectionMasterEdition: marketAccount.nftCollectionMasterEdition,
         collectionAuthority: collectionAuthority, //needs to be the same as market creator and needs to sign.
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        tokenProgram: TOKEN_PROGRAM_ID,
         tokenMetadataProgram: this.METAPLEX_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
