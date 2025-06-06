@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/shortx_contract.json`.
  */
 export type ShortxContract = {
-    "address": "3AhNo8g3CQ5EdLjYurtAodG7Zrbkv3aj94L1yiw8m9s6";
+    "address": "CR2SwZjpMJbCENVv2vnQbcHcT9Qx7mSjnFitgnqYxH4d";
     "metadata": {
         "name": "shortxContract";
         "version": "0.1.0";
@@ -291,6 +291,10 @@ export type ShortxContract = {
                     "writable": true;
                 },
                 {
+                    "name": "oraclePubkey";
+                    "writable": true;
+                },
+                {
                     "name": "config";
                 },
                 {
@@ -310,8 +314,35 @@ export type ShortxContract = {
                                 ];
                             },
                             {
-                                "kind": "arg";
-                                "path": "args.market_id";
+                                "kind": "account";
+                                "path": "config.num_markets";
+                                "account": "config";
+                            }
+                        ];
+                    };
+                },
+                {
+                    "name": "marketPositionsAccount";
+                    "writable": true;
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const";
+                                "value": [
+                                    112,
+                                    111,
+                                    115,
+                                    105,
+                                    116,
+                                    105,
+                                    111,
+                                    110
+                                ];
+                            },
+                            {
+                                "kind": "account";
+                                "path": "config.num_markets";
+                                "account": "config";
                             }
                         ];
                     };
@@ -321,7 +352,7 @@ export type ShortxContract = {
                     "writable": true;
                 },
                 {
-                    "name": "marketVault";
+                    "name": "marketUsdcVault";
                     "writable": true;
                     "pda": {
                         "seeds": [
@@ -378,6 +409,18 @@ export type ShortxContract = {
                     };
                 },
                 {
+                    "name": "nftCollectionMint";
+                    "writable": true;
+                },
+                {
+                    "name": "nftCollectionMetadata";
+                    "writable": true;
+                },
+                {
+                    "name": "nftCollectionMasterEdition";
+                    "writable": true;
+                },
+                {
                     "name": "tokenProgram";
                 },
                 {
@@ -387,6 +430,10 @@ export type ShortxContract = {
                 {
                     "name": "systemProgram";
                     "address": "11111111111111111111111111111111";
+                },
+                {
+                    "name": "tokenMetadataProgram";
+                    "address": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
                 }
             ];
             "args": [
@@ -401,16 +448,16 @@ export type ShortxContract = {
             ];
         },
         {
-            "name": "createOrder";
+            "name": "createPosition";
             "discriminator": [
-                141,
-                54,
-                37,
-                207,
-                237,
-                210,
-                250,
-                215
+                48,
+                215,
+                197,
+                153,
+                96,
+                203,
+                180,
+                133
             ];
             "accounts": [
                 {
@@ -423,7 +470,7 @@ export type ShortxContract = {
                     "writable": true;
                 },
                 {
-                    "name": "userTrade";
+                    "name": "marketPositionsAccount";
                     "writable": true;
                 },
                 {
@@ -431,11 +478,11 @@ export type ShortxContract = {
                     "writable": true;
                 },
                 {
-                    "name": "mint";
+                    "name": "usdcMint";
                     "writable": true;
                 },
                 {
-                    "name": "userAta";
+                    "name": "userUsdcAta";
                     "writable": true;
                     "pda": {
                         "seeds": [
@@ -449,7 +496,7 @@ export type ShortxContract = {
                             },
                             {
                                 "kind": "account";
-                                "path": "mint";
+                                "path": "usdcMint";
                             }
                         ];
                         "program": {
@@ -492,7 +539,7 @@ export type ShortxContract = {
                     };
                 },
                 {
-                    "name": "marketVault";
+                    "name": "marketUsdcVault";
                     "writable": true;
                     "pda": {
                         "seeds": [
@@ -506,7 +553,7 @@ export type ShortxContract = {
                             },
                             {
                                 "kind": "account";
-                                "path": "mint";
+                                "path": "usdcMint";
                             }
                         ];
                         "program": {
@@ -569,23 +616,23 @@ export type ShortxContract = {
                     "name": "args";
                     "type": {
                         "defined": {
-                            "name": "openOrderArgs";
+                            "name": "openPositionArgs";
                         };
                     };
                 }
             ];
         },
         {
-            "name": "createSubUserTrade";
+            "name": "createSubPositionAccount";
             "discriminator": [
-                77,
-                201,
-                111,
-                73,
-                47,
-                229,
-                244,
-                161
+                194,
+                196,
+                200,
+                66,
+                242,
+                197,
+                107,
+                188
             ];
             "accounts": [
                 {
@@ -594,55 +641,61 @@ export type ShortxContract = {
                     "signer": true;
                 },
                 {
-                    "name": "userTrade";
+                    "name": "market";
+                    "writable": true;
+                },
+                {
+                    "name": "marketPositionsAccount";
                     "writable": true;
                     "pda": {
                         "seeds": [
                             {
                                 "kind": "const";
                                 "value": [
-                                    117,
+                                    112,
+                                    111,
                                     115,
-                                    101,
-                                    114,
-                                    95,
+                                    105,
                                     116,
-                                    114,
-                                    97,
-                                    100,
-                                    101
+                                    105,
+                                    111,
+                                    110
                                 ];
                             },
                             {
                                 "kind": "account";
-                                "path": "signer";
+                                "path": "market.market_id";
+                                "account": "marketState";
                             }
                         ];
                     };
                 },
                 {
-                    "name": "subUserTrade";
+                    "name": "subMarketPositions";
                     "writable": true;
                     "pda": {
                         "seeds": [
                             {
                                 "kind": "const";
                                 "value": [
-                                    117,
+                                    112,
+                                    111,
                                     115,
-                                    101,
-                                    114,
-                                    95,
+                                    105,
                                     116,
-                                    114,
-                                    97,
-                                    100,
-                                    101
+                                    105,
+                                    111,
+                                    110
                                 ];
                             },
                             {
+                                "kind": "account";
+                                "path": "market_positions_account.market_id";
+                                "account": "positionAccount";
+                            },
+                            {
                                 "kind": "arg";
-                                "path": "subUserKey";
+                                "path": "subPositionKey";
                             }
                         ];
                     };
@@ -654,7 +707,7 @@ export type ShortxContract = {
             ];
             "args": [
                 {
-                    "name": "subUserKey";
+                    "name": "subPositionKey";
                     "type": "pubkey";
                 }
             ];
@@ -715,58 +768,6 @@ export type ShortxContract = {
             ];
         },
         {
-            "name": "createUserTrade";
-            "discriminator": [
-                232,
-                235,
-                58,
-                194,
-                135,
-                248,
-                153,
-                1
-            ];
-            "accounts": [
-                {
-                    "name": "signer";
-                    "writable": true;
-                    "signer": true;
-                },
-                {
-                    "name": "userTrade";
-                    "writable": true;
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const";
-                                "value": [
-                                    117,
-                                    115,
-                                    101,
-                                    114,
-                                    95,
-                                    116,
-                                    114,
-                                    97,
-                                    100,
-                                    101
-                                ];
-                            },
-                            {
-                                "kind": "account";
-                                "path": "signer";
-                            }
-                        ];
-                    };
-                },
-                {
-                    "name": "systemProgram";
-                    "address": "11111111111111111111111111111111";
-                }
-            ];
-            "args": [];
-        },
-        {
             "name": "initializeConfig";
             "discriminator": [
                 208,
@@ -820,16 +821,16 @@ export type ShortxContract = {
             ];
         },
         {
-            "name": "settleOrder";
+            "name": "mintPosition";
             "discriminator": [
-                80,
-                74,
-                204,
-                34,
-                12,
-                183,
-                66,
-                66
+                251,
+                31,
+                179,
+                3,
+                138,
+                134,
+                203,
+                28
             ];
             "accounts": [
                 {
@@ -838,23 +839,148 @@ export type ShortxContract = {
                     "signer": true;
                 },
                 {
-                    "name": "feeVault";
+                    "name": "market";
                     "writable": true;
                 },
                 {
-                    "name": "userTrade";
+                    "name": "marketPositionsAccount";
                     "writable": true;
+                },
+                {
+                    "name": "nftMint";
+                    "writable": true;
+                    "signer": true;
+                },
+                {
+                    "name": "nftTokenAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "metadataAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "masterEdition";
+                    "writable": true;
+                },
+                {
+                    "name": "collectionMint";
+                    "writable": true;
+                },
+                {
+                    "name": "collectionMetadata";
+                    "writable": true;
+                },
+                {
+                    "name": "collectionAuthority";
+                    "writable": true;
+                    "signer": true;
+                },
+                {
+                    "name": "collectionMasterEdition";
+                    "writable": true;
+                },
+                {
+                    "name": "tokenProgram";
+                    "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+                },
+                {
+                    "name": "tokenMetadataProgram";
+                    "address": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
+                },
+                {
+                    "name": "associatedTokenProgram";
+                    "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+                },
+                {
+                    "name": "systemProgram";
+                    "address": "11111111111111111111111111111111";
+                },
+                {
+                    "name": "sysvarInstructions";
+                }
+            ];
+            "args": [
+                {
+                    "name": "args";
+                    "type": {
+                        "defined": {
+                            "name": "mintPositionArgs";
+                        };
+                    };
+                }
+            ];
+        },
+        {
+            "name": "resolveMarket";
+            "discriminator": [
+                155,
+                23,
+                80,
+                173,
+                46,
+                74,
+                23,
+                239
+            ];
+            "accounts": [
+                {
+                    "name": "signer";
+                    "writable": true;
+                    "signer": true;
                 },
                 {
                     "name": "market";
                     "writable": true;
                 },
                 {
-                    "name": "mint";
+                    "name": "oraclePubkey";
+                    "writable": true;
+                }
+            ];
+            "args": [
+                {
+                    "name": "args";
+                    "type": {
+                        "defined": {
+                            "name": "resolveMarketArgs";
+                        };
+                    };
+                }
+            ];
+        },
+        {
+            "name": "settleNftPosition";
+            "discriminator": [
+                162,
+                104,
+                238,
+                50,
+                211,
+                191,
+                185,
+                184
+            ];
+            "accounts": [
+                {
+                    "name": "signer";
+                    "writable": true;
+                    "signer": true;
+                },
+                {
+                    "name": "market";
                     "writable": true;
                 },
                 {
-                    "name": "userAta";
+                    "name": "marketPositionsAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "usdcMint";
+                    "writable": true;
+                },
+                {
+                    "name": "userUsdcAta";
                     "writable": true;
                     "pda": {
                         "seeds": [
@@ -868,7 +994,7 @@ export type ShortxContract = {
                             },
                             {
                                 "kind": "account";
-                                "path": "mint";
+                                "path": "usdcMint";
                             }
                         ];
                         "program": {
@@ -911,7 +1037,7 @@ export type ShortxContract = {
                     };
                 },
                 {
-                    "name": "marketVault";
+                    "name": "marketUsdcVault";
                     "writable": true;
                     "pda": {
                         "seeds": [
@@ -925,7 +1051,202 @@ export type ShortxContract = {
                             },
                             {
                                 "kind": "account";
-                                "path": "mint";
+                                "path": "usdcMint";
+                            }
+                        ];
+                        "program": {
+                            "kind": "const";
+                            "value": [
+                                140,
+                                151,
+                                37,
+                                143,
+                                78,
+                                36,
+                                137,
+                                241,
+                                187,
+                                61,
+                                16,
+                                41,
+                                20,
+                                142,
+                                13,
+                                131,
+                                11,
+                                90,
+                                19,
+                                153,
+                                218,
+                                255,
+                                16,
+                                132,
+                                4,
+                                142,
+                                123,
+                                216,
+                                219,
+                                233,
+                                248,
+                                89
+                            ];
+                        };
+                    };
+                },
+                {
+                    "name": "nftMint";
+                    "writable": true;
+                },
+                {
+                    "name": "userNftTokenAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "nftMetadataAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "nftMasterEditionAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "tokenProgram";
+                    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+                },
+                {
+                    "name": "token2022Program";
+                    "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+                },
+                {
+                    "name": "tokenMetadataProgram";
+                },
+                {
+                    "name": "associatedTokenProgram";
+                    "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+                },
+                {
+                    "name": "systemProgram";
+                    "address": "11111111111111111111111111111111";
+                }
+            ];
+            "args": [
+                {
+                    "name": "args";
+                    "type": {
+                        "defined": {
+                            "name": "payoutNftArgs";
+                        };
+                    };
+                }
+            ];
+        },
+        {
+            "name": "settlePosition";
+            "discriminator": [
+                33,
+                156,
+                74,
+                218,
+                215,
+                42,
+                112,
+                175
+            ];
+            "accounts": [
+                {
+                    "name": "signer";
+                    "writable": true;
+                    "signer": true;
+                },
+                {
+                    "name": "feeVault";
+                    "writable": true;
+                },
+                {
+                    "name": "marketPositionsAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "market";
+                    "writable": true;
+                },
+                {
+                    "name": "usdcMint";
+                    "writable": true;
+                },
+                {
+                    "name": "userUsdcAta";
+                    "writable": true;
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "account";
+                                "path": "signer";
+                            },
+                            {
+                                "kind": "account";
+                                "path": "tokenProgram";
+                            },
+                            {
+                                "kind": "account";
+                                "path": "usdcMint";
+                            }
+                        ];
+                        "program": {
+                            "kind": "const";
+                            "value": [
+                                140,
+                                151,
+                                37,
+                                143,
+                                78,
+                                36,
+                                137,
+                                241,
+                                187,
+                                61,
+                                16,
+                                41,
+                                20,
+                                142,
+                                13,
+                                131,
+                                11,
+                                90,
+                                19,
+                                153,
+                                218,
+                                255,
+                                16,
+                                132,
+                                4,
+                                142,
+                                123,
+                                216,
+                                219,
+                                233,
+                                248,
+                                89
+                            ];
+                        };
+                    };
+                },
+                {
+                    "name": "marketUsdcVault";
+                    "writable": true;
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "account";
+                                "path": "market";
+                            },
+                            {
+                                "kind": "account";
+                                "path": "tokenProgram";
+                            },
+                            {
+                                "kind": "account";
+                                "path": "usdcMint";
                             }
                         ];
                         "program": {
@@ -985,7 +1306,7 @@ export type ShortxContract = {
             ];
             "args": [
                 {
-                    "name": "orderId";
+                    "name": "positionId";
                     "type": "u64";
                 }
             ];
@@ -1124,6 +1445,19 @@ export type ShortxContract = {
             ];
         },
         {
+            "name": "positionAccount";
+            "discriminator": [
+                60,
+                125,
+                250,
+                193,
+                181,
+                109,
+                238,
+                86
+            ];
+        },
+        {
             "name": "user";
             "discriminator": [
                 159,
@@ -1134,19 +1468,6 @@ export type ShortxContract = {
                 151,
                 58,
                 236
-            ];
-        },
-        {
-            "name": "userTrade";
-            "discriminator": [
-                149,
-                190,
-                47,
-                218,
-                136,
-                9,
-                222,
-                222
             ];
         }
     ];
@@ -1165,19 +1486,6 @@ export type ShortxContract = {
             ];
         },
         {
-            "name": "orderEvent";
-            "discriminator": [
-                209,
-                51,
-                146,
-                206,
-                88,
-                127,
-                112,
-                69
-            ];
-        },
-        {
             "name": "poolEvent";
             "discriminator": [
                 76,
@@ -1188,6 +1496,19 @@ export type ShortxContract = {
                 218,
                 164,
                 244
+            ];
+        },
+        {
+            "name": "positionEvent";
+            "discriminator": [
+                169,
+                63,
+                86,
+                103,
+                243,
+                59,
+                238,
+                111
             ];
         },
         {
@@ -1222,123 +1543,148 @@ export type ShortxContract = {
         },
         {
             "code": 6003;
-            "name": "noAvailableOrderSlot";
-            "msg": "No available order slot";
+            "name": "noAvailablePositionSlot";
+            "msg": "No available position slot";
         },
         {
             "code": 6004;
+            "name": "invalidOracle";
+            "msg": "Invalid oracle";
+        },
+        {
+            "code": 6005;
+            "name": "oracleNotResolved";
+            "msg": "Oracle not resolved";
+        },
+        {
+            "code": 6006;
             "name": "marketInactive";
             "msg": "Market is inactive";
         },
         {
-            "code": 6005;
-            "name": "orderNotFound";
-            "msg": "Order not found";
+            "code": 6007;
+            "name": "positionNotFound";
+            "msg": "Position not found";
         },
         {
-            "code": 6006;
+            "code": 6008;
             "name": "questionPeriodNotStarted";
             "msg": "Question period not started";
         },
         {
-            "code": 6007;
+            "code": 6009;
             "name": "questionPeriodEnded";
             "msg": "Question period ended";
         },
         {
-            "code": 6008;
+            "code": 6010;
             "name": "marketStillActive";
             "msg": "Market still active";
         },
         {
-            "code": 6009;
+            "code": 6011;
             "name": "insufficientLiquidity";
             "msg": "Insufficient liquidity";
         },
         {
-            "code": 6010;
+            "code": 6012;
             "name": "marketAlreadyResolved";
             "msg": "Market already resolved";
         },
         {
-            "code": 6011;
+            "code": 6013;
             "name": "concurrentTransaction";
             "msg": "Concurrent transaction";
         },
         {
-            "code": 6012;
+            "code": 6014;
             "name": "marketNotAllowedToPayout";
             "msg": "Market Not allowed to payout";
         },
         {
-            "code": 6013;
+            "code": 6015;
             "name": "userTradeIsSubUser";
             "msg": "User trade is sub user";
         },
         {
-            "code": 6014;
+            "code": 6016;
             "name": "prizeNotFound";
             "msg": "Prize not found";
         },
         {
-            "code": 6015;
+            "code": 6017;
             "name": "noPrizesAvailable";
             "msg": "No Prize Available";
         },
         {
-            "code": 6016;
+            "code": 6018;
             "name": "alreadyLinked";
             "msg": "Already linked";
         },
         {
-            "code": 6017;
+            "code": 6019;
             "name": "notLinked";
             "msg": "Not linked";
         },
         {
-            "code": 6018;
+            "code": 6020;
             "name": "invalidCustomer";
             "msg": "Invalid customer";
         },
         {
-            "code": 6019;
+            "code": 6021;
             "name": "invalidMint";
             "msg": "Invalid mint";
         },
         {
-            "code": 6020;
+            "code": 6022;
             "name": "invalidFeeVault";
             "msg": "Invalid fee vault";
         },
         {
-            "code": 6021;
+            "code": 6023;
             "name": "invalidShares";
             "msg": "Invalid shares";
         },
         {
-            "code": 6022;
+            "code": 6024;
             "name": "unauthorizedToOrderBook";
             "msg": "Unauthorized to order book";
         },
         {
-            "code": 6023;
+            "code": 6025;
             "name": "orderIsFullFilled";
             "msg": "Order is full filled";
         },
         {
-            "code": 6024;
+            "code": 6026;
             "name": "overflow";
             "msg": "overflow";
         },
         {
-            "code": 6025;
+            "code": 6027;
             "name": "marketAlreadyAggregated";
             "msg": "Market already aggregated";
         },
         {
-            "code": 6026;
+            "code": 6028;
             "name": "invalidMarketId";
             "msg": "Invalid market id";
+        },
+        {
+            "code": 6029;
+            "name": "invalidCollection";
+            "msg": "Invalid collection";
+        },
+        {
+            "code": 6030;
+            "name": "invalidCollectionMint";
+            "msg": "Invalid collection mint";
+        },
+        {
+            "code": 6031;
+            "name": "invalidAuthority";
+            "msg": "Invalid collection authority";
         }
     ];
     "types": [
@@ -1378,6 +1724,10 @@ export type ShortxContract = {
                     {
                         "name": "version";
                         "type": "u64";
+                    },
+                    {
+                        "name": "numMarkets";
+                        "type": "u64";
                     }
                 ];
             };
@@ -1387,10 +1737,6 @@ export type ShortxContract = {
             "type": {
                 "kind": "struct";
                 "fields": [
-                    {
-                        "name": "marketId";
-                        "type": "u64";
-                    },
                     {
                         "name": "question";
                         "type": {
@@ -1407,6 +1753,10 @@ export type ShortxContract = {
                     {
                         "name": "marketEnd";
                         "type": "i64";
+                    },
+                    {
+                        "name": "metadataUri";
+                        "type": "string";
                     }
                 ];
             };
@@ -1457,7 +1807,7 @@ export type ShortxContract = {
                         "type": "i64";
                     },
                     {
-                        "name": "nextOrderId";
+                        "name": "nextPositionId";
                         "type": "u64";
                     },
                     {
@@ -1506,12 +1856,42 @@ export type ShortxContract = {
                         "type": "u8";
                     },
                     {
+                        "name": "marketId";
+                        "type": "u64";
+                    },
+                    {
                         "name": "authority";
                         "type": "pubkey";
                     },
                     {
-                        "name": "marketId";
-                        "type": "u64";
+                        "name": "oraclePubkey";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "nftCollectionMint";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "nftCollectionMetadata";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "nftCollectionMasterEdition";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "marketUsdcVault";
+                        "type": {
+                            "option": "pubkey";
+                        };
                     },
                     {
                         "name": "yesLiquidity";
@@ -1539,7 +1919,7 @@ export type ShortxContract = {
                         };
                     },
                     {
-                        "name": "nextOrderId";
+                        "name": "nextPositionId";
                         "type": "u64";
                     },
                     {
@@ -1612,7 +1992,23 @@ export type ShortxContract = {
             };
         },
         {
-            "name": "openOrderArgs";
+            "name": "mintPositionArgs";
+            "type": {
+                "kind": "struct";
+                "fields": [
+                    {
+                        "name": "positionId";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "metadataUri";
+                        "type": "string";
+                    }
+                ];
+            };
+        },
+        {
+            "name": "openPositionArgs";
             "type": {
                 "kind": "struct";
                 "fields": [
@@ -1624,7 +2020,7 @@ export type ShortxContract = {
                         "name": "direction";
                         "type": {
                             "defined": {
-                                "name": "orderDirection";
+                                "name": "positionDirection";
                             };
                         };
                     }
@@ -1632,16 +2028,12 @@ export type ShortxContract = {
             };
         },
         {
-            "name": "order";
+            "name": "payoutNftArgs";
             "type": {
                 "kind": "struct";
                 "fields": [
                     {
-                        "name": "ts";
-                        "type": "i64";
-                    },
-                    {
-                        "name": "orderId";
+                        "name": "positionId";
                         "type": "u64";
                     },
                     {
@@ -1649,131 +2041,16 @@ export type ShortxContract = {
                         "type": "u64";
                     },
                     {
-                        "name": "orderStatus";
+                        "name": "amount";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "direction";
                         "type": {
                             "defined": {
-                                "name": "orderStatus";
+                                "name": "positionDirection";
                             };
                         };
-                    },
-                    {
-                        "name": "price";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "version";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "orderDirection";
-                        "type": {
-                            "defined": {
-                                "name": "orderDirection";
-                            };
-                        };
-                    },
-                    {
-                        "name": "userNonce";
-                        "type": "u32";
-                    },
-                    {
-                        "name": "createdAt";
-                        "type": "i64";
-                    },
-                    {
-                        "name": "padding";
-                        "type": {
-                            "array": [
-                                "u8",
-                                3
-                            ];
-                        };
-                    }
-                ];
-            };
-        },
-        {
-            "name": "orderDirection";
-            "type": {
-                "kind": "enum";
-                "variants": [
-                    {
-                        "name": "yes";
-                    },
-                    {
-                        "name": "no";
-                    }
-                ];
-            };
-        },
-        {
-            "name": "orderEvent";
-            "type": {
-                "kind": "struct";
-                "fields": [
-                    {
-                        "name": "authority";
-                        "type": "pubkey";
-                    },
-                    {
-                        "name": "marketId";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "orderId";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "price";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "orderDirection";
-                        "type": {
-                            "defined": {
-                                "name": "orderDirection";
-                            };
-                        };
-                    },
-                    {
-                        "name": "orderStatus";
-                        "type": {
-                            "defined": {
-                                "name": "orderStatus";
-                            };
-                        };
-                    },
-                    {
-                        "name": "userNonce";
-                        "type": "u32";
-                    },
-                    {
-                        "name": "ts";
-                        "type": "i64";
-                    },
-                    {
-                        "name": "createdAt";
-                        "type": "i64";
-                    }
-                ];
-            };
-        },
-        {
-            "name": "orderStatus";
-            "type": {
-                "kind": "enum";
-                "variants": [
-                    {
-                        "name": "init";
-                    },
-                    {
-                        "name": "open";
-                    },
-                    {
-                        "name": "closed";
-                    },
-                    {
-                        "name": "claimed";
                     }
                 ];
             };
@@ -1813,6 +2090,227 @@ export type ShortxContract = {
             };
         },
         {
+            "name": "position";
+            "type": {
+                "kind": "struct";
+                "fields": [
+                    {
+                        "name": "positionId";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "marketId";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "amount";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "direction";
+                        "type": {
+                            "defined": {
+                                "name": "positionDirection";
+                            };
+                        };
+                    },
+                    {
+                        "name": "createdAt";
+                        "type": "i64";
+                    },
+                    {
+                        "name": "ts";
+                        "type": "i64";
+                    },
+                    {
+                        "name": "isNft";
+                        "type": "bool";
+                    },
+                    {
+                        "name": "mint";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "authority";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "positionStatus";
+                        "type": {
+                            "defined": {
+                                "name": "positionStatus";
+                            };
+                        };
+                    },
+                    {
+                        "name": "positionNonce";
+                        "type": "u32";
+                    },
+                    {
+                        "name": "padding";
+                        "type": {
+                            "array": [
+                                "u8",
+                                3
+                            ];
+                        };
+                    },
+                    {
+                        "name": "version";
+                        "type": "u64";
+                    }
+                ];
+            };
+        },
+        {
+            "name": "positionAccount";
+            "type": {
+                "kind": "struct";
+                "fields": [
+                    {
+                        "name": "bump";
+                        "type": "u8";
+                    },
+                    {
+                        "name": "authority";
+                        "type": "pubkey";
+                    },
+                    {
+                        "name": "version";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "positions";
+                        "type": {
+                            "array": [
+                                {
+                                    "defined": {
+                                        "name": "position";
+                                    };
+                                },
+                                10
+                            ];
+                        };
+                    },
+                    {
+                        "name": "marketId";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "nonce";
+                        "type": "u32";
+                    },
+                    {
+                        "name": "isSubPosition";
+                        "type": "bool";
+                    },
+                    {
+                        "name": "padding";
+                        "type": {
+                            "array": [
+                                "u8",
+                                25
+                            ];
+                        };
+                    }
+                ];
+            };
+        },
+        {
+            "name": "positionDirection";
+            "type": {
+                "kind": "enum";
+                "variants": [
+                    {
+                        "name": "yes";
+                    },
+                    {
+                        "name": "no";
+                    }
+                ];
+            };
+        },
+        {
+            "name": "positionEvent";
+            "type": {
+                "kind": "struct";
+                "fields": [
+                    {
+                        "name": "authority";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "marketId";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "amount";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "direction";
+                        "type": {
+                            "defined": {
+                                "name": "positionDirection";
+                            };
+                        };
+                    },
+                    {
+                        "name": "positionStatus";
+                        "type": {
+                            "defined": {
+                                "name": "positionStatus";
+                            };
+                        };
+                    },
+                    {
+                        "name": "isNft";
+                        "type": "bool";
+                    },
+                    {
+                        "name": "mint";
+                        "type": {
+                            "option": "pubkey";
+                        };
+                    },
+                    {
+                        "name": "ts";
+                        "type": "i64";
+                    },
+                    {
+                        "name": "createdAt";
+                        "type": "i64";
+                    }
+                ];
+            };
+        },
+        {
+            "name": "positionStatus";
+            "type": {
+                "kind": "enum";
+                "variants": [
+                    {
+                        "name": "init";
+                    },
+                    {
+                        "name": "open";
+                    },
+                    {
+                        "name": "closed";
+                    },
+                    {
+                        "name": "claimed";
+                    }
+                ];
+            };
+        },
+        {
             "name": "priceEvent";
             "type": {
                 "kind": "struct";
@@ -1837,6 +2335,26 @@ export type ShortxContract = {
             };
         },
         {
+            "name": "resolveMarketArgs";
+            "type": {
+                "kind": "struct";
+                "fields": [
+                    {
+                        "name": "marketId";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "winningDirection";
+                        "type": {
+                            "defined": {
+                                "name": "winningDirection";
+                            };
+                        };
+                    }
+                ];
+            };
+        },
+        {
             "name": "updateMarketArgs";
             "type": {
                 "kind": "struct";
@@ -1847,29 +2365,7 @@ export type ShortxContract = {
                     },
                     {
                         "name": "marketEnd";
-                        "type": {
-                            "option": "i64";
-                        };
-                    },
-                    {
-                        "name": "winningDirection";
-                        "type": {
-                            "option": {
-                                "defined": {
-                                    "name": "winningDirection";
-                                };
-                            };
-                        };
-                    },
-                    {
-                        "name": "state";
-                        "type": {
-                            "option": {
-                                "defined": {
-                                    "name": "marketStates";
-                                };
-                            };
-                        };
+                        "type": "i64";
                     }
                 ];
             };
@@ -1897,64 +2393,6 @@ export type ShortxContract = {
                             "array": [
                                 "u8",
                                 32
-                            ];
-                        };
-                    }
-                ];
-            };
-        },
-        {
-            "name": "userTrade";
-            "type": {
-                "kind": "struct";
-                "fields": [
-                    {
-                        "name": "bump";
-                        "type": "u8";
-                    },
-                    {
-                        "name": "authority";
-                        "type": "pubkey";
-                    },
-                    {
-                        "name": "totalDeposits";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "totalWithdraws";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "version";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "orders";
-                        "type": {
-                            "array": [
-                                {
-                                    "defined": {
-                                        "name": "order";
-                                    };
-                                },
-                                10
-                            ];
-                        };
-                    },
-                    {
-                        "name": "nonce";
-                        "type": "u32";
-                    },
-                    {
-                        "name": "isSubUser";
-                        "type": "bool";
-                    },
-                    {
-                        "name": "padding";
-                        "type": {
-                            "array": [
-                                "u8",
-                                25
                             ];
                         };
                     }

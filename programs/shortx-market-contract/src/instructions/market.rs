@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken, metadata::Metadata, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
+    associated_token::AssociatedToken, metadata::Metadata, token::Token, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
 };
 use mpl_token_metadata::{instructions::CreateV1CpiBuilder, types::{PrintSupply, TokenStandard}};
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
@@ -74,7 +74,7 @@ pub struct MarketContext<'info> {
     #[account(mut)]
     pub nft_collection_master_edition: UncheckedAccount<'info>,
 
-    pub token_program: Interface<'info, TokenInterface>,
+    pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub token_metadata_program: Program<'info, Metadata>,

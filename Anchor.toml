@@ -9,7 +9,7 @@ skip-lint = false
 shortx_market_contract = "BWbCJnhhafrC69hCdFTqj7L7yJtjP9is6Lykzaq7euaV"
 
 [programs.devnet]
-shortx_market_contract = "shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ"
+shortx_market_contract = "CR2SwZjpMJbCENVv2vnQbcHcT9Qx7mSjnFitgnqYxH4d"
 
 [registry]
 url = "https://api.apr.dev"

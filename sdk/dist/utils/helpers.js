@@ -1,5 +1,6 @@
-import { OrderDirection, OrderStatus, WinningDirection } from '../types/trade';
+import { WinningDirection } from '../types/trade';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { PositionDirection, PositionStatus } from '../types/position';
 export const encodeString = (value, alloc = 32) => {
     const buffer = Buffer.alloc(alloc, 32);
     buffer.write(value);
@@ -18,37 +19,42 @@ export const formatMarket = (account, address) => {
         yesLiquidity: account.yesLiquidity.toString(),
         noLiquidity: account.noLiquidity.toString(),
         volume: account.volume.toString(),
+        oraclePubkey: account.oraclePubkey ? account.oraclePubkey.toString() : '',
+        nftCollectionMint: account.nftCollectionMint ? account.nftCollectionMint.toString() : '',
+        nftCollectionMetadata: account.nftCollectionMetadata ? account.nftCollectionMetadata.toString() : '',
+        nftCollectionMasterEdition: account.nftCollectionMasterEdition ? account.nftCollectionMasterEdition.toString() : '',
+        marketUsdcVault: account.marketUsdcVault ? account.marketUsdcVault.toString() : '',
         marketState: getMarketState(account.marketState),
         updateTs: account.updateTs.toString(),
-        nextOrderId: account.nextOrderId.toString(),
+        nextPositionId: account.nextPositionId.toString(),
         marketStart: account.marketStart.toString(),
         marketEnd: account.marketEnd.toString(),
         question: Buffer.from(account.question).toString().replace(/\0+$/, ''),
         winningDirection: getWinningDirection(account.winningDirection),
     };
 };
-export const formatUserTrade = (account, publicKey) => {
+export const formatPositionAccount = (account, marketId) => {
     return {
-        user: publicKey.toString(),
-        totalDeposits: account.totalDeposits.toString(),
-        totalWithdraws: account.totalWithdraws.toString(),
-        orders: account.orders.map((order) => formatOrder(order, account.authority.toString())),
-        nonce: account.nonce.toString(),
-        isSubUser: account.isSubUser
+        authority: account.authority,
+        marketId: marketId,
+        positions: account.positions.map((position) => formatPosition(position, account.authority.toString())),
+        nonce: account.nonce,
+        isSubPosition: account.isSubPosition
     };
 };
-export const formatOrder = (order, authority) => {
+export const formatPosition = (position, authority) => {
     return {
-        ts: order.ts.toString(),
+        ts: position.ts.toString(),
         authority: authority ? authority : '',
-        userNonce: order.userNonce.toString(),
-        createdAt: order.createdAt ? order.createdAt.toString() : '',
-        orderId: order.orderId.toString(),
-        marketId: order.marketId.toString(),
-        orderStatus: getOrderStatus(order.orderStatus),
-        orderDirection: getOrderDirection(order.orderDirection),
-        price: order.price.toString(),
-        version: order.version.toString(),
+        positionNonce: position.positionNonce.toString(),
+        createdAt: position.createdAt ? position.createdAt.toString() : '',
+        positionId: position.positionId.toString(),
+        marketId: position.marketId.toString(),
+        isNft: position.isNft,
+        mint: position.mint ? position.mint.toString() : '',
+        positionStatus: getPositionStatus(position.positionStatus),
+        direction: getPositionDirection(position.direction),
+        amount: position.amount.toString(),
     };
 };
 export const getMarketState = (status) => {
@@ -75,27 +81,27 @@ export const getWinningDirection = (direction) => {
 export const getTokenProgram = (mint) => {
     return TOKEN_PROGRAM_ID;
 };
-export const getOrderDirection = (direction) => {
+export const getPositionDirection = (direction) => {
     if (Object.keys(direction)[0] === 'yes') {
-        return OrderDirection.YES;
+        return PositionDirection.YES;
     }
-    return OrderDirection.NO;
+    return PositionDirection.NO;
 };
-export const getOrderStatus = (status) => {
+export const getPositionStatus = (status) => {
     let currentStatus = Object.keys(status)[0];
     switch (currentStatus) {
         case 'init':
-            return OrderStatus.INIT;
+            return PositionStatus.INIT;
         case 'open':
-            return OrderStatus.OPEN;
+            return PositionStatus.OPEN;
         case 'closed':
-            return OrderStatus.CLOSED;
+            return PositionStatus.CLOSED;
         case 'claimed':
-            return OrderStatus.CLAIMED;
+            return PositionStatus.CLAIMED;
         case 'liquidated':
-            return OrderStatus.LIQUIDATED;
+            return PositionStatus.LIQUIDATED;
         case 'waiting':
-            return OrderStatus.WAITING;
+            return PositionStatus.WAITING;
         default:
             throw new Error('Invalid order status');
     }

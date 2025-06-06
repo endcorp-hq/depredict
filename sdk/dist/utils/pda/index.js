@@ -13,13 +13,14 @@ export const getConfigPDA = (programId) => {
 export const getCustomerPDA = (programId, customerId) => {
     return PublicKey.findProgramAddressSync([Buffer.from('customer'), new BN(customerId).toArrayLike(Buffer, 'le', 8)], programId)[0];
 };
-export const getUserTradePDA = (programId, wallet) => {
-    return PublicKey.findProgramAddressSync([Buffer.from('user_trade'), wallet.toBuffer()], programId)[0];
+export const getPositionAccountPDA = (programId, marketId, subPositionKey) => {
+    return subPositionKey ? PublicKey.findProgramAddressSync([Buffer.from('position_account'), new BN(marketId).toArrayLike(Buffer, 'le', 8), subPositionKey.toBuffer()], programId)[0] : PublicKey.findProgramAddressSync([Buffer.from('position_account'), new BN(marketId).toArrayLike(Buffer, 'le', 8)], programId)[0];
 };
-export const getSubUserTradePDA = (programId, wallet, nonce) => {
+export const getSubPositionAccountPDA = (programId, marketId, sub_position_key, nonce) => {
     return PublicKey.findProgramAddressSync([
-        Buffer.from('sub_user_trade'),
-        wallet.toBuffer(),
+        Buffer.from('sub_position_account'),
+        new BN(marketId).toArrayLike(Buffer, 'le', 8),
+        sub_position_key.toBuffer(),
         new BN(nonce).toArrayLike(Buffer, 'le', 8)
     ], programId)[0];
 };

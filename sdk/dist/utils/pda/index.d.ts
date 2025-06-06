@@ -3,6 +3,6 @@ export declare const getTokenATA: (address: PublicKey, Mint: PublicKey, program?
 export declare const getMarketPDA: (programId: PublicKey, marketId: number) => PublicKey;
 export declare const getConfigPDA: (programId: PublicKey) => PublicKey;
 export declare const getCustomerPDA: (programId: PublicKey, customerId: number) => PublicKey;
-export declare const getUserTradePDA: (programId: PublicKey, wallet: PublicKey) => PublicKey;
-export declare const getSubUserTradePDA: (programId: PublicKey, wallet: PublicKey, nonce: number) => PublicKey;
+export declare const getPositionAccountPDA: (programId: PublicKey, marketId: number, subPositionKey?: PublicKey) => PublicKey;
+export declare const getSubPositionAccountPDA: (programId: PublicKey, marketId: number, sub_position_key: PublicKey, nonce: number) => PublicKey;
 export declare const getPoolPDA: (programId: PublicKey, poolId: number) => PublicKey;

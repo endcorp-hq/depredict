@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("shrtX1eBcrSci4CdZU7t1X1uaxV77VC4FatEqYwtZoJ");
+declare_id!("CR2SwZjpMJbCENVv2vnQbcHcT9Qx7mSjnFitgnqYxH4d");
 
 #[program]
 pub mod shortx_contract {

@@ -200,7 +200,6 @@ describe("shortx-contract", () => {
       try {
         const tx = await program.methods
           .createMarket({
-            marketId,
             question,
             marketStart,
             marketEnd,

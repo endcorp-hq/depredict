@@ -1,9 +1,10 @@
 import { AddressLookupTableAccount, Connection, TransactionInstruction } from '@solana/web3.js';
-export declare const swap: ({ connection, wallet, inToken, amount }: {
+export declare const swap: ({ connection, wallet, inToken, amount, usdcMint }: {
     connection: Connection;
     wallet: string;
     inToken: string;
     amount: number;
+    usdcMint: string;
 }) => Promise<{
     swapIxs: TransactionInstruction[];
     addressLookupTableAccounts: AddressLookupTableAccount[];

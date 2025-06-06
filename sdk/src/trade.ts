@@ -5,6 +5,7 @@ import {
   AddressLookupTableAccount,
   Keypair,
   PublicKey,
+  SystemProgram,
   TransactionInstruction,
 } from "@solana/web3.js";
 import {
@@ -26,8 +27,11 @@ import { swap } from "./utils/swap";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   createInitializeMint2Instruction,
+  createInitializeMintInstruction,
   createMint,
   getAssociatedTokenAddressSync,
+  getMinimumBalanceForRentExemptMint,
+  MINT_SIZE,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -100,7 +104,6 @@ export default class Trade {
    */
   async createMarket(
     {
-      marketId,
       startTime,
       endTime,
       question,
@@ -116,15 +119,21 @@ export default class Trade {
 
     const ixs: TransactionInstruction[] = [];
 
+   
+
+    const [configPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      this.program.programId
+    );
+
+    const configAccount = await this.program.account.config.fetch(configPDA);
+
+    const marketId = configAccount.numMarkets;
+
     const marketIdBN = new BN(marketId);
 
     const [marketPDA] = PublicKey.findProgramAddressSync(
       [Buffer.from("market"), marketIdBN.toArrayLike(Buffer, "le", 8)],
-      this.program.programId
-    );
-
-    const [configPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from("config")],
       this.program.programId
     );
 
@@ -138,16 +147,23 @@ export default class Trade {
     const collectionMintKeypair = Keypair.generate();
     console.log("Collection Mint:", collectionMintKeypair.publicKey.toString());
 
+   
+    const createAccountInstruction = SystemProgram.createAccount({
+          fromPubkey: payer,
+          newAccountPubkey: collectionMintKeypair.publicKey,
+          space: MINT_SIZE,
+          lamports: await getMinimumBalanceForRentExemptMint(this.program.provider.connection),
+          programId: TOKEN_PROGRAM_ID
+      })
+    const initMintInstruction =  createInitializeMint2Instruction(collectionMintKeypair.publicKey, 1, payer, payer, TOKEN_PROGRAM_ID);
+  
+
+
     // Initialize the collection mint using SPL Token program
-    const mintIx = createInitializeMint2Instruction(
-      collectionMintKeypair.publicKey,
-      1,
-      payer, // payer
-      payer, // Mint Authority
-      TOKEN_PROGRAM_ID
-    );
+    
     console.log("Add collection mint account instructions to transaction");
-    ixs.push(mintIx);
+    ixs.push(createAccountInstruction);
+    ixs.push(initMintInstruction);
 
     const [collectionMetadataPda] = PublicKey.findProgramAddressSync(
       [
@@ -336,7 +352,7 @@ export default class Trade {
         })
         .instruction()
     );
-
+    return ixs;
     return sendVersionedTransaction(this.program, ixs, options);
   }
 
@@ -471,6 +487,7 @@ export default class Trade {
       );
     }
 
+    return ixs;
     return sendVersionedTransaction(this.program, ixs, options);
   }
 
@@ -502,6 +519,7 @@ export default class Trade {
         .instruction()
     );
 
+    return ixs;
     return sendVersionedTransaction(this.program, ixs, options);
   }
 
@@ -608,6 +626,7 @@ export default class Trade {
       );
     }
 
+    return ixs;
     return sendVersionedTransaction(this.program, ixs, options);
   }
 

@@ -2,29 +2,22 @@ import { Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "./types/shortx";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
-import { CreateMarketArgs, OpenOrderArgs, UserTrade, CreateCustomerArgs, MarketStates } from "./types/trade";
+import { CreateMarketArgs, OpenOrderArgs, MarketStates } from "./types/trade";
 import { RpcOptions } from "./types/index";
+import Position from "./position";
 export default class Trade {
     private program;
     decimals: number;
-    constructor(program: Program<ShortxContract>);
+    position: Position;
+    ADMIN_KEY: PublicKey;
+    FEE_VAULT: PublicKey;
+    USDC_MINT: PublicKey;
+    constructor(program: Program<ShortxContract>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey);
     /**
      * Get All Markets
      *
      */
     getAllMarkets(): Promise<import("./types/trade").Market[]>;
-    /**
-     * Get My User Trades from a user authority
-     * @param user - User PublicKey
-     *
-     */
-    getMyUserTrades(user: PublicKey): Promise<UserTrade[]>;
-    /**
-     * Get User Orders
-     * @param user - User PublicKey
-     *
-     */
-    getUserOrders(user: PublicKey): Promise<import("./types/trade").Order[]>;
     /**
      * Get Market By ID
      * @param marketId - The ID of the market
@@ -33,83 +26,23 @@ export default class Trade {
     getMarketById(marketId: number): Promise<import("./types/trade").Market>;
     /**
      * Get Market By Address
-     * @param address - The address of the market
+     * @param address - The address of the market PDA
      *
      */
     getMarketByAddress(address: PublicKey): Promise<import("./types/trade").Market>;
-    /**
-     * Get User Trade
-     * @param user - User PublicKey
-     * @param userNonce - The nonce of the user
-     *
-     */
-    getUserTrade(user: PublicKey, userNonce?: number): Promise<{
-        bump: number;
-        authority: anchor.web3.PublicKey;
-        totalDeposits: anchor.BN;
-        totalWithdraws: anchor.BN;
-        version: anchor.BN;
-        orders: {
-            ts: anchor.BN;
-            orderId: anchor.BN;
-            marketId: anchor.BN;
-            orderStatus: ({
-                open?: undefined;
-                closed?: undefined;
-                claimed?: undefined;
-            } & {
-                init: Record<string, never>;
-            }) | ({
-                init?: undefined;
-                closed?: undefined;
-                claimed?: undefined;
-            } & {
-                open: Record<string, never>;
-            }) | ({
-                init?: undefined;
-                open?: undefined;
-                claimed?: undefined;
-            } & {
-                closed: Record<string, never>;
-            }) | ({
-                init?: undefined;
-                open?: undefined;
-                closed?: undefined;
-            } & {
-                claimed: Record<string, never>;
-            });
-            price: anchor.BN;
-            version: anchor.BN;
-            orderDirection: ({
-                no?: undefined;
-            } & {
-                yes: Record<string, never>;
-            }) | ({
-                yes?: undefined;
-            } & {
-                no: Record<string, never>;
-            });
-            userNonce: number;
-            createdAt: anchor.BN;
-            padding: number[];
-        }[];
-        nonce: number;
-        isSubUser: boolean;
-        padding: number[];
-    }>;
     /**
      * Create Market
      * @param args.marketId - new markert id - length + 1
      * @param args.startTime - start time
      * @param args.endTime - end time
      * @param args.question - question (max 80 characters)
-     * @param args.liquidityAtStart - liquidity at start
-     * @param args.payoutFee - payout fee (to add affiliate system)
-     *
+     * @param args.oraclePubkey - oracle pubkey
+     * @param args.metadataUri - metadata uri
+     * @param args.payer - payer
      * @param options - RPC options
      *
      */
-    createMarket({ marketId, startTime, endTime, question, }: CreateMarketArgs, options?: RpcOptions): Promise<string>;
+    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
     /**
      * Open Order
      * @param args.marketId - The ID of the Market
@@ -117,11 +50,14 @@ export default class Trade {
      * @param args.direction - The direction of the Order
      * @param args.mint - The mint of the Order
      * @param args.token - The token to use for the Order
-     *
+     * @param args.payer - The payer of the Order
      * @param options - RPC options
      *
      */
-    openOrder({ marketId, amount, direction, mint, token }: OpenOrderArgs, options?: RpcOptions): Promise<string | undefined>;
+    openPosition({ marketId, amount, direction, mint, token, payer }: OpenOrderArgs, options?: RpcOptions): Promise<string | {
+        ixs: anchor.web3.TransactionInstruction[];
+        addressLookupTableAccounts: anchor.web3.AddressLookupTableAccount[];
+    } | undefined>;
     /**
      * Resolve Market
      * @param args.marketId - The ID of the Market
@@ -130,7 +66,7 @@ export default class Trade {
      * @param options - RPC options
      *
      */
-    resolveMarket({ marketId, winningDirection, state, }: {
+    resolveMarket({ marketId, winningDirection, payer, }: {
         marketId: number;
         winningDirection: {
             yes: {};
@@ -142,15 +78,16 @@ export default class Trade {
             draw: {};
         };
         state: MarketStates;
-    }, options?: RpcOptions): Promise<string>;
+        payer: PublicKey;
+    }, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
     /**
      * Collect Remaining Liquidity
      * @param marketId - The ID of the market
-     *
+     * @param payer - The payer of the Market
      * @param options - RPC options
      *
      */
-    closeMarket(marketId: number, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
+    closeMarket(marketId: number, payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
     /**
      * Payout Order
      * @param args.marketId - The ID of the Market
@@ -165,55 +102,31 @@ export default class Trade {
         orderId: number;
         userNonce: number;
         mint: PublicKey;
-    }[], options?: RpcOptions): Promise<string>;
-    /**
-     * Allow Market to Payout
-     * @param marketId - The ID of the market
-     *
-     * @param options - RPC options
-     *
-     */
-    allowMarketToPayout(marketId: number, options?: RpcOptions): Promise<string>;
-    /**
-     * Create Sub User Trade
-     * @param user - User PublicKey the main user
-     *
-     * @param options - RPC options
-     *
-     */
-    createSubUserTrade(user: PublicKey, options?: RpcOptions): Promise<string>;
+    }[], payer: PublicKey, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
     /**
      * Update Market
      * @param marketId - The ID of the market
      * @param marketEnd - The end time of the market
-     *
      * @param options - RPC options
      *
      */
-    updateMarket(marketId: number, marketEnd: number, options?: RpcOptions): Promise<string>;
-    /**
-     * Create Customer
-     * @param args.id - The ID of the customer
-     * @param args.name - The name of the customer
-     * @param args.authority - The authority of the customer
-     *
-     * @param options - RPC options
-     *
-     */
-    createCustomer({ id, name, authority, feeRecipient }: CreateCustomerArgs, options?: RpcOptions): Promise<string>;
-    /**
-     * Get User Trade Nonce With Slots
-     * @param userTrades - User Trades
-     *
-     */
-    getUserTradeNonceWithSlots(userTrades: UserTrade[]): anchor.web3.PublicKey;
-    getUserTradeIxs(): Promise<{
-        userTradePDA: anchor.web3.PublicKey;
-        ixs: anchor.web3.TransactionInstruction[];
-        nonce: number;
-    } | {
-        userTradePDA: anchor.web3.PublicKey;
-        ixs: anchor.web3.TransactionInstruction[];
-        nonce?: undefined;
-    }>;
+    updateMarket(marketId: number, marketEnd: number, payer: PublicKey, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
+    payoutNft(nftPositions: {
+        marketId: number;
+        positionId: number;
+        positionNonce: number;
+        amount: number;
+        direction: {
+            yes: {};
+        } | {
+            no: {};
+        };
+        nftMint: PublicKey;
+        nftMetadata: PublicKey;
+        nftMasterEdition: PublicKey;
+        nftTokenAccount: PublicKey;
+        nftUsdcTokenAccount: PublicKey;
+        nftUsdcVault: PublicKey;
+        nftCollectionMint: PublicKey;
+    }[], payer: PublicKey, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
 }
