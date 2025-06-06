@@ -4,8 +4,11 @@ use crate::{
     state::{ MarketState, MintPositionArgs, Position, PositionAccount, PositionStatus},
 };
 use anchor_lang::prelude::*;
-use anchor_spl::metadata::{mpl_token_metadata, Metadata};
-use anchor_spl::{associated_token::AssociatedToken, token_2022::Token2022};
+use anchor_spl::{
+    metadata::{mpl_token_metadata, Metadata}, 
+    token::Token,
+    associated_token::AssociatedToken
+};
 use mpl_token_metadata::{
     instructions::{CreateV1CpiBuilder, SetAndVerifyCollectionCpiBuilder},
     types::{Collection, PrintSupply, TokenStandard},
@@ -60,7 +63,7 @@ pub struct MintPositionContext<'info> {
     #[account(mut)]
     pub collection_master_edition: AccountInfo<'info>,
 
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
     pub token_metadata_program: Program<'info, Metadata>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
