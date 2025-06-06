@@ -1,10 +1,8 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
-  METADATA_POINTER_SIZE,
-  TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
@@ -84,7 +82,7 @@ describe("shortx-contract", () => {
             position.mint,
             user.publicKey,  // get the user's NFT token account address
             false, // allowOwnerOffCurve
-            TOKEN_2022_PROGRAM_ID
+            TOKEN_PROGRAM_ID
           );
 
         console.log("NFT Token Account:", nftTokenAccount.toString());
@@ -182,7 +180,6 @@ describe("shortx-contract", () => {
         console.log("User Public Key:", user.publicKey.toString());
         console.log("NFT Mint:", position.mint.toString());
         console.log("Token Program ID:", TOKEN_PROGRAM_ID.toString());
-        console.log("Token 2022 Program ID:", TOKEN_2022_PROGRAM_ID.toString());
         console.log("Associated Token Program ID:", ASSOCIATED_TOKEN_PROGRAM_ID.toString());
         console.log("Token Metadata Program ID:", METAPLEX_ID.toString());
 
@@ -231,7 +228,6 @@ describe("shortx-contract", () => {
               nftMasterEditionAccount: nftMasterEditionPda,
               nftMetadataAccount: nftMetadataPda,
               tokenProgram: TOKEN_PROGRAM_ID,
-              token2022Program: TOKEN_2022_PROGRAM_ID,
               tokenMetadataProgram: METAPLEX_ID,
               associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
               systemProgram: anchor.web3.SystemProgram.programId,

@@ -9,6 +9,12 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import { getUsdcMint, getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID } from "../helpers";
+import { getMint } from "@solana/spl-token";
+
+// At the top of your file:
+let numMarkets: anchor.BN;
+let configPda: PublicKey;
+
 
 describe("shortx-contract", () => {
   let usdcMint: PublicKey;
@@ -69,18 +75,22 @@ describe("shortx-contract", () => {
       console.log(
         `Admin ATA (${usdcMint.toString()}): ${adminTokenAccount.toString()}`
       );
+      
+      const mintInfo = await getMint(provider.connection, usdcMint);
+      console.log("Mint authority:", mintInfo.mintAuthority?.toBase58());
 
       // Mint USDC to admin if needed
       const adminUsdcBalance = await provider.connection.getTokenAccountBalance(adminTokenAccount);
       if (Number(adminUsdcBalance.value.amount) < 1000) {
         console.log("Minting USDC to admin...");
         const { keypair: usdcMintKeypair } = await getUsdcMint();
+        console.log("MintTo authority:", usdcMintKeypair.publicKey.toBase58());
         await mintTo(
           provider.connection,
           ADMIN,
           usdcMint,
           adminTokenAccount,
-          usdcMintKeypair, // Use USDC mint keypair as mint authority
+          ADMIN.publicKey, 
           1000_000_000 // 1000 USDC with 6 decimals
         );
       }
@@ -98,6 +108,23 @@ describe("shortx-contract", () => {
     } catch (error) {
       console.error("Error minting tokens:", error);
     }
+
+    // Assign to file-level configPda
+    configPda = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    )[0];
+
+    console.log("Config PDA:", configPda.toString());
+
+    // load the config account to get the num_markets
+    const configAccount = await program.account.config.fetch(configPda);
+    numMarkets = configAccount.numMarkets; // assign to file-level variable
+    console.log("Num Markets:", numMarkets);
+
+
+
+
   });
 
   describe("Market", () => {
@@ -127,9 +154,10 @@ describe("shortx-contract", () => {
           marketStart.toNumber() * 1000
         ).toISOString()})`
       );
-      // Generate a random market ID
-      const marketId = new anchor.BN(Math.floor(Math.random() * 1000000));
-      console.log("Using market ID:", marketId.toString());
+      console.log("Number of existing markets:", numMarkets.toNumber());
+      // Generate a market ID based on the number of existing markets
+      const marketId = numMarkets.add(new anchor.BN(1));
+      console.log("Using market ID:", marketId.toNumber());
       const question = Array.from(Buffer.from("Will BTC reach $100k in 2024?"));
 
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -142,12 +170,16 @@ describe("shortx-contract", () => {
 
       console.log("Market PDA:", marketPda.toString());
 
-      const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
+      const [marketPositionsPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("position"),
+          marketId.toArrayLike(Buffer, "le", 8),
+        ],
         program.programId
       );
 
-      console.log("Config PDA:", configPda.toString());
+      console.log("Market Positions PDA:", marketPositionsPda.toString());
+
 
       // Use devnet oracle for testing
       const oraclePubkey = new PublicKey("CYkBEhDgvVHutGKXafAg1gki92SGWDT4MnCxX8KLed6i");
@@ -209,6 +241,7 @@ describe("shortx-contract", () => {
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             market: marketPda,
+            marketPositionsAccount: marketPositionsPda,
             oraclePubkey: oraclePubkey,
             usdcMint: usdcMint,
             nftCollectionMint: collectionMintKeypair.publicKey,
@@ -228,6 +261,7 @@ describe("shortx-contract", () => {
             preflightCommitment: "confirmed"
           });
         console.log("Transaction signature:", tx);
+        
       } catch (error) {
         console.error("Full error:", error);
         if (error.logs) {
@@ -252,6 +286,17 @@ describe("shortx-contract", () => {
       console.log("Winning Direction:", marketAccount.winningDirection);
       console.log("=== End Market State Details ===\n");
       
+      const configAccount = await program.account.config.fetch(configPda);
+      console.log("\n=== Config State Details ===");
+      console.log("Number of markets:", configAccount.numMarkets.toNumber());
+      console.log("Authority:", configAccount.authority.toString());
+      console.log("Fee Vault:", configAccount.feeVault.toString());
+      console.log("Fee Amount:", configAccount.feeAmount);
+      console.log("Version:", configAccount.version.toString());
+      console.log("=== End Config State Details ===\n");
+
+
+
       assert.ok(marketAccount.marketId.eq(marketId));
       assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
     });

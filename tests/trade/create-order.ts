@@ -1,21 +1,48 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, Keypair, SystemProgram, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getOrCreateAssociatedTokenAccount,
+  mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getUsdcMint, getNetworkConfig, FEE_VAULT, program, provider, USER, MARKET_ID } from "../helpers";
+import { getUsdcMint, getNetworkConfig, FEE_VAULT, program, provider, USER, MARKET_ID, ADMIN } from "../helpers";
+import * as fs from "fs";
 
 describe("shortx-contract", () => { 
 
   let usdcMint: PublicKey;
+  let userTokenAccount: PublicKey;
+  let marketVault: PublicKey; 
 
   before(async () => {
     // Get network configuration
     const { isDevnet } = await getNetworkConfig();
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
+
+    // Ensure USER has enough SOL for rent and fees by transferring from local wallet if needed
+    const userBalance = await provider.connection.getBalance(USER.publicKey);
+    const minBalance = 1_000_000_000; // 1 SOL
+    if (userBalance < minBalance) {
+      // Load local wallet from ~/.config/solana/id.json
+      const localKeypair = Keypair.fromSecretKey(
+        Buffer.from(JSON.parse(fs.readFileSync(`${process.env.HOME}/.config/solana/id.json`, "utf-8")))
+      );
+      console.log("Transferring 2 SOL from local wallet to USER...");
+      const recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+      const transferIx = SystemProgram.transfer({
+        fromPubkey: localKeypair.publicKey,
+        toPubkey: USER.publicKey,
+        lamports: 2 * LAMPORTS_PER_SOL,
+      });
+      const transaction = new anchor.web3.Transaction().add(transferIx);
+      transaction.recentBlockhash = recentBlockhash;
+      transaction.feePayer = localKeypair.publicKey;
+      const signature = await provider.connection.sendTransaction(transaction, [localKeypair]);
+      await provider.connection.confirmTransaction(signature);
+      console.log("Transfer to USER successful");
+    }
 
     // Devnet USDC mint address
     const { mint } = await getUsdcMint();
@@ -23,6 +50,8 @@ describe("shortx-contract", () => {
 
     // Get the market PDA for mint authority
     global.MARKET_ID = MARKET_ID;
+    console.log("MARKET_ID:", MARKET_ID.toNumber());
+    
     const [marketPda] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("market"),
@@ -43,18 +72,56 @@ describe("shortx-contract", () => {
     const tokenAccountRentExempt = await provider.connection.getMinimumBalanceForRentExemption(165);
     console.log("Required rent-exempt amount for token account:", tokenAccountRentExempt, "lamports");
 
-    // Create user's USDC token account
-    const userTokenAccount = (
-      await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        USER, // Payer
-        usdcMint,
-        USER.publicKey
-      )
-    ).address;
-    console.log(
-      `User USDC ATA: ${userTokenAccount.toString()}`
-    );
+    // Defensive check: Create user's USDC token account
+
+    try {
+      userTokenAccount = (
+        await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          USER, // Payer
+          usdcMint,
+          USER.publicKey
+        )
+      ).address;
+      console.log(`User USDC ATA: ${userTokenAccount.toString()}`);
+
+      // Mint USDC to USER's ATA if needed
+      const userUsdcBalance = await provider.connection.getTokenAccountBalance(userTokenAccount);
+      if (Number(userUsdcBalance.value.amount) < 1000_000) { // less than 1 USDC
+        
+        console.log("Minting 1000 USDC to USER...");
+        await mintTo(
+          provider.connection,
+          ADMIN, // payer and mint authority
+          usdcMint,
+          userTokenAccount,
+          ADMIN, // mint authority
+          1000_000_000 // 1000 USDC (6 decimals)
+        );
+        console.log("Minted 1000 USDC to USER's ATA");
+      }
+    } catch (e) {
+      console.error("Failed to get or create user USDC ATA:", e);
+      throw e;
+    }
+
+    // Defensive check: Create market's USDC vault (ATA for market PDA)
+    let marketVault;
+    try {
+      marketVault = (
+        await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          USER, // Payer
+          usdcMint,
+          marketPda,
+          true // allowOwnerOffCurve for PDA
+        )
+      ).address;
+      console.log(`Market USDC Vault: ${marketVault.toString()}`);
+    } catch (e) {
+      console.error("Failed to get or create market USDC vault:", e);
+      throw e;
+    }
 
     // Note: You'll need to get USDC from the faucet: https://spl-token-faucet.com/?token-name=USDC
     if (isDevnet) {
@@ -65,15 +132,15 @@ describe("shortx-contract", () => {
   describe("Trade", () => {
     it("Creates an order in an existing market", async () => {
 
-      // Ensure user has enough SOL for fee and rent
-      const userBalance = await provider.connection.getBalance(USER.publicKey);
-      const requiredBalance = 2_000_000_000; // 2 SOL for fee and rent
-      if (userBalance < requiredBalance) {
-        console.log("Requesting airdrop for user...");
-        const signature = await provider.connection.requestAirdrop(USER.publicKey, requiredBalance);
-        await provider.connection.confirmTransaction(signature);
-        console.log("Airdrop successful");
-      }
+      // // Ensure user has enough SOL for fee and rent
+      // const userBalance = await provider.connection.getBalance(USER.publicKey);
+      // const requiredBalance = 2_000_000_000; // 2 SOL for fee and rent
+      // if (userBalance < requiredBalance) {
+      //   console.log("Requesting airdrop for user...");
+      //   const signature = await provider.connection.requestAirdrop(USER.publicKey, requiredBalance);
+      //   await provider.connection.confirmTransaction(signature);
+      //   console.log("Airdrop successful");
+      // }
 
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -106,14 +173,6 @@ describe("shortx-contract", () => {
       const amount = new anchor.BN(100); // 100 USDC (6 decimals)
       const direction = { yes: {} }; // Betting on "Yes"
 
-      const marketVault = (await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        USER,
-        usdcMint,
-        marketPda,
-        true
-      )).address;
-
       try {
         const tx = await program.methods
           .createPosition({
@@ -126,12 +185,7 @@ describe("shortx-contract", () => {
             marketPositionsAccount: positionAccountPda,
             market: marketPda,
             usdcMint: usdcMint, // Use devnet USDC mint
-            userUsdcAta: (await getOrCreateAssociatedTokenAccount(
-              provider.connection,
-              USER,
-              usdcMint,
-              USER.publicKey
-            )).address,
+            userUsdcAta: userTokenAccount,
             marketUsdcVault: marketVault,
             config: configPda,
             tokenProgram: TOKEN_PROGRAM_ID,

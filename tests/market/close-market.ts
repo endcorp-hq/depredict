@@ -7,10 +7,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getOrCreateAssociatedTokenAccount,
   mintTo,
-  TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { assert } from "chai";
-import * as fs from "fs";
 import { ADMIN, FEE_VAULT, getUsdcMint, MARKET_ID } from "../helpers";
 
 describe("shortx-contract", () => {

@@ -1,11 +1,42 @@
 use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken, metadata::Metadata, token::Token, token_2022::TransferChecked, token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface}
+    associated_token::AssociatedToken, 
+    metadata::Metadata, 
+    token::{
+        Token, 
+        TransferChecked,
+        transfer_checked,
+        CloseAccount,
+        close_account
+    },
+    token_interface::{ 
+        Mint, 
+        TokenAccount, 
+        TokenInterface
+    }
 };
 use mpl_token_metadata::{instructions::CreateV1CpiBuilder, types::{PrintSupply, TokenStandard}};
-use switchboard_on_demand::{prelude::rust_decimal::Decimal};
-use crate::{constants::{ MARKET, POSITION, USDC_MINT}, constraints::{get_oracle_price}, state::{CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection}};
+// use switchboard_on_demand::{prelude::rust_decimal::Decimal};
+use crate::{constants::{ 
+    MARKET, 
+    POSITION, 
+    USDC_MINT
+    }, 
+    // constraints::{get_oracle_price}, 
+    state::{
+        CloseMarketArgs, 
+        Config, 
+        CreateMarketArgs, 
+        MarketState, 
+        MarketStates, 
+        Position, 
+        PositionAccount, 
+        PositionStatus, 
+        ResolveMarketArgs, 
+        UpdateMarketArgs
+    }
+};
 use crate::errors::ShortxError;
 
 #[derive(Accounts)]
@@ -26,14 +57,15 @@ pub struct MarketContext<'info> {
         mut
     )]
     pub oracle_pubkey: AccountInfo<'info>,
-
+    
+    #[account(mut)]
     pub config: Box<Account<'info, Config>>,
 
     #[account(
         init,
         payer = signer,
         space = 8 + MarketState::INIT_SPACE,
-        seeds = [MARKET.as_bytes(), &config.num_markets.to_le_bytes()],
+        seeds = [MARKET.as_bytes(), &(1 + config.num_markets).to_le_bytes()],
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
@@ -42,7 +74,7 @@ pub struct MarketContext<'info> {
         init,
         payer = signer,
         space = 8 + PositionAccount::INIT_SPACE,
-        seeds = [POSITION.as_bytes(), &config.num_markets.to_le_bytes()],
+        seeds = [POSITION.as_bytes(), &(1 + config.num_markets).to_le_bytes()],
         bump
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
@@ -177,10 +209,13 @@ impl<'info> MarketContext<'info> {
         // require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
         msg!("Skipping oracle check");
 
+        let market_id = config.next_market_id();
+        msg!("Market ID: {}", market_id);
+
         market.set_inner(MarketState {
             bump: bumps.market,
             authority: signer.key(),
-            market_id: config.next_market_id(),
+            market_id: market_id,
             market_start: args.market_start,
             market_end: args.market_end,
             question: args.question,
@@ -191,6 +226,18 @@ impl<'info> MarketContext<'info> {
             nft_collection_master_edition: Some(self.nft_collection_master_edition.key()),
             market_usdc_vault: Some(self.market_usdc_vault.key()),
             ..Default::default()
+        });
+
+        // update the num_markets in the config account
+        require!(config.num_markets == market_id - 1, ShortxError::InvalidMarketId);
+        msg!("Updating num_markets in config account to: {}", market_id);
+        config.set_inner(Config {
+            num_markets: market_id,
+            bump: config.bump,
+            authority: config.authority,
+            fee_vault: config.fee_vault,
+            fee_amount: config.fee_amount,
+            version: config.version,
         });
     
         let mut positions = [Position::default(); 10];
@@ -204,7 +251,7 @@ impl<'info> MarketContext<'info> {
             version: 0,
             positions,
             nonce: 0,
-            market_id: config.next_market_id(),
+            market_id: market_id,
             is_sub_position: false,
             padding: [0; 25],
         });
@@ -216,6 +263,7 @@ impl<'info> MarketContext<'info> {
         }
     
         market.emit_market_event()?;
+
 
         msg!("Creating collection NFT");
 
@@ -230,7 +278,8 @@ impl<'info> MarketContext<'info> {
         let system_program = self.system_program.to_account_info();
         let token_program = self.token_program.to_account_info();
 
-        let market_id = market.market_id;
+
+        msg!("Market ID: {}", market_id);
         let market_bump = market.bump;
         let market_signer: &[&[&[u8]]] = &[&[
             MARKET.as_bytes(),
@@ -348,9 +397,9 @@ impl<'info> CloseMarketContext<'info> {
                     self.token_program.to_account_info(),
                     TransferChecked {
                         from: self.market_vault.to_account_info(),
+                        mint: self.usdc_mint.to_account_info(),
                         to: self.fee_vault_usdc_ata.to_account_info(),
                         authority: self.market.to_account_info(), // Market PDA is authority
-                        mint: self.usdc_mint.to_account_info(),
                     },
                     market_signer,
                 ),
@@ -361,10 +410,10 @@ impl<'info> CloseMarketContext<'info> {
 
         // 2. Close the market's token ATA, sending its rent lamports to the fee_vault
         msg!("Closing market vault account: {}", self.market_vault.key());
-        anchor_spl::token_interface::close_account(
+        close_account(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
-                anchor_spl::token_interface::CloseAccount {
+                CloseAccount {
                     account: self.market_vault.to_account_info(),
                     destination: self.fee_vault.to_account_info(), // Lamport destination
                     authority: self.market.to_account_info(), // Market PDA is authority

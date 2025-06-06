@@ -3,7 +3,7 @@ import { PublicKey, Keypair, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js"
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
-  TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
 import { getNetworkConfig, ADMIN, program, provider, USER, MARKET_ID, METAPLEX_ID } from "../helpers";
@@ -93,7 +93,7 @@ describe("shortx-contract", () => {
         nftMintKeypair.publicKey,
         USER.publicKey,  // Create token account for admin since they own the position
         false, // allowOwnerOffCurve
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_PROGRAM_ID
         );
       console.log("NFT Token Account:", nftTokenAccount.toString());
 
@@ -147,7 +147,7 @@ describe("shortx-contract", () => {
             collectionAuthority: ADMIN.publicKey, //this will also be a signer for the minting instruction
             
             // Program accounts
-            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            tokenProgram: TOKEN_PROGRAM_ID,
             tokenMetadataProgram: METAPLEX_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,

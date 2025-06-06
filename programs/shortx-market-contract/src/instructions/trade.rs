@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{ transfer, Transfer };
-use anchor_spl::token::Token;
-use anchor_spl::token_2022::{ transfer_checked, Token2022, TransferChecked };
+use anchor_spl::token::{Token, TransferChecked, transfer_checked};
+
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
 use anchor_spl::{metadata::BurnNft};
 
@@ -119,7 +119,6 @@ pub struct PayoutNftContext<'info> {
     pub nft_master_edition_account: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
-    pub token_2022_program: Program<'info, Token2022>,
 
     /// CHECK: Check by CPI
     pub token_metadata_program: AccountInfo<'info>,
@@ -421,7 +420,7 @@ impl<'info> PayoutNftContext<'info> {
             let mint = self.nft_mint.to_account_info();
             let token = self.user_nft_token_account.to_account_info();
             let edition = self.nft_master_edition_account.to_account_info();
-            let spl_token = self.token_2022_program.to_account_info();
+            let spl_token = self.token_program.to_account_info();
             let metadata_program_id = self.token_metadata_program.to_account_info();
     
             CpiContext::new(
