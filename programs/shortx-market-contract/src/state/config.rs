@@ -13,8 +13,8 @@ pub struct Config {
 
 impl Config {
     pub fn next_market_id(&mut self) -> u64 {
-        let id: u64 = self.num_markets;
-        self.num_markets = self.num_markets.checked_add(1).unwrap();
+        // calculates the next market id but does not update the num_markets
+        let id: u64 = self.num_markets.checked_add(1).unwrap();
         id
     }
 }
