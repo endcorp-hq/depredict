@@ -1,5 +1,5 @@
 {
-  "address": "CR2SwZjpMJbCENVv2vnQbcHcT9Qx7mSjnFitgnqYxH4d",
+  "address": "JAihLeLiVsbP1u52aET4XEpK5UFhiSfrgxXoJq4yAyhB",
   "metadata": {
     "name": "shortx_contract",
     "version": "0.1.0",
@@ -289,57 +289,16 @@
           "writable": true
         },
         {
-          "name": "config"
+          "name": "config",
+          "writable": true
         },
         {
           "name": "market",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  109,
-                  97,
-                  114,
-                  107,
-                  101,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "config.num_markets",
-                "account": "Config"
-              }
-            ]
-          }
+          "writable": true
         },
         {
           "name": "market_positions_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  115,
-                  105,
-                  116,
-                  105,
-                  111,
-                  110
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "config.num_markets",
-                "account": "Config"
-              }
-            ]
-          }
+          "writable": true
         },
         {
           "name": "usdc_mint",
@@ -415,7 +374,8 @@
           "writable": true
         },
         {
-          "name": "token_program"
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
           "name": "associated_token_program",
@@ -876,7 +836,7 @@
         },
         {
           "name": "token_program",
-          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
           "name": "token_metadata_program",
@@ -1106,10 +1066,6 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "token_2022_program",
-          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
         {
           "name": "token_metadata_program"

@@ -27,12 +27,9 @@ import { swap } from "./utils/swap";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   createInitializeMint2Instruction,
-  createInitializeMintInstruction,
-  createMint,
   getAssociatedTokenAddressSync,
   getMinimumBalanceForRentExemptMint,
   MINT_SIZE,
-  TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import {
@@ -617,7 +614,6 @@ export default class Trade {
             nftMasterEditionAccount: position.nftMasterEdition,
             market: marketPda,
             tokenProgram: TOKEN_PROGRAM_ID,
-            token2022Program: TOKEN_2022_PROGRAM_ID,
             tokenMetadataProgram: METAPLEX_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
