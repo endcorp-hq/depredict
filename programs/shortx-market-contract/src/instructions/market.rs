@@ -57,7 +57,8 @@ pub struct MarketContext<'info> {
         mut
     )]
     pub oracle_pubkey: AccountInfo<'info>,
-
+    
+    #[account(mut)]
     pub config: Box<Account<'info, Config>>,
 
     #[account(
@@ -226,6 +227,18 @@ impl<'info> MarketContext<'info> {
             market_usdc_vault: Some(self.market_usdc_vault.key()),
             ..Default::default()
         });
+
+        // update the num_markets in the config account
+        require!(config.num_markets == market_id - 1, ShortxError::InvalidMarketId);
+        msg!("Updating num_markets in config account to: {}", market_id);
+        config.set_inner(Config {
+            num_markets: market_id,
+            bump: config.bump,
+            authority: config.authority,
+            fee_vault: config.fee_vault,
+            fee_amount: config.fee_amount,
+            version: config.version,
+        });
     
         let mut positions = [Position::default(); 10];
         for pos in positions.iter_mut() {
@@ -250,6 +263,7 @@ impl<'info> MarketContext<'info> {
         }
     
         market.emit_market_event()?;
+
 
         msg!("Creating collection NFT");
 
@@ -298,11 +312,6 @@ impl<'info> MarketContext<'info> {
 
         // Store collection mint in market state
         market.nft_collection_mint = Some(self.nft_collection_mint.key());
-
-        // update the num_markets in the config account
-        require!(config.num_markets == market_id - 1, ShortxError::InvalidMarketId);
-        msg!("Updating num_markets in config account to: {}", market_id);
-        config.num_markets = market_id;
 
         Ok(())
     }
