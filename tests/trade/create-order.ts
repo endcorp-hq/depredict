@@ -10,6 +10,8 @@ import { assert } from "chai";
 import { getUsdcMint, getNetworkConfig, FEE_VAULT, program, provider, USER, MARKET_ID, ADMIN } from "../helpers";
 import * as fs from "fs";
 
+import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+
 describe("shortx-contract", () => { 
 
   let usdcMint: PublicKey;
@@ -162,13 +164,24 @@ describe("shortx-contract", () => {
       );
 
       // Get the position account PDA
+      const positionId = marketAccount.nextPositionId; // This should be a BN
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("position"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
-      console.log("Position account PDA:", positionAccountPda.toString());
+      const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("nft"),
+          MARKET_ID.toArrayLike(Buffer, "le", 8),
+          marketAccount.nextPositionId.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId
+      );
 
+      console.log("Position account PDA:", positionAccountPda.toString());
+      const collectionPubkey = marketAccount.nftCollection;
+      console.log("Collection PDA:", collectionPubkey.toString());
       // Create order parameters
       const amount = new anchor.BN(100); // 100 USDC (6 decimals)
       const direction = { yes: {} }; // Betting on "Yes"
@@ -187,6 +200,9 @@ describe("shortx-contract", () => {
             usdcMint: usdcMint, // Use devnet USDC mint
             userUsdcAta: userTokenAccount,
             marketUsdcVault: marketVault,
+            positionNftAccount: positionNftAccountPda,
+            collection: collectionPubkey,
+            mplCoreProgram: MPL_CORE_PROGRAM_ID,
             config: configPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

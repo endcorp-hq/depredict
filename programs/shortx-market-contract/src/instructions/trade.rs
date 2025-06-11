@@ -3,18 +3,30 @@ use anchor_lang::system_program::{ transfer, Transfer };
 use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
-use anchor_spl::{};
 
-use mpl_token_metadata::instructions::{BurnNft, BurnNftCpiBuilder};
+use mpl_token_metadata::instructions::{BurnNftCpiBuilder};
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 use std::str::FromStr;
 
 use crate::constants::{USDC_MINT};
-use crate::state::{Config, MarketStates, OpenPositionArgs, PayoutNftArgs, Position, PositionAccount, PositionDirection, PositionStatus};
+use crate::state::{Config, MarketStates, OpenPositionArgs, PayoutNftArgs, Position, PositionAccount, PositionDirection, PositionNftAccount, PositionStatus};
 use crate::{
     errors::ShortxError,
     state::{ MarketState, WinningDirection },
+};
+use mpl_core::{
+    ID as MPL_CORE_ID,
+    instructions::{
+        CreateV2CpiBuilder
+    },
+    types::{
+        Attribute, 
+        Attributes, 
+        Plugin, 
+        PluginAuthorityPair, 
+        PluginAuthority
+    },
 };
 
 #[derive(Accounts)]
@@ -34,6 +46,19 @@ pub struct PositionContext<'info> {
         constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
+
+    /// CHECK: This account will be created by the CPI to mpl_core
+    #[account(
+        mut,
+        seeds = [ 
+            b"nft", 
+            market_positions_account.market_id.to_le_bytes().as_ref(), 
+            market.next_position_id.to_le_bytes().as_ref(),
+        ],
+        bump
+    )]
+    pub position_nft_account: UncheckedAccount<'info>,
+
 
     #[account(mut)]
     pub market: Box<Account<'info, MarketState>>,
@@ -66,6 +91,13 @@ pub struct PositionContext<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+    #[account(address = MPL_CORE_ID)]
+    /// CHECK: this account is checked by the address constraint
+    pub mpl_core_program: UncheckedAccount<'info>,
+
+    #[account(mut, constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection)]
+    /// CHECK: this account is checked by the address constraint
+    pub collection: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -135,10 +167,12 @@ pub struct PayoutNftContext<'info> {
 
 
 impl<'info> PositionContext<'info> {
-    pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<()> {
+    pub fn open_position(&mut self, args: OpenPositionArgs, bumps: &PositionContextBumps) -> Result<()> {
+        let next_position_id = self.market.next_position_id; // Store before increment
         let market = &mut self.market;
         let market_positions_account = &mut self.market_positions_account;
     
+        let collection = &market.nft_collection.unwrap();
         let ts = Clock::get()?.unix_timestamp;
     
 
@@ -196,7 +230,6 @@ impl<'info> PositionContext<'info> {
             amount: net_amount,
             direction: args.direction,
             is_nft: false,
-            mint: None,
             authority: Some(self.signer.key()),
             created_at: ts,
             version: 0,
@@ -249,6 +282,79 @@ impl<'info> PositionContext<'info> {
         market.update_ts = ts;
     
         market.emit_market_event()?;
+
+        msg!("Position created");
+
+        msg!("Creating NFT");
+
+
+        // Add attributes to the NFT
+        msg!("Adding attributes to NFT");
+        let attributes = Attributes {
+            attribute_list: vec![
+                Attribute {
+                    key: "market_id".to_string(),
+                    value: market_positions_account.market_id.to_string(),
+                },
+                Attribute {
+                    key: "position_id".to_string(),
+                    value: current_position.position_id.to_string(),
+                },
+                Attribute {
+                    key: "position_amount".to_string(),
+                    value: current_position.amount.to_string(),
+                },
+            ],
+        };
+       
+        
+        let position_nft_account_bump = bumps.position_nft_account;
+        let market_id = &market_positions_account.market_id.to_le_bytes();
+
+        let nft_signer_seeds: &[&[u8]] = &[
+            b"nft",
+            market_id,
+            &next_position_id.to_le_bytes(),
+            &[position_nft_account_bump],
+        ];
+
+        msg!("NFT Signer Seeds: {:?}", nft_signer_seeds);
+        msg!("market_id: {:?}", market_id);
+        msg!("position_id: {:?}", &next_position_id.to_le_bytes());
+        msg!("position_nft_account_bump: {:?}", position_nft_account_bump);
+
+
+        let nft_name = format!("MID:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
+        let uri = format!("https://shortx.io/market/{}/{}/{} ", market_positions_account.market_id, current_position.position_id, current_position.position_nonce);
+        let mpl_core_program = &self.mpl_core_program.to_account_info();
+        
+        msg!("Collection: {:?}", self.collection.key());
+        
+        msg!("Create the asset");
+        let mut create_asset_cpi = CreateV2CpiBuilder::new(mpl_core_program);
+        create_asset_cpi    
+        .asset(&self.position_nft_account.to_account_info())
+        .name(nft_name)
+        .uri(uri)
+        .collection(Some(&self.collection.to_account_info()))
+        .payer(&self.signer.to_account_info())
+        .plugins(vec![PluginAuthorityPair {
+            plugin: Plugin::Attributes(attributes),
+            authority: None,
+        }])
+        .system_program(&self.system_program.to_account_info())
+        .invoke_signed(&[nft_signer_seeds])?;
+
+        msg!("NFT created");
+
+
+
+
+
+
+
+
+
     
         Ok(())
     }
@@ -386,7 +492,6 @@ impl<'info> PayoutNftContext<'info> {
             .iter()
             .position(|pos| {
                 pos.position_id == args.position_id &&
-                pos.mint == Some(self.nft_mint.key()) && //check that the nft mint is the same as the one in the position
                 pos.is_nft &&
                 pos.position_status == PositionStatus::Open &&
                 pos.amount == args.amount
