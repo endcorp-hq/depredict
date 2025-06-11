@@ -63,7 +63,7 @@ pub mod shortx_contract {
     }
 
     pub fn create_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
-        ctx.accounts.open_position(args)?;
+        ctx.accounts.open_position(args, &ctx.bumps)?;
         Ok(())
     }
 
