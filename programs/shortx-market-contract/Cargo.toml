@@ -22,3 +22,4 @@ anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.31.1", features = ["metadata"] }
 switchboard-on-demand = "0.3.8"
 mpl-token-metadata = { version = "5.1.0" }
+mpl-core = "0.10.0"

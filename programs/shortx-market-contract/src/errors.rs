@@ -104,4 +104,7 @@ ShortxError {
 
     #[msg("Invalid collection authority")]
     InvalidAuthority,
+
+    #[msg("Invalid mpl core program")]
+    InvalidMplCoreProgram,
 }

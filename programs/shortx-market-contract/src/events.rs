@@ -18,7 +18,6 @@ pub struct PositionEvent {
     pub direction: PositionDirection,
     pub position_status: PositionStatus,
     pub is_nft: bool,
-    pub mint: Option<Pubkey>,
     pub ts: i64,
     pub created_at: i64,
 }
