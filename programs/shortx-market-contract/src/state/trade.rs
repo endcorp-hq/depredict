@@ -25,7 +25,6 @@ pub struct Position {
     pub created_at: i64,
     pub ts: i64,                   // Timestamp
     pub is_nft: bool,              // Whether this position is represented as NFT
-    pub mint: Option<Pubkey>,      // NFT mint address (None if not NFT)
     pub authority: Option<Pubkey>, // Original bettor (None if converted to NFT)
     pub position_status: PositionStatus,
     pub position_nonce: u32,
@@ -43,7 +42,6 @@ impl Default for Position {
             created_at: 0,
             ts: 0,
             is_nft: false,
-            mint: None,
             authority: None,
             position_status: PositionStatus::Init,
             position_nonce: 0,
@@ -117,7 +115,6 @@ impl PositionAccount {
             direction: position.direction,
             created_at: position.created_at,
             is_nft: position.is_nft,
-            mint: position.mint,
             position_status: position.position_status,
         });
 
