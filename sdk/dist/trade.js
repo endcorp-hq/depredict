@@ -3,6 +3,7 @@ import { Keypair, PublicKey, } from "@solana/web3.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers";
 import { getConfigPDA, getMarketPDA, getNftMasterEditionPDA, getNftMetadataPDA, getPositionAccountPDA, getSubPositionAccountPDA, } from "./utils/pda/index";
+import sendVersionedTransaction from "./utils/sendVersionedTransaction";
 import { swap } from "./utils/swap";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, } from "@solana/spl-token";
 import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants";
@@ -52,6 +53,7 @@ export default class Trade {
      * @param args.question - question (max 80 characters)
      * @param args.oraclePubkey - oracle pubkey
      * @param args.metadataUri - metadata uri
+     * @param args.mintPublicKey - collection mint public key. This needs to sign the transaction.
      * @param args.payer - payer
      * @param options - RPC options
      *
@@ -68,9 +70,9 @@ export default class Trade {
         const marketPDA = getMarketPDA(this.program.programId, marketId);
         const marketPositionsPDA = getPositionAccountPDA(this.program.programId, marketId);
         // Create a new keypair for the collection mint
-        const collectionMintKeypair = Keypair.generate();
-        const collectionMetadataPda = getNftMetadataPDA(collectionMintKeypair.publicKey, this.METAPLEX_PROGRAM_ID);
-        const collectionMasterEditionPda = getNftMasterEditionPDA(collectionMintKeypair.publicKey, this.METAPLEX_PROGRAM_ID);
+        const collectionMint = Keypair.generate();
+        const collectionMetadataPda = getNftMetadataPDA(collectionMint.publicKey, this.METAPLEX_PROGRAM_ID);
+        const collectionMasterEditionPda = getNftMasterEditionPDA(collectionMint.publicKey, this.METAPLEX_PROGRAM_ID);
         try {
             ixs.push(await this.program.methods
                 .createMarket({
@@ -87,7 +89,7 @@ export default class Trade {
                 market: marketPDA,
                 marketPositionsAccount: marketPositionsPDA,
                 usdcMint: this.USDC_MINT,
-                nftCollectionMint: collectionMintKeypair.publicKey,
+                nftCollectionMint: collectionMint.publicKey,
                 nftCollectionMetadata: collectionMetadataPda,
                 nftCollectionMasterEdition: collectionMasterEditionPda,
                 tokenProgram: TOKEN_PROGRAM_ID,
@@ -96,7 +98,9 @@ export default class Trade {
                 tokenMetadataProgram: METAPLEX_ID,
             })
                 .instruction());
-            return { ixs, signers: [collectionMintKeypair] };
+            const tx = await sendVersionedTransaction(this.program, ixs, payer, options);
+            tx.sign([collectionMint]);
+            return tx;
         }
         catch (error) {
             console.log("error", error);

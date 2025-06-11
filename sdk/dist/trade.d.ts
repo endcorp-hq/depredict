@@ -39,14 +39,12 @@ export default class Trade {
      * @param args.question - question (max 80 characters)
      * @param args.oraclePubkey - oracle pubkey
      * @param args.metadataUri - metadata uri
+     * @param args.mintPublicKey - collection mint public key. This needs to sign the transaction.
      * @param args.payer - payer
      * @param options - RPC options
      *
      */
-    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<{
-        ixs: anchor.web3.TransactionInstruction[];
-        signers: anchor.web3.Keypair[];
-    }>;
+    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<anchor.web3.VersionedTransaction>;
     /**
      * Open Order
      * @param args.marketId - The ID of the Market

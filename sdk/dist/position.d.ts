@@ -1,6 +1,6 @@
 import { BN, Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "./types/shortx";
-import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { RpcOptions } from "./types";
 import { PositionAccount } from "./types/position";
 export default class Position {
@@ -106,8 +106,5 @@ export default class Position {
         positionAccountPDA: PublicKey;
         ixs: TransactionInstruction[];
     }>;
-    mintExistingPosition(marketId: number, positionId: number, positionNonce: number, payer: PublicKey, metadataUri: string, collectionAuthority: PublicKey, options?: RpcOptions): Promise<{
-        ixs: TransactionInstruction[];
-        signers: Keypair[];
-    }>;
+    mintExistingPosition(marketId: number, positionId: number, positionNonce: number, payer: PublicKey, metadataUri: string, collectionAuthority: PublicKey, options?: RpcOptions): Promise<import("@solana/web3.js").VersionedTransaction>;
 }

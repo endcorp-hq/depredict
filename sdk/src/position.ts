@@ -25,6 +25,7 @@ import {
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+import createVersionedTransaction from "./utils/sendVersionedTransaction";
 
 export default class Position {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
@@ -69,7 +70,7 @@ export default class Position {
   async getPositionsForUser(user: PublicKey) {
     // Then try the filtered query
     const allAccounts = await this.program.account.positionAccount.all();
-    
+
     const formattedPositionAccounts = allAccounts.map(({ account }) =>
       formatPositionAccount(account)
     );
@@ -389,7 +390,6 @@ export default class Position {
       false, // allowOwnerOffCurve
       TOKEN_PROGRAM_ID
     );
-    console.log("NFT Token Account:", nftTokenAccount.toString());
 
     if (
       !marketAccount.nftCollectionMint ||
@@ -428,10 +428,18 @@ export default class Position {
           })
           .instruction()
       );
+
+      const tx = await createVersionedTransaction(
+        this.program,
+        ixs,
+        payer,
+        options
+      );
+      tx.sign([nftMintKeypair]);
+      return tx;
     } catch (error) {
       console.log("error", error);
       throw error;
     }
-    return { ixs, signers: [nftMintKeypair] };
   }
 }

@@ -91,6 +91,7 @@ export default class Trade {
    * @param args.question - question (max 80 characters)
    * @param args.oraclePubkey - oracle pubkey
    * @param args.metadataUri - metadata uri
+   * @param args.mintPublicKey - collection mint public key. This needs to sign the transaction.
    * @param args.payer - payer
    * @param options - RPC options
    *
@@ -128,15 +129,15 @@ export default class Trade {
     );
 
     // Create a new keypair for the collection mint
-    const collectionMintKeypair = Keypair.generate();
+    const collectionMint = Keypair.generate();
 
     const collectionMetadataPda = getNftMetadataPDA(
-      collectionMintKeypair.publicKey,
+      collectionMint.publicKey,
       this.METAPLEX_PROGRAM_ID
     );
 
     const collectionMasterEditionPda = getNftMasterEditionPDA(
-      collectionMintKeypair.publicKey,
+      collectionMint.publicKey,
       this.METAPLEX_PROGRAM_ID
     );
 
@@ -157,7 +158,7 @@ export default class Trade {
             market: marketPDA,
             marketPositionsAccount: marketPositionsPDA,
             usdcMint: this.USDC_MINT,
-            nftCollectionMint: collectionMintKeypair.publicKey,
+            nftCollectionMint: collectionMint.publicKey,
             nftCollectionMetadata: collectionMetadataPda,
             nftCollectionMasterEdition: collectionMasterEditionPda,
             tokenProgram: TOKEN_PROGRAM_ID,
@@ -167,7 +168,14 @@ export default class Trade {
           })
           .instruction()
       );
-      return { ixs, signers: [collectionMintKeypair] };
+      const tx = await sendVersionedTransaction(
+        this.program,
+        ixs,
+        payer,
+        options
+      );
+      tx.sign([collectionMint]);
+      return tx;
     } catch (error) {
       console.log("error", error);
       throw error;
@@ -520,7 +528,9 @@ export default class Trade {
       nftPositions[0].marketId
     );
 
-    const marketAccount = await this.program.account.marketState.fetch(marketPda);
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPda
+    );
     const nftCollectionMint = marketAccount.nftCollectionMint;
 
     if (!nftCollectionMint) {
@@ -600,8 +610,11 @@ export default class Trade {
       const nftCollectionMetadataPda = getNftMetadataPDA(
         nftCollectionMint,
         this.METAPLEX_PROGRAM_ID
-      ); 
-      console.log("NFT Collection Metadata PDA:", nftCollectionMetadataPda.toString());
+      );
+      console.log(
+        "NFT Collection Metadata PDA:",
+        nftCollectionMetadataPda.toString()
+      );
 
       const nftTokenAccount = getAssociatedTokenAddressSync(
         nftMint,

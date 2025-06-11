@@ -6,6 +6,7 @@ import { PositionStatus } from "./types/position";
 import { METAPLEX_ID } from "./utils/constants";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, } from "@solana/spl-token";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+import createVersionedTransaction from "./utils/sendVersionedTransaction";
 export default class Position {
     constructor(program) {
         this.program = program;
@@ -203,7 +204,6 @@ export default class Position {
         const nftTokenAccount = getAssociatedTokenAddressSync(nftMintKeypair.publicKey, payer, // Create token account for admin since they own the position
         false, // allowOwnerOffCurve
         TOKEN_PROGRAM_ID);
-        console.log("NFT Token Account:", nftTokenAccount.toString());
         if (!marketAccount.nftCollectionMint ||
             !marketAccount.nftCollectionMetadata ||
             !marketAccount.nftCollectionMasterEdition) {
@@ -234,11 +234,13 @@ export default class Position {
                 sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
             })
                 .instruction());
+            const tx = await createVersionedTransaction(this.program, ixs, payer, options);
+            tx.sign([nftMintKeypair]);
+            return tx;
         }
         catch (error) {
             console.log("error", error);
             throw error;
         }
-        return { ixs, signers: [nftMintKeypair] };
     }
 }

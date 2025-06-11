@@ -1,6 +1,6 @@
 {
   "name": "shortx-sdk",
-  "version": "0.1.53",
+  "version": "0.1.55",
   "description": "SDK for interacting with the ShortX Protocol Solana contract",
   "type": "module",
   "main": "dist/index.js",

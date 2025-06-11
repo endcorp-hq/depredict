@@ -116,10 +116,10 @@ impl<'info> CloseConfigContext<'info> {
     pub fn close_config(&mut self) -> Result<()> {
 
         let config = &mut self.config;
-        // require!(
-        //     config.num_markets == 0,
-        //     ShortxError::ConfigInUse
-        // );
+        require!(
+            config.num_markets == 0,
+            ShortxError::ConfigInUse
+        );
         // Transfer lamports to the signer
         let lamports = self.config.to_account_info().lamports();
         **self.config.to_account_info().try_borrow_mut_lamports()? = 0;
