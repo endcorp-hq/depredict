@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken, 
+    associated_token::AssociatedToken,
     token::{
         Token, 
         TransferChecked,
@@ -53,7 +53,7 @@ use crate::errors::ShortxError;
 #[instruction(args: CreateMarketArgs)]
 pub struct MarketContext<'info> {
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub payer: Signer<'info>,
 
     /// CHECK: fee vault account
     #[account(
@@ -73,7 +73,7 @@ pub struct MarketContext<'info> {
 
     #[account(
         init,
-        payer = signer,
+        payer = payer,
         space = 8 + MarketState::INIT_SPACE,
         seeds = [MARKET.as_bytes(), &config.next_market_id.to_le_bytes()],
         bump
@@ -82,7 +82,7 @@ pub struct MarketContext<'info> {
 
     #[account(
         init,
-        payer = signer,
+        payer = payer,
         space = 8 + PositionAccount::INIT_SPACE,
         seeds = [POSITION.as_bytes(), &config.next_market_id.to_le_bytes()],
         bump
@@ -108,7 +108,7 @@ pub struct MarketContext<'info> {
 
     #[account(
         init,
-        payer = signer,
+        payer = payer,
         associated_token::mint = usdc_mint,
         associated_token::authority = market,
         associated_token::token_program = token_program
@@ -223,7 +223,7 @@ pub struct CloseMarketContext<'info> {
 impl<'info> MarketContext<'info> {
     pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &MarketContextBumps) -> Result<()> {
         let market = &mut self.market;
-        let signer = &self.signer;
+        let payer = &self.payer.to_account_info();
         let ts = Clock::get()?.unix_timestamp;
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
@@ -238,7 +238,7 @@ impl<'info> MarketContext<'info> {
 
         market.set_inner(MarketState {
             bump: bumps.market,
-            authority: signer.key(),
+            authority: payer.key(),
             market_id: market_id,
             market_start: args.market_start,
             market_end: args.market_end,
@@ -268,7 +268,7 @@ impl<'info> MarketContext<'info> {
 
         market_positions.set_inner(PositionAccount {
             bump: bumps.market_positions_account,
-            authority: self.signer.key(),
+            authority: self.payer.key(),
             version: 0,
             positions,
             nonce: 0,
@@ -324,9 +324,9 @@ impl<'info> MarketContext<'info> {
         .collection(&self.collection.to_account_info())
         .payer(&payer)
         .update_authority(update_authority.as_ref())
-            .system_program(&system_program)
+        .system_program(&system_program)
         .name(market_nft_name)
-            .uri(args.metadata_uri)
+        .uri(args.metadata_uri)
         .plugins(plugins)  
         .invoke_signed(&[&[
             b"collection",
