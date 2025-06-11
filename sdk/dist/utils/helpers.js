@@ -34,18 +34,20 @@ export const formatMarket = (account, address) => {
     };
 };
 export const formatPositionAccount = (account, marketId) => {
+    console.log('formatPositionAccount', account);
     return {
         authority: account.authority,
-        marketId: marketId,
-        positions: account.positions.map((position) => formatPosition(position, account.authority.toString())),
+        marketId: marketId ? marketId : account.marketId ? account.marketId.toNumber() : 0,
+        positions: account.positions.map((position) => formatPosition(position)),
         nonce: account.nonce,
         isSubPosition: account.isSubPosition
     };
 };
-export const formatPosition = (position, authority) => {
+export const formatPosition = (position) => {
+    console.log("formatPosition SDK", position.positionId.toString(), position.isNft);
     return {
         ts: position.ts.toString(),
-        authority: authority ? authority : '',
+        authority: position.authority?.toBase58() || '',
         positionNonce: position.positionNonce.toString(),
         createdAt: position.createdAt ? position.createdAt.toString() : '',
         positionId: position.positionId.toString(),

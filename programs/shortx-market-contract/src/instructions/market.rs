@@ -65,7 +65,7 @@ pub struct MarketContext<'info> {
         init,
         payer = signer,
         space = 8 + MarketState::INIT_SPACE,
-        seeds = [MARKET.as_bytes(), &(1 + config.num_markets).to_le_bytes()],
+        seeds = [MARKET.as_bytes(), &config.next_market_id.to_le_bytes()],
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
@@ -74,7 +74,7 @@ pub struct MarketContext<'info> {
         init,
         payer = signer,
         space = 8 + PositionAccount::INIT_SPACE,
-        seeds = [POSITION.as_bytes(), &(1 + config.num_markets).to_le_bytes()],
+        seeds = [POSITION.as_bytes(), &config.next_market_id.to_le_bytes()],
         bump
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
@@ -96,7 +96,7 @@ pub struct MarketContext<'info> {
 
     /// CHECK: We create it using metaplex
     #[account(mut)]
-    pub nft_collection_mint: AccountInfo<'info>,
+    pub nft_collection_mint: Signer<'info>,
 
     /// CHECK: We create it using metaplex
     #[account(mut)]
@@ -146,7 +146,7 @@ pub struct ResolveMarketContext<'info> {
 
 // Context for closing the market
 #[derive(Accounts)]
-#[instruction(args: CloseMarketArgs)] // Need args for seeds/constraints
+#[instruction(args: CloseMarketArgs)]
 pub struct CloseMarketContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
@@ -158,6 +158,7 @@ pub struct CloseMarketContext<'info> {
     )]
     pub fee_vault: AccountInfo<'info>,
 
+    #[account(mut)]
     pub config: Box<Account<'info, Config>>,
 
     #[account(
@@ -191,6 +192,13 @@ pub struct CloseMarketContext<'info> {
         associated_token::authority = market,
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [POSITION.as_bytes(), &args.market_id.to_le_bytes()],
+        bump,
+    )]
+    pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -228,21 +236,21 @@ impl<'info> MarketContext<'info> {
             ..Default::default()
         });
 
-        // update the num_markets in the config account
-        require!(config.num_markets == market_id - 1, ShortxError::InvalidMarketId);
-        msg!("Updating num_markets in config account to: {}", market_id);
+
         config.set_inner(Config {
-            num_markets: market_id,
+            next_market_id: config.next_market_id,
             bump: config.bump,
             authority: config.authority,
             fee_vault: config.fee_vault,
             fee_amount: config.fee_amount,
             version: config.version,
+            num_markets: config.num_markets.checked_add(1).ok_or(ShortxError::ArithmeticOverflow)?,
         });
     
         let mut positions = [Position::default(); 10];
         for pos in positions.iter_mut() {
             pos.position_status = PositionStatus::Init;
+            pos.authority = None;
         }
 
         market_positions.set_inner(PositionAccount {
@@ -260,6 +268,7 @@ impl<'info> MarketContext<'info> {
         msg!("Initializing position slots:");
         for (i, pos) in market_positions.positions.iter().enumerate() {
             msg!("Position {}: status = {:?}", i, pos.position_status);
+            msg!("Position {}: authority = {:?}", i, pos.authority);
         }
     
         market.emit_market_event()?;
@@ -291,7 +300,7 @@ impl<'info> MarketContext<'info> {
 
         create_collection_cpi
             .metadata(&collection_metadata)
-            .mint(&collection_mint, false)
+            .mint(&collection_mint, true)
             .authority(&signer_account)
             .payer(&signer_account)
             .update_authority(&signer_account, true)
@@ -373,6 +382,7 @@ impl<'info> CloseMarketContext<'info> {
 
         let market = &mut self.market;
         let signer = &self.signer;
+        let config = &mut self.config;
 
         require!(market.authority == *signer.key, ShortxError::Unauthorized);
 
@@ -388,6 +398,11 @@ impl<'info> CloseMarketContext<'info> {
             &market_id.to_le_bytes(),
             &[market_bump]
         ]];
+
+
+        msg!("Before decrement - num_markets: {}", config.num_markets);
+        config.num_markets = config.num_markets.checked_sub(1).ok_or(ShortxError::ArithmeticOverflow)?;
+        msg!("After decrement - num_markets: {}", config.num_markets);
 
         // 1. Transfer remaining token liquidity (if any) from market vault to fee vault ATA
         if self.market_vault.amount > 0 {
@@ -435,7 +450,18 @@ impl<'info> CloseMarketContext<'info> {
         msg!("Transferring {} lamports from market account to fee vault.", market_lamports);
 
         **market_account_info.try_borrow_mut_lamports()? -= market_lamports;
-        **fee_vault_info.try_borrow_mut_lamports()? += market_lamports;
+        **fee_vault_info.try_borrow_mut_lamports()? += market_lamports;        
+
+        // After closing the market account, close the positions account
+        let positions_account_info = self.market_positions_account.to_account_info();
+        let positions_lamports = positions_account_info.lamports();
+
+        msg!("Closing market positions account: {}", positions_account_info.key());
+        msg!("Transferring {} lamports from positions account to fee vault.", positions_lamports);
+
+        // Transfer lamports to fee vault
+        **positions_account_info.try_borrow_mut_lamports()? -= positions_lamports;
+        **fee_vault_info.try_borrow_mut_lamports()? += positions_lamports;
 
         // Mark the market account data as closed by zeroizing (optional but good practice)
         // market_account_info.assign(&System::id()); // This reassigns owner

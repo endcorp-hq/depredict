@@ -6,6 +6,12 @@ ShortxError {
     #[msg("Unauthorized Instruction")]
     Unauthorized,
 
+    #[msg("Config account in use, cannot close it")]
+    ConfigInUse,
+
+    #[msg("Arithmetic overflow")]
+    ArithmeticOverflow,
+
     #[msg("Insufficient funds")]
     InsufficientFunds,
 

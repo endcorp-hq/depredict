@@ -2,11 +2,14 @@ import { Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "./types/shortx";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
+import Trade from "./trade";
 export default class Config {
     private program;
     ADMIN_KEY: PublicKey;
     FEE_VAULT: PublicKey;
-    constructor(program: Program<ShortxContract>, adminKey: PublicKey, feeVault: PublicKey);
+    USDC_MINT: PublicKey;
+    trade: Trade;
+    constructor(program: Program<ShortxContract>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey);
     /**
      * Init a config account to maintain details
      *
@@ -22,6 +25,7 @@ export default class Config {
         feeVault: PublicKey;
         feeAmount: anchor.BN;
         version: anchor.BN;
+        nextMarketId: anchor.BN;
         numMarkets: anchor.BN;
     } | null>;
     /**
@@ -29,4 +33,10 @@ export default class Config {
      *
      */
     updateConfig(payer: PublicKey, feeAmount?: number, authority?: PublicKey, feeVault?: PublicKey): Promise<TransactionInstruction[]>;
+    /**
+     * Close a config account
+     * @param payer - PublicKey of the payer
+     * @returns TransactionInstruction[] - Array of TransactionInstruction
+     */
+    closeConfig(payer: PublicKey): Promise<TransactionInstruction[]>;
 }

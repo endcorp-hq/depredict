@@ -50,6 +50,23 @@ pub struct UpdateConfigContext<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct CloseConfigContext<'info> {
+    #[account(
+        mut,
+        constraint = signer.key() == config.authority @ ShortxError::Unauthorized
+    )]
+    pub signer: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [CONFIG.as_bytes()],
+        bump = config.bump,
+    )]
+    pub config: Box<Account<'info, Config>>,
+    pub system_program: Program<'info, System>,
+}
+
 impl<'info> InitConfigContext<'info> {
     pub fn init_config(&mut self, fee_amount: u64, bump: &InitConfigContextBumps) -> Result<()> {
         let config = &mut self.config;
@@ -58,6 +75,7 @@ impl<'info> InitConfigContext<'info> {
         config.fee_vault = *self.fee_vault.key;
         config.fee_amount = fee_amount;
         config.version = 1;
+        config.next_market_id = 1;
         config.num_markets = 0;
         Ok(())
     }
@@ -90,6 +108,28 @@ impl<'info> UpdateConfigContext<'info> {
             config.fee_vault = fee_vault;
         }
         config.version = config.version.checked_add(1).unwrap();
+        Ok(())
+    }
+}
+
+impl<'info> CloseConfigContext<'info> {
+    pub fn close_config(&mut self) -> Result<()> {
+
+        let config = &mut self.config;
+        // require!(
+        //     config.num_markets == 0,
+        //     ShortxError::ConfigInUse
+        // );
+        // Transfer lamports to the signer
+        let lamports = self.config.to_account_info().lamports();
+        **self.config.to_account_info().try_borrow_mut_lamports()? = 0;
+        **self.signer.try_borrow_mut_lamports()? = self.signer.lamports().checked_add(lamports)
+            .ok_or(ShortxError::ArithmeticOverflow)?;
+
+        // Close the account
+        self.config.to_account_info().assign(&System::id());
+        self.config.to_account_info().realloc(0, false)?;
+
         Ok(())
     }
 }

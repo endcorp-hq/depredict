@@ -119,7 +119,7 @@ describe("shortx-contract", () => {
 
     // load the config account to get the num_markets
     const configAccount = await program.account.config.fetch(configPda);
-    numMarkets = configAccount.numMarkets; // assign to file-level variable
+    numMarkets = configAccount.nextMarketId; // assign to file-level variable
     console.log("Num Markets:", numMarkets);
 
 
@@ -156,9 +156,12 @@ describe("shortx-contract", () => {
       );
       console.log("Number of existing markets:", numMarkets.toNumber());
       // Generate a market ID based on the number of existing markets
-      const marketId = numMarkets.add(new anchor.BN(1));
-      console.log("Using market ID:", marketId.toNumber());
+      // const marketId = numMarkets.add(new anchor.BN(1));
+      // console.log("Using market ID:", marketId.toNumber());
       const question = Array.from(Buffer.from("Will BTC reach $100k in 2024?"));
+      // const configAccountBefore = await program.account.config.fetch(configPda);
+      const marketId = numMarkets;
+      console.log("Market ID:", marketId.toNumber());
 
       const [marketPda] = PublicKey.findProgramAddressSync(
         [
@@ -195,7 +198,7 @@ describe("shortx-contract", () => {
       console.log("Collection Mint:", collectionMintKeypair.publicKey.toString());
 
       // Initialize the collection mint using SPL Token program
-      await createMint(
+      const mintId = await createMint(
         provider.connection,
         ADMIN, // Payer
         ADMIN.publicKey, // Mint Authority
@@ -203,7 +206,7 @@ describe("shortx-contract", () => {
         0, // Decimals (NFTs have 0 decimals)
         collectionMintKeypair // Mint Keypair
       );
-      console.log("Created collection mint account");
+      console.log("Created collection mint account", mintId.toString());
 
       const [collectionMetadataPda] = PublicKey.findProgramAddressSync(
         [
@@ -288,7 +291,7 @@ describe("shortx-contract", () => {
       
       const configAccount = await program.account.config.fetch(configPda);
       console.log("\n=== Config State Details ===");
-      console.log("Number of markets:", configAccount.numMarkets.toNumber());
+      console.log("Number of markets:", configAccount.nextMarketId.toNumber());
       console.log("Authority:", configAccount.authority.toString());
       console.log("Fee Vault:", configAccount.feeVault.toString());
       console.log("Fee Amount:", configAccount.feeAmount);

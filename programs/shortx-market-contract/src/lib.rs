@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("CR2SwZjpMJbCENVv2vnQbcHcT9Qx7mSjnFitgnqYxH4d");
+declare_id!("2gPyynVwHkCZPKGKYkvSGdmTYmTvdgjPU4WwNXLcq3N7");
 
 #[program]
 pub mod shortx_contract {
@@ -23,6 +23,11 @@ pub mod shortx_contract {
 
     pub fn update_config(ctx: Context<UpdateConfigContext>, fee_amount: Option<u64>, authority: Option<Pubkey>, fee_vault: Option<Pubkey>) -> Result<()> {
         ctx.accounts.update_config(fee_amount, authority, fee_vault)?;
+        Ok(())
+    }
+
+    pub fn close_config(ctx: Context<CloseConfigContext>) -> Result<()> {
+        ctx.accounts.close_config()?;
         Ok(())
     }
 

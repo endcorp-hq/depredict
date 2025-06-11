@@ -8,7 +8,7 @@ export default class ShortXClient {
         this.program = new Program(IDL, { connection });
         this.trade = new Trade(this.program, adminKey, feeVault, usdcMint);
         this.position = new Position(this.program);
-        this.config = new Config(this.program, adminKey, feeVault);
+        this.config = new Config(this.program, adminKey, feeVault, usdcMint);
         this.ADMIN_KEY = adminKey;
         this.FEE_VAULT = feeVault;
         this.USDC_MINT = usdcMint;

@@ -150,7 +150,7 @@ impl<'info> MintPositionContext<'info> {
         // Update position state
         position.is_nft = true;
         position.mint = Some(self.nft_mint.key());
-        position.authority = Some(self.signer.key());  // Keep the original position owner as authority
+        position.authority = Some(Pubkey::default());  // Change the authority to default pubkey
         
         // Update the position in the account
         position_account.positions[position_index] = position;

@@ -6,10 +6,10 @@ use crate::events::PositionEvent;
 #[derive(InitSpace)]
 pub struct PositionAccount {
     pub bump: u8,
+    pub market_id: u64,
     pub authority: Pubkey,
     pub version: u64,
     pub positions: [Position; 10],
-    pub market_id: u64,
     pub nonce: u32,
     pub is_sub_position: bool,
     pub padding: [u8; 25],

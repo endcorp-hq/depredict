@@ -30,6 +30,29 @@ export const getConfigPDA = (programId: PublicKey) => {
   )[0]
 }
 
+export const getNftMetadataPDA = (nftMint: PublicKey, metaplexProgramId: PublicKey) => {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      metaplexProgramId.toBuffer(),
+      nftMint.toBuffer(),
+    ],
+    metaplexProgramId
+  )[0];
+}
+
+export const getNftMasterEditionPDA = (nftMint: PublicKey, metaplexProgramId: PublicKey) => {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      metaplexProgramId.toBuffer(),
+      nftMint.toBuffer(),
+      Buffer.from("edition"),
+    ],
+    metaplexProgramId
+  )[0];
+}
+
 export const getCustomerPDA = (programId: PublicKey, customerId: number) => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('customer'), new BN(customerId).toArrayLike(Buffer, 'le', 8)],
@@ -39,10 +62,10 @@ export const getCustomerPDA = (programId: PublicKey, customerId: number) => {
 
 export const getPositionAccountPDA = (programId: PublicKey, marketId: number, subPositionKey?: PublicKey) => {
   return subPositionKey ? PublicKey.findProgramAddressSync(
-    [Buffer.from('position_account'), new BN(marketId).toArrayLike(Buffer, 'le', 8), subPositionKey.toBuffer()],
+    [Buffer.from('position'), new BN(marketId).toArrayLike(Buffer, 'le', 8), subPositionKey.toBuffer()],
     programId
   )[0] : PublicKey.findProgramAddressSync(
-    [Buffer.from('position_account'), new BN(marketId).toArrayLike(Buffer, 'le', 8)],
+    [Buffer.from('position'), new BN(marketId).toArrayLike(Buffer, 'le', 8)],
     programId
   )[0]
 }

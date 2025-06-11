@@ -7,6 +7,7 @@ import { RpcOptions } from "./types/index";
 import Position from "./position";
 export default class Trade {
     private program;
+    METAPLEX_PROGRAM_ID: anchor.web3.PublicKey;
     decimals: number;
     position: Position;
     ADMIN_KEY: PublicKey;
@@ -42,7 +43,10 @@ export default class Trade {
      * @param options - RPC options
      *
      */
-    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
+    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<{
+        ixs: anchor.web3.TransactionInstruction[];
+        signers: anchor.web3.Keypair[];
+    }>;
     /**
      * Open Order
      * @param args.marketId - The ID of the Market
@@ -54,7 +58,7 @@ export default class Trade {
      * @param options - RPC options
      *
      */
-    openPosition({ marketId, amount, direction, mint, token, payer }: OpenOrderArgs, options?: RpcOptions): Promise<string | {
+    openPosition({ marketId, amount, direction, mint, token, payer }: OpenOrderArgs, options?: RpcOptions): Promise<{
         ixs: anchor.web3.TransactionInstruction[];
         addressLookupTableAccounts: anchor.web3.AddressLookupTableAccount[];
     } | undefined>;
@@ -66,7 +70,7 @@ export default class Trade {
      * @param options - RPC options
      *
      */
-    resolveMarket({ marketId, winningDirection, payer, }: {
+    resolveMarket({ marketId, winningDirection, payer, oraclePubkey, }: {
         marketId: number;
         winningDirection: {
             yes: {};
@@ -79,9 +83,10 @@ export default class Trade {
         };
         state: MarketStates;
         payer: PublicKey;
-    }, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
+        oraclePubkey: PublicKey;
+    }, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
     /**
-     * Collect Remaining Liquidity
+     * Close Market and related accounts to collect remaining liquidity
      * @param marketId - The ID of the market
      * @param payer - The payer of the Market
      * @param options - RPC options
@@ -101,8 +106,7 @@ export default class Trade {
         marketId: number;
         orderId: number;
         userNonce: number;
-        mint: PublicKey;
-    }[], payer: PublicKey, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
+    }[], payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
     /**
      * Update Market
      * @param marketId - The ID of the market
@@ -110,23 +114,10 @@ export default class Trade {
      * @param options - RPC options
      *
      */
-    updateMarket(marketId: number, marketEnd: number, payer: PublicKey, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
+    updateMarket(marketId: number, marketEnd: number, payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
     payoutNft(nftPositions: {
         marketId: number;
         positionId: number;
         positionNonce: number;
-        amount: number;
-        direction: {
-            yes: {};
-        } | {
-            no: {};
-        };
-        nftMint: PublicKey;
-        nftMetadata: PublicKey;
-        nftMasterEdition: PublicKey;
-        nftTokenAccount: PublicKey;
-        nftUsdcTokenAccount: PublicKey;
-        nftUsdcVault: PublicKey;
-        nftCollectionMint: PublicKey;
-    }[], payer: PublicKey, options?: RpcOptions): Promise<string | anchor.web3.TransactionInstruction[]>;
+    }[], payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
 }

@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/shortx_contract.json`.
  */
 export type ShortxContract = {
-    "address": "CR2SwZjpMJbCENVv2vnQbcHcT9Qx7mSjnFitgnqYxH4d";
+    "address": "2gPyynVwHkCZPKGKYkvSGdmTYmTvdgjPU4WwNXLcq3N7";
     "metadata": {
         "name": "shortxContract";
         "version": "0.1.0";
@@ -13,6 +13,50 @@ export type ShortxContract = {
         "description": "Created with Anchor";
     };
     "instructions": [
+        {
+            "name": "closeConfig";
+            "discriminator": [
+                145,
+                9,
+                72,
+                157,
+                95,
+                125,
+                61,
+                85
+            ];
+            "accounts": [
+                {
+                    "name": "signer";
+                    "writable": true;
+                    "signer": true;
+                },
+                {
+                    "name": "config";
+                    "writable": true;
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const";
+                                "value": [
+                                    99,
+                                    111,
+                                    110,
+                                    102,
+                                    105,
+                                    103
+                                ];
+                            }
+                        ];
+                    };
+                },
+                {
+                    "name": "systemProgram";
+                    "address": "11111111111111111111111111111111";
+                }
+            ];
+            "args": [];
+        },
         {
             "name": "closeMarket";
             "discriminator": [
@@ -37,6 +81,7 @@ export type ShortxContract = {
                 },
                 {
                     "name": "config";
+                    "writable": true;
                 },
                 {
                     "name": "feeVaultUsdcAta";
@@ -246,6 +291,31 @@ export type ShortxContract = {
                     };
                 },
                 {
+                    "name": "marketPositionsAccount";
+                    "writable": true;
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const";
+                                "value": [
+                                    112,
+                                    111,
+                                    115,
+                                    105,
+                                    116,
+                                    105,
+                                    111,
+                                    110
+                                ];
+                            },
+                            {
+                                "kind": "arg";
+                                "path": "args.market_id";
+                            }
+                        ];
+                    };
+                },
+                {
                     "name": "tokenProgram";
                 },
                 {
@@ -296,6 +366,7 @@ export type ShortxContract = {
                 },
                 {
                     "name": "config";
+                    "writable": true;
                 },
                 {
                     "name": "market";
@@ -315,7 +386,7 @@ export type ShortxContract = {
                             },
                             {
                                 "kind": "account";
-                                "path": "config.num_markets";
+                                "path": "config.next_market_id";
                                 "account": "config";
                             }
                         ];
@@ -341,7 +412,7 @@ export type ShortxContract = {
                             },
                             {
                                 "kind": "account";
-                                "path": "config.num_markets";
+                                "path": "config.next_market_id";
                                 "account": "config";
                             }
                         ];
@@ -411,6 +482,7 @@ export type ShortxContract = {
                 {
                     "name": "nftCollectionMint";
                     "writable": true;
+                    "signer": true;
                 },
                 {
                     "name": "nftCollectionMetadata";
@@ -422,6 +494,7 @@ export type ShortxContract = {
                 },
                 {
                     "name": "tokenProgram";
+                    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
                 },
                 {
                     "name": "associatedTokenProgram";
@@ -882,7 +955,7 @@ export type ShortxContract = {
                 },
                 {
                     "name": "tokenProgram";
-                    "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+                    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
                 },
                 {
                     "name": "tokenMetadataProgram";
@@ -1102,6 +1175,10 @@ export type ShortxContract = {
                     "writable": true;
                 },
                 {
+                    "name": "nftCollectionMetadata";
+                    "writable": true;
+                },
+                {
                     "name": "nftMetadataAccount";
                     "writable": true;
                 },
@@ -1112,10 +1189,6 @@ export type ShortxContract = {
                 {
                     "name": "tokenProgram";
                     "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-                },
-                {
-                    "name": "token2022Program";
-                    "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
                 },
                 {
                     "name": "tokenMetadataProgram";
@@ -1533,156 +1606,166 @@ export type ShortxContract = {
         },
         {
             "code": 6001;
+            "name": "configInUse";
+            "msg": "Config account in use, cannot close it";
+        },
+        {
+            "code": 6002;
+            "name": "arithmeticOverflow";
+            "msg": "Arithmetic overflow";
+        },
+        {
+            "code": 6003;
             "name": "insufficientFunds";
             "msg": "Insufficient funds";
         },
         {
-            "code": 6002;
+            "code": 6004;
             "name": "invalidPrice";
             "msg": "Invalid price";
         },
         {
-            "code": 6003;
+            "code": 6005;
             "name": "noAvailablePositionSlot";
             "msg": "No available position slot";
         },
         {
-            "code": 6004;
+            "code": 6006;
             "name": "invalidOracle";
             "msg": "Invalid oracle";
         },
         {
-            "code": 6005;
+            "code": 6007;
             "name": "oracleNotResolved";
             "msg": "Oracle not resolved";
         },
         {
-            "code": 6006;
+            "code": 6008;
             "name": "marketInactive";
             "msg": "Market is inactive";
         },
         {
-            "code": 6007;
+            "code": 6009;
             "name": "positionNotFound";
             "msg": "Position not found";
         },
         {
-            "code": 6008;
+            "code": 6010;
             "name": "questionPeriodNotStarted";
             "msg": "Question period not started";
         },
         {
-            "code": 6009;
+            "code": 6011;
             "name": "questionPeriodEnded";
             "msg": "Question period ended";
         },
         {
-            "code": 6010;
+            "code": 6012;
             "name": "marketStillActive";
             "msg": "Market still active";
         },
         {
-            "code": 6011;
+            "code": 6013;
             "name": "insufficientLiquidity";
             "msg": "Insufficient liquidity";
         },
         {
-            "code": 6012;
+            "code": 6014;
             "name": "marketAlreadyResolved";
             "msg": "Market already resolved";
         },
         {
-            "code": 6013;
+            "code": 6015;
             "name": "concurrentTransaction";
             "msg": "Concurrent transaction";
         },
         {
-            "code": 6014;
+            "code": 6016;
             "name": "marketNotAllowedToPayout";
             "msg": "Market Not allowed to payout";
         },
         {
-            "code": 6015;
+            "code": 6017;
             "name": "userTradeIsSubUser";
             "msg": "User trade is sub user";
         },
         {
-            "code": 6016;
+            "code": 6018;
             "name": "prizeNotFound";
             "msg": "Prize not found";
         },
         {
-            "code": 6017;
+            "code": 6019;
             "name": "noPrizesAvailable";
             "msg": "No Prize Available";
         },
         {
-            "code": 6018;
+            "code": 6020;
             "name": "alreadyLinked";
             "msg": "Already linked";
         },
         {
-            "code": 6019;
+            "code": 6021;
             "name": "notLinked";
             "msg": "Not linked";
         },
         {
-            "code": 6020;
+            "code": 6022;
             "name": "invalidCustomer";
             "msg": "Invalid customer";
         },
         {
-            "code": 6021;
+            "code": 6023;
             "name": "invalidMint";
             "msg": "Invalid mint";
         },
         {
-            "code": 6022;
+            "code": 6024;
             "name": "invalidFeeVault";
             "msg": "Invalid fee vault";
         },
         {
-            "code": 6023;
+            "code": 6025;
             "name": "invalidShares";
             "msg": "Invalid shares";
         },
         {
-            "code": 6024;
+            "code": 6026;
             "name": "unauthorizedToOrderBook";
             "msg": "Unauthorized to order book";
         },
         {
-            "code": 6025;
+            "code": 6027;
             "name": "orderIsFullFilled";
             "msg": "Order is full filled";
         },
         {
-            "code": 6026;
+            "code": 6028;
             "name": "overflow";
             "msg": "overflow";
         },
         {
-            "code": 6027;
+            "code": 6029;
             "name": "marketAlreadyAggregated";
             "msg": "Market already aggregated";
         },
         {
-            "code": 6028;
+            "code": 6030;
             "name": "invalidMarketId";
             "msg": "Invalid market id";
         },
         {
-            "code": 6029;
+            "code": 6031;
             "name": "invalidCollection";
             "msg": "Invalid collection";
         },
         {
-            "code": 6030;
+            "code": 6032;
             "name": "invalidCollectionMint";
             "msg": "Invalid collection mint";
         },
         {
-            "code": 6031;
+            "code": 6033;
             "name": "invalidAuthority";
             "msg": "Invalid collection authority";
         }
@@ -1723,6 +1806,10 @@ export type ShortxContract = {
                     },
                     {
                         "name": "version";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "nextMarketId";
                         "type": "u64";
                     },
                     {
@@ -2176,6 +2263,10 @@ export type ShortxContract = {
                         "type": "u8";
                     },
                     {
+                        "name": "marketId";
+                        "type": "u64";
+                    },
+                    {
                         "name": "authority";
                         "type": "pubkey";
                     },
@@ -2195,10 +2286,6 @@ export type ShortxContract = {
                                 10
                             ];
                         };
-                    },
-                    {
-                        "name": "marketId";
-                        "type": "u64";
                     },
                     {
                         "name": "nonce";

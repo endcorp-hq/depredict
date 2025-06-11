@@ -1,5 +1,5 @@
 {
-    "address": "CR2SwZjpMJbCENVv2vnQbcHcT9Qx7mSjnFitgnqYxH4d",
+    "address": "2gPyynVwHkCZPKGKYkvSGdmTYmTvdgjPU4WwNXLcq3N7",
     "metadata": {
         "name": "shortx_contract",
         "version": "0.1.0",
@@ -7,6 +7,50 @@
         "description": "Created with Anchor"
     },
     "instructions": [
+        {
+            "name": "close_config",
+            "discriminator": [
+                145,
+                9,
+                72,
+                157,
+                95,
+                125,
+                61,
+                85
+            ],
+            "accounts": [
+                {
+                    "name": "signer",
+                    "writable": true,
+                    "signer": true
+                },
+                {
+                    "name": "config",
+                    "writable": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    99,
+                                    111,
+                                    110,
+                                    102,
+                                    105,
+                                    103
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "system_program",
+                    "address": "11111111111111111111111111111111"
+                }
+            ],
+            "args": []
+        },
         {
             "name": "close_market",
             "discriminator": [
@@ -30,7 +74,8 @@
                     "writable": true
                 },
                 {
-                    "name": "config"
+                    "name": "config",
+                    "writable": true
                 },
                 {
                     "name": "fee_vault_usdc_ata",
@@ -240,6 +285,31 @@
                     }
                 },
                 {
+                    "name": "market_positions_account",
+                    "writable": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    112,
+                                    111,
+                                    115,
+                                    105,
+                                    116,
+                                    105,
+                                    111,
+                                    110
+                                ]
+                            },
+                            {
+                                "kind": "arg",
+                                "path": "args.market_id"
+                            }
+                        ]
+                    }
+                },
+                {
                     "name": "token_program"
                 },
                 {
@@ -289,7 +359,8 @@
                     "writable": true
                 },
                 {
-                    "name": "config"
+                    "name": "config",
+                    "writable": true
                 },
                 {
                     "name": "market",
@@ -309,7 +380,7 @@
                             },
                             {
                                 "kind": "account",
-                                "path": "config.num_markets",
+                                "path": "config.next_market_id",
                                 "account": "Config"
                             }
                         ]
@@ -335,7 +406,7 @@
                             },
                             {
                                 "kind": "account",
-                                "path": "config.num_markets",
+                                "path": "config.next_market_id",
                                 "account": "Config"
                             }
                         ]
@@ -404,7 +475,8 @@
                 },
                 {
                     "name": "nft_collection_mint",
-                    "writable": true
+                    "writable": true,
+                    "signer": true
                 },
                 {
                     "name": "nft_collection_metadata",
@@ -415,7 +487,8 @@
                     "writable": true
                 },
                 {
-                    "name": "token_program"
+                    "name": "token_program",
+                    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                 },
                 {
                     "name": "associated_token_program",
@@ -876,7 +949,7 @@
                 },
                 {
                     "name": "token_program",
-                    "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                 },
                 {
                     "name": "token_metadata_program",
@@ -1096,6 +1169,10 @@
                     "writable": true
                 },
                 {
+                    "name": "nft_collection_metadata",
+                    "writable": true
+                },
+                {
                     "name": "nft_metadata_account",
                     "writable": true
                 },
@@ -1106,10 +1183,6 @@
                 {
                     "name": "token_program",
                     "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-                },
-                {
-                    "name": "token_2022_program",
-                    "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
                 },
                 {
                     "name": "token_metadata_program"
@@ -1527,156 +1600,166 @@
         },
         {
             "code": 6001,
+            "name": "ConfigInUse",
+            "msg": "Config account in use, cannot close it"
+        },
+        {
+            "code": 6002,
+            "name": "ArithmeticOverflow",
+            "msg": "Arithmetic overflow"
+        },
+        {
+            "code": 6003,
             "name": "InsufficientFunds",
             "msg": "Insufficient funds"
         },
         {
-            "code": 6002,
+            "code": 6004,
             "name": "InvalidPrice",
             "msg": "Invalid price"
         },
         {
-            "code": 6003,
+            "code": 6005,
             "name": "NoAvailablePositionSlot",
             "msg": "No available position slot"
         },
         {
-            "code": 6004,
+            "code": 6006,
             "name": "InvalidOracle",
             "msg": "Invalid oracle"
         },
         {
-            "code": 6005,
+            "code": 6007,
             "name": "OracleNotResolved",
             "msg": "Oracle not resolved"
         },
         {
-            "code": 6006,
+            "code": 6008,
             "name": "MarketInactive",
             "msg": "Market is inactive"
         },
         {
-            "code": 6007,
+            "code": 6009,
             "name": "PositionNotFound",
             "msg": "Position not found"
         },
         {
-            "code": 6008,
+            "code": 6010,
             "name": "QuestionPeriodNotStarted",
             "msg": "Question period not started"
         },
         {
-            "code": 6009,
+            "code": 6011,
             "name": "QuestionPeriodEnded",
             "msg": "Question period ended"
         },
         {
-            "code": 6010,
+            "code": 6012,
             "name": "MarketStillActive",
             "msg": "Market still active"
         },
         {
-            "code": 6011,
+            "code": 6013,
             "name": "InsufficientLiquidity",
             "msg": "Insufficient liquidity"
         },
         {
-            "code": 6012,
+            "code": 6014,
             "name": "MarketAlreadyResolved",
             "msg": "Market already resolved"
         },
         {
-            "code": 6013,
+            "code": 6015,
             "name": "ConcurrentTransaction",
             "msg": "Concurrent transaction"
         },
         {
-            "code": 6014,
+            "code": 6016,
             "name": "MarketNotAllowedToPayout",
             "msg": "Market Not allowed to payout"
         },
         {
-            "code": 6015,
+            "code": 6017,
             "name": "UserTradeIsSubUser",
             "msg": "User trade is sub user"
         },
         {
-            "code": 6016,
+            "code": 6018,
             "name": "PrizeNotFound",
             "msg": "Prize not found"
         },
         {
-            "code": 6017,
+            "code": 6019,
             "name": "NoPrizesAvailable",
             "msg": "No Prize Available"
         },
         {
-            "code": 6018,
+            "code": 6020,
             "name": "AlreadyLinked",
             "msg": "Already linked"
         },
         {
-            "code": 6019,
+            "code": 6021,
             "name": "NotLinked",
             "msg": "Not linked"
         },
         {
-            "code": 6020,
+            "code": 6022,
             "name": "InvalidCustomer",
             "msg": "Invalid customer"
         },
         {
-            "code": 6021,
+            "code": 6023,
             "name": "InvalidMint",
             "msg": "Invalid mint"
         },
         {
-            "code": 6022,
+            "code": 6024,
             "name": "InvalidFeeVault",
             "msg": "Invalid fee vault"
         },
         {
-            "code": 6023,
+            "code": 6025,
             "name": "InvalidShares",
             "msg": "Invalid shares"
         },
         {
-            "code": 6024,
+            "code": 6026,
             "name": "UnauthorizedToOrderBook",
             "msg": "Unauthorized to order book"
         },
         {
-            "code": 6025,
+            "code": 6027,
             "name": "OrderIsFullFilled",
             "msg": "Order is full filled"
         },
         {
-            "code": 6026,
+            "code": 6028,
             "name": "Overflow",
             "msg": "Overflow"
         },
         {
-            "code": 6027,
+            "code": 6029,
             "name": "MarketAlreadyAggregated",
             "msg": "Market already aggregated"
         },
         {
-            "code": 6028,
+            "code": 6030,
             "name": "InvalidMarketId",
             "msg": "Invalid market id"
         },
         {
-            "code": 6029,
+            "code": 6031,
             "name": "InvalidCollection",
             "msg": "Invalid collection"
         },
         {
-            "code": 6030,
+            "code": 6032,
             "name": "InvalidCollectionMint",
             "msg": "Invalid collection mint"
         },
         {
-            "code": 6031,
+            "code": 6033,
             "name": "InvalidAuthority",
             "msg": "Invalid collection authority"
         }
@@ -1717,6 +1800,10 @@
                     },
                     {
                         "name": "version",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "next_market_id",
                         "type": "u64"
                     },
                     {
@@ -2170,6 +2257,10 @@
                         "type": "u8"
                     },
                     {
+                        "name": "market_id",
+                        "type": "u64"
+                    },
+                    {
                         "name": "authority",
                         "type": "pubkey"
                     },
@@ -2189,10 +2280,6 @@
                                 10
                             ]
                         }
-                    },
-                    {
-                        "name": "market_id",
-                        "type": "u64"
                     },
                     {
                         "name": "nonce",

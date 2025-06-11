@@ -1,6 +1,6 @@
 import { BN, Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "./types/shortx";
-import { PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { RpcOptions } from "./types";
 import { PositionAccount } from "./types/position";
 export default class Position {
@@ -12,13 +12,19 @@ export default class Position {
      * @param marketId - Market ID
      *
      */
-    getPositionAccountsForMarket(marketId: number): Promise<PositionAccount[]>;
+    getPositionsAccountsForMarket(marketId: number): Promise<PositionAccount[]>;
     /**
-     * Get User positions for a market
+     * Get all Positions for a user
      * @param user - User PublicKey
      *
      */
-    getUserPositions(user: PublicKey, marketId: number): Promise<import("./types/position").Position[]>;
+    getPositionsForUser(user: PublicKey): Promise<import("./types/position").Position[]>;
+    /**
+     * Get User positions for a particular market
+     * @param user - User PublicKey
+     * @param marketId - Market ID
+     */
+    getUserPositionsForMarket(user: PublicKey, marketId: number): Promise<import("./types/position").Position[]>;
     /**
      * Get the PDA for a position account
      * @param marketId - Market ID
@@ -28,6 +34,7 @@ export default class Position {
      */
     getPositionsAccountPda(marketId: number, positionNonce?: number): Promise<{
         bump: number;
+        marketId: BN;
         authority: PublicKey;
         version: BN;
         positions: {
@@ -77,7 +84,6 @@ export default class Position {
             padding: number[];
             version: BN;
         }[];
-        marketId: BN;
         nonce: number;
         isSubPosition: boolean;
         padding: number[];
@@ -89,16 +95,19 @@ export default class Position {
      * @param options - RPC options
      *
      */
-    createSubPositionAccount(marketId: number, payer: PublicKey, marketAddress: PublicKey, options?: RpcOptions): Promise<string | TransactionInstruction[]>;
+    createSubPositionAccount(marketId: number, payer: PublicKey, marketAddress: PublicKey, options?: RpcOptions): Promise<TransactionInstruction[]>;
     /**
      * Get position account Nonce With Slots
      * @param positionAccounts - Position Accounts
      *
      */
-    getPositionAccountNonceWithSlots(positionAccounts: PositionAccount[]): PublicKey;
-    getPositionAccountIxs(marketId: number): Promise<{
+    getPositionAccountNonceWithSlots(positionAccounts: PositionAccount[], payer: PublicKey): PublicKey;
+    getPositionAccountIxs(marketId: number, payer: PublicKey): Promise<{
         positionAccountPDA: PublicKey;
         ixs: TransactionInstruction[];
     }>;
-    mintExistingPosition(marketId: number, positionId: number, positionNonce: number, payer: PublicKey, metadataUri: string, collectionAuthority: PublicKey, options?: RpcOptions): Promise<void>;
+    mintExistingPosition(marketId: number, positionId: number, positionNonce: number, payer: PublicKey, metadataUri: string, collectionAuthority: PublicKey, options?: RpcOptions): Promise<{
+        ixs: TransactionInstruction[];
+        signers: Keypair[];
+    }>;
 }

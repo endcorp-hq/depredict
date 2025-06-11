@@ -3,7 +3,10 @@ use anchor_lang::system_program::{ transfer, Transfer };
 use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
-use anchor_spl::{metadata::BurnNft};
+use anchor_spl::{};
+
+use mpl_token_metadata::instructions::{BurnNft, BurnNftCpiBuilder};
+use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 use std::str::FromStr;
 
@@ -109,6 +112,10 @@ pub struct PayoutNftContext<'info> {
     /// CHECK: Burn expects type of accountInfo so I guess checking happens in the CPI
     #[account(mut)]
     pub user_nft_token_account: AccountInfo<'info>,
+
+    /// CHECK: Burn expects type of accountInfo so I guess checking happens in the CPI
+    #[account(mut)]
+    pub nft_collection_metadata: AccountInfo<'info>,
 
     /// CHECK: Verified by CPI
     #[account(mut)]
@@ -279,8 +286,35 @@ impl<'info> PositionContext<'info> {
         let mut payout = 0;
     
         if is_winner {
-            let winning_liquidity_percentage = position.amount.checked_div(market.yes_liquidity).unwrap();
-            payout = market.no_liquidity.checked_mul(winning_liquidity_percentage).unwrap() + position.amount;
+
+            let (winning_liquidity, otherside_liquidity) = match position.direction {
+                PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
+                PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
+            };
+            
+
+            // Convert u64s to Decimals
+            let position_amount = Decimal::from(position.amount);
+            let winning_liquidity = Decimal::from(winning_liquidity);
+            let otherside_liquidity = Decimal::from(otherside_liquidity);
+
+            // Compute percentage share of the winning pool
+            let winning_percentage = position_amount
+                .checked_div(winning_liquidity)
+                .ok_or(ShortxError::ArithmeticOverflow)?;
+
+            // Compute share from otherside pool
+            let share_of_otherside = otherside_liquidity
+                .checked_mul(winning_percentage)
+                .ok_or(ShortxError::ArithmeticOverflow)?;
+
+            // Total payout = stake + winnings
+            let total_payout = share_of_otherside
+                .checked_add(position_amount)
+                .ok_or(ShortxError::ArithmeticOverflow)?;
+
+            // Convert back to u64 (this floors the value)
+            payout = total_payout.try_into().map_err(|_| ShortxError::ArithmeticOverflow)?;
         }
     
         
@@ -380,8 +414,29 @@ impl<'info> PayoutNftContext<'info> {
                 PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
             };
             
-            let winning_liquidity_percentage = position.amount.checked_div(winning_liquidity).unwrap();
-            payout = otherside_liquidity.checked_mul(winning_liquidity_percentage).unwrap() + position.amount;
+
+            // Convert u64s to Decimals
+            let position_amount = Decimal::from(position.amount);
+            let winning_liquidity = Decimal::from(winning_liquidity);
+            let otherside_liquidity = Decimal::from(otherside_liquidity);
+
+            // Compute percentage share of the winning pool
+            let winning_percentage = position_amount
+                .checked_div(winning_liquidity)
+                .ok_or(ShortxError::ArithmeticOverflow)?;
+
+            // Compute share from otherside pool
+            let share_of_otherside = otherside_liquidity
+                .checked_mul(winning_percentage)
+                .ok_or(ShortxError::ArithmeticOverflow)?;
+
+            // Total payout = stake + winnings
+            let total_payout = share_of_otherside
+                .checked_add(position_amount)
+                .ok_or(ShortxError::ArithmeticOverflow)?;
+
+            // Convert back to u64 (this floors the value)
+            payout = total_payout.try_into().map_err(|_| ShortxError::ArithmeticOverflow)?;
         }
 
         if payout > 0 && is_winner {
@@ -422,18 +477,18 @@ impl<'info> PayoutNftContext<'info> {
             let edition = self.nft_master_edition_account.to_account_info();
             let spl_token = self.token_program.to_account_info();
             let metadata_program_id = self.token_metadata_program.to_account_info();
+            let collection_metadata = self.nft_collection_metadata.to_account_info();
     
-            CpiContext::new(
-                metadata_program_id,
-                BurnNft {
-                    metadata,
-                    owner,
-                    mint,
-                    token,
-                    edition,
-                    spl_token,
-                },
-            );
+            BurnNftCpiBuilder::new(&metadata_program_id)
+            .metadata(&metadata)
+            // if your NFT is part of a collection you will need to pass in the collection metadata address.
+            .collection_metadata(Some(collection_metadata.as_ref()))
+            .owner(&owner)
+            .mint(&mint)
+            .token_account(&token)
+            .master_edition_account(&edition)
+            .spl_token_program(&spl_token)
+            .invoke()?;
 
             msg!("NFT burn successful");
         }

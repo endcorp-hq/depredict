@@ -20,6 +20,27 @@ export type Market = {
     question: string;
     winningDirection: WinningDirection;
 };
+export type FilteredMarket = {
+    address: string;
+    bump: number;
+    authority: string;
+    oraclePubkey: string;
+    nftCollectionMint: string;
+    nftCollectionMetadata: string;
+    nftCollectionMasterEdition: string;
+    marketUsdcVault: string;
+    marketId: string;
+    yesLiquidity: string;
+    noLiquidity: string;
+    volume: string;
+    updateTs: string;
+    nextPositionId: string;
+    marketState: string;
+    marketStart: string;
+    marketEnd: string;
+    question: string;
+    winningDirection: string;
+};
 export type MarketStates = {
     active: {};
 } | {

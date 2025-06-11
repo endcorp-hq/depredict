@@ -6,8 +6,8 @@ import { PositionAccount, Position, PositionDirection, PositionStatus } from '..
 export declare const encodeString: (value: string, alloc?: number) => number[];
 export declare const decodeString: (bytes: number[]) => string;
 export declare const formatMarket: (account: IdlAccounts<ShortxContract>["marketState"], address: PublicKey) => Market;
-export declare const formatPositionAccount: (account: IdlAccounts<ShortxContract>["positionAccount"], marketId: number) => PositionAccount;
-export declare const formatPosition: (position: IdlAccounts<ShortxContract>["positionAccount"]["positions"][number], authority?: string) => Position;
+export declare const formatPositionAccount: (account: IdlAccounts<ShortxContract>["positionAccount"], marketId?: number) => PositionAccount;
+export declare const formatPosition: (position: IdlAccounts<ShortxContract>["positionAccount"]["positions"][number]) => Position;
 export declare const getMarketState: (status: IdlAccounts<ShortxContract>["marketState"]["marketState"]) => MarketStates;
 export declare const getWinningDirection: (direction: IdlAccounts<ShortxContract>["marketState"]["winningDirection"]) => WinningDirection;
 export declare const getTokenProgram: (mint: PublicKey) => PublicKey;

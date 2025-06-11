@@ -51,13 +51,14 @@ export const formatMarket = (
 
 export const formatPositionAccount = (
   account: IdlAccounts<ShortxContract>['positionAccount'],
-  marketId: number
+  marketId?: number
 ): PositionAccount => {
+  console.log('formatPositionAccount', account)
   return {
     authority: account.authority,
-    marketId: marketId,
+    marketId: marketId ? marketId : account.marketId ? account.marketId.toNumber() : 0,
     positions: account.positions.map((position: any) =>
-      formatPosition(position, account.authority.toString())
+      formatPosition(position)
     ),
     nonce: account.nonce,
     isSubPosition: account.isSubPosition
@@ -65,12 +66,12 @@ export const formatPositionAccount = (
 }
 
 export const formatPosition = (
-  position: IdlAccounts<ShortxContract>['positionAccount']['positions'][number],
-  authority?: string
+  position: IdlAccounts<ShortxContract>['positionAccount']['positions'][number]
 ): Position => {
+  console.log("formatPosition SDK", position.positionId.toString(), position.isNft);
   return {
     ts: position.ts.toString(),
-    authority: authority ? authority : '',
+    authority: position.authority?.toBase58() || '',
     positionNonce: position.positionNonce.toString(),
     createdAt: position.createdAt ? position.createdAt.toString() : '',
     positionId: position.positionId.toString(),

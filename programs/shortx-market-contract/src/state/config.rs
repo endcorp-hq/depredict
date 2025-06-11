@@ -8,13 +8,17 @@ pub struct Config {
     pub fee_vault: Pubkey,
     pub fee_amount: u64,
     pub version: u64,
+    pub next_market_id: u64,
     pub num_markets: u64,
 }
 
 impl Config {
     pub fn next_market_id(&mut self) -> u64 {
-        // calculates the next market id but does not update the num_markets
-        let id: u64 = self.num_markets.checked_add(1).unwrap();
+        let id = self.next_market_id;
+        msg!("this is the next market id: {}", id);
+        msg!("this is the next market id before increment: {}", self.next_market_id);
+        self.next_market_id = self.next_market_id.checked_add(1).unwrap();
+        msg!("this is the next market id after increment: {}", self.next_market_id);
         id
     }
 }
