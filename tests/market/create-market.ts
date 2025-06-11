@@ -10,6 +10,7 @@ import {
 import { assert } from "chai";
 import { getUsdcMint, getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID } from "../helpers";
 import { getMint } from "@solana/spl-token";
+import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
 // At the top of your file:
 let numMarkets: anchor.BN;
@@ -163,7 +164,7 @@ describe("shortx-contract", () => {
       const marketId = numMarkets;
       console.log("Market ID:", marketId.toNumber());
 
-      const [marketPda] = PublicKey.findProgramAddressSync(
+      const [marketPda, marketBump] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("market"),
           marketId.toArrayLike(Buffer, "le", 8),
@@ -187,8 +188,11 @@ describe("shortx-contract", () => {
       // Use devnet oracle for testing
       const oraclePubkey = new PublicKey("CYkBEhDgvVHutGKXafAg1gki92SGWDT4MnCxX8KLed6i");
 
-      const [collectionPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("collection")],
+      const [collectionPda, collectionBump] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collection"), 
+          marketId.toArrayLike(Buffer, "le", 8)
+        ],
         program.programId
       );
       console.log("Collection PDA:", collectionPda.toString());
@@ -241,20 +245,19 @@ describe("shortx-contract", () => {
             metadataUri
           })
           .accountsPartial({
-            signer: ADMIN.publicKey,
+            payer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             market: marketPda,
+            collection: collectionPda,
             marketPositionsAccount: marketPositionsPda,
             oraclePubkey: oraclePubkey,
+            updateAuthority: ADMIN.publicKey,
             usdcMint: usdcMint,
-            nftCollectionMint: collectionMintKeypair.publicKey,
-            nftCollectionMetadata: collectionMetadataPda,
-            nftCollectionMasterEdition: collectionMasterEditionPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             config: configPda,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
-            tokenMetadataProgram: METAPLEX_ID,
+            mplCoreProgram: MPL_CORE_PROGRAM_ID,
           })
           .signers([ADMIN])
           .rpc({
@@ -282,9 +285,6 @@ describe("shortx-contract", () => {
       console.log("Question:", Buffer.from(marketAccount.question).toString());
       console.log("Update Timestamp:", new Date(marketAccount.updateTs.toNumber() * 1000).toISOString());
       console.log("Oracle Pubkey:", marketAccount.oraclePubkey?.toString() || "None");
-      console.log("Collection Mint:", marketAccount.nftCollectionMint?.toString() || "None");
-      console.log("Collection Metadata:", marketAccount.nftCollectionMetadata?.toString() || "None");
-      console.log("Collection Master Edition:", marketAccount.nftCollectionMasterEdition?.toString() || "None");
       console.log("Market State:", marketAccount.marketState);
       console.log("Winning Direction:", marketAccount.winningDirection);
       console.log("=== End Market State Details ===\n");
