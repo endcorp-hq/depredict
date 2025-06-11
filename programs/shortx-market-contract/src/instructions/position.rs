@@ -5,16 +5,24 @@ use crate::{
 };
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    metadata::{mpl_token_metadata, Metadata}, 
     token::Token,
     associated_token::AssociatedToken
 };
-use mpl_token_metadata::{
-    instructions::{CreateV1CpiBuilder, SetAndVerifyCollectionCpiBuilder},
-    types::{Collection, PrintSupply, TokenStandard},
-};
 
-use mpl_token_metadata::instructions::MintV1CpiBuilder;
+
+use mpl_core::{
+    ID as MPL_CORE_ID,
+    instructions::{
+        CreateV2CpiBuilder
+    },
+    types::{
+        Attribute, 
+        Attributes, 
+        Plugin, 
+        PluginAuthorityPair, 
+        PluginAuthority
+    },
+};
 
 #[derive(Accounts)]
 pub struct MintPositionContext<'info> {
@@ -31,44 +39,24 @@ pub struct MintPositionContext<'info> {
     #[account(mut)]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
-    /// CHECK: mint needs to be a signer to create the NFT
-    #[account(mut)]
-    pub nft_mint: Signer<'info>,
-
-    /// CHECK: We create it using anchor-spl
-    #[account(mut)]
-    pub nft_token_account: AccountInfo<'info>,
-
-    /// CHECK: We create it using metaplex
-    #[account(mut)]
-    pub metadata_account: AccountInfo<'info>,
-
-    /// CHECK: We create it using metaplex
-    #[account(mut)]
-    pub master_edition: AccountInfo<'info>,
-
-    /// CHECK: Collection mint account
-    #[account(mut)]
-    pub collection_mint: AccountInfo<'info>,
-
-    /// CHECK: Collection metadata account
-    #[account(mut)]
-    pub collection_metadata: AccountInfo<'info>,
 
     /// CHECK: Collection authority account - must be the market authority
     #[account(mut)]
     pub collection_authority: Signer<'info>,
 
-    /// CHECK: Collection master edition account
-    #[account(mut)]
-    pub collection_master_edition: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
-    pub token_metadata_program: Program<'info, Metadata>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     /// CHECK: This is the instructions sysvar
     pub sysvar_instructions: AccountInfo<'info>,
+    #[account(address = MPL_CORE_ID)]
+    /// CHECK: this account is checked by the address constraint
+    pub mpl_core_program: UncheckedAccount<'info>,
+
+    #[account(mut, constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection)]
+    /// CHECK: this account is checked by the address constraint
+    pub collection: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -149,7 +137,7 @@ impl<'info> MintPositionContext<'info> {
         let mut position = position_account.positions[position_index];
         // Update position state
         position.is_nft = true;
-        position.mint = Some(self.nft_mint.key());
+        // position.mint = Some(self.nft_mint.key());
         position.authority = Some(Pubkey::default());  // Change the authority to default pubkey
         
         // Update the position in the account
@@ -158,91 +146,56 @@ impl<'info> MintPositionContext<'info> {
         let nft_name = format!("SHORTX - {}", self.market.market_id);
         msg!("position accounts modified");
 
-        let token_metadata_program = self.token_metadata_program.to_account_info();
-        let metadata_account = self.metadata_account.to_account_info();
-        let mint_account = self.nft_mint.to_account_info();
-        let signer_account = self.signer.to_account_info();
-        let nft_token_account = self.nft_token_account.to_account_info();
-        let associated_token_program = self.associated_token_program.to_account_info();
-        let master_edition_account = self.master_edition.to_account_info();
-        let system_program = self.system_program.to_account_info();
-        let token_program = self.token_program.to_account_info();
         
-        // Get collection mint from market
-        let collection_mint_info = self.market.nft_collection_mint.ok_or(ShortxError::InvalidCollection)?;
+        let signer_account = self.signer.to_account_info();
+        let system_program = self.system_program.to_account_info();
+        
 
-        msg!("Collection mint: {}", collection_mint_info.to_string());
-        msg!("Collection authority key: {}", self.collection_authority.key());
+
         msg!("Market authority: {}", self.market.authority);
 
         require!(self.collection_authority.key() == self.market.authority, ShortxError::InvalidAuthority);
-        
-        let mut create_cpi = CreateV1CpiBuilder::new(&token_metadata_program);
-        create_cpi
-        .metadata(&metadata_account)
-        .mint(&mint_account, true)
-        .authority(&self.collection_authority)  // Position owner as authority
-        .payer(&signer_account)      // Position owner as payer
-        .update_authority(&self.collection_authority, true)  // Market authority as update authority
-        .master_edition(Some(&master_edition_account))
-        .system_program(&system_program)
-        .sysvar_instructions(&self.sysvar_instructions)
-        .spl_token_program(Some(&token_program))
-        .token_standard(TokenStandard::NonFungible)
+
+        // Add attributes to the NFT
+        msg!("Adding attributes to NFT");
+        let attributes = Attributes {
+            attribute_list: vec![
+                Attribute {
+                    key: "market_id".to_string(),
+                    value: self.market.market_id.to_string(),
+                },
+                Attribute {
+                    key: "position_id".to_string(),
+                    value: position.position_id.to_string(),
+                },
+                Attribute {
+                    key: "position_amount".to_string(),
+                    value: position.amount.to_string(),
+                },
+            ],
+        };
+
+        msg!("Create the asset");
+        let mpl_core_program = &self.mpl_core_program.to_account_info();
+
+        let mut create_asset_cpi = CreateV2CpiBuilder::new(mpl_core_program);
+        create_asset_cpi
+        .asset(&position_account.to_account_info())
         .name(nft_name)
         .uri(args.metadata_uri)
-        .seller_fee_basis_points(550)
-        .token_standard(TokenStandard::NonFungible)
-        .print_supply(PrintSupply::Zero)
-        .collection(Collection {
-            verified: false,  // We'll verify it after creation
-            key: collection_mint_info,
-        });
-
-        create_cpi.invoke()?;
-        msg!("NFT created");
-
-        //this mints the nft to the user's wallet
-        let mut mint_cpi = MintV1CpiBuilder::new(&token_metadata_program);
-        msg!("Minting NFT");
-        mint_cpi
-            .token(&nft_token_account)
-            .token_owner(Some(&signer_account))
-            .metadata(&metadata_account)
-            .master_edition(Some(&master_edition_account))
-            .mint(&mint_account)
-            .payer(&signer_account)
-            .authority(&self.collection_authority)  // Position owner as authority for minting
-            .system_program(&system_program)
-            .spl_token_program(&token_program)
-            .spl_ata_program(&associated_token_program)
-            .sysvar_instructions(&self.sysvar_instructions)
-            .amount(1);
-
-        mint_cpi.invoke()?;
-        msg!("Minted NFT");
-
-        // Now verify the collection
-        msg!("Verifying collection");
-        msg!("Collection authority: {}", self.collection_authority.key());
-        msg!("Update authority: {}", signer_account.key());
-        msg!("Market authority: {}", self.market.authority);
-        
-
-        // this sets the collection on the nft and also verifies it in one single instruction.
-        let mut verify_cpi = SetAndVerifyCollectionCpiBuilder::new(&token_metadata_program);
-        verify_cpi
-            .metadata(&metadata_account)
-            .collection_authority(&self.collection_authority)
-            .payer(&signer_account)
-            .update_authority(&self.collection_authority)
-            .collection_mint(&self.collection_mint)
-            .collection(&self.collection_metadata)
-            .collection_master_edition_account(&self.collection_master_edition)
-            .collection_authority_record(None);
-            
-        verify_cpi.invoke()?;
-        msg!("Collection verified");
+        .collection(Some(&self.collection.to_account_info()))
+        .authority(Some(&self.collection_authority))
+        .payer(&signer_account)
+        .plugins(vec![PluginAuthorityPair {
+            plugin: Plugin::Attributes(attributes),
+            authority: Some(PluginAuthority::UpdateAuthority),
+        }])
+        .system_program(&system_program)
+        .invoke_signed(&[&[
+            b"collection",
+            &self.market.market_id.to_le_bytes(),
+            &[self.market.bump]
+        ]])?; // this is the collection seeds, to review
 
         Ok(())
     }
