@@ -177,6 +177,17 @@ describe("shortx-contract", () => {
 
       console.log("Position account PDA:", positionAccountPda.toString());
       const collectionPubkey = marketAccount.nftCollection;
+
+      const [collectionPda, collectionBump] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collection"), 
+          MARKET_ID.toArrayLike(Buffer, "le", 8)
+        ],
+        program.programId
+      );
+      console.log("Collection PDA:", collectionPda.toString());
+
+
       console.log("Collection PDA:", collectionPubkey.toString());
       // Create order parameters
       const amount = new anchor.BN(2); // 2 USDC (6 decimals)
@@ -231,6 +242,40 @@ describe("shortx-contract", () => {
         }
         throw error;
       }
+
+
+      const umi = createUmi(provider.connection)
+
+      const asset = await fetchAsset(umi, positionNftAccountPda.toString(), {
+        skipDerivePlugins: false,
+      })
+      
+      console.log("Asset:", asset)
+      let attributes = asset.attributes
+      // map the attributes as key value pairs and console log: 
+      let attributesMap = attributes.attributeList.map((attribute: any) => {
+        return {
+          [attribute.key]: attribute.value
+        }
+      })
+      console.log("Attributes:", attributesMap)
+
+      console.log("Fetching collection...");
+      const collection = await fetchCollection(umi, collectionPda.toString())
+      console.log(collection)
+      let collection_attributes = collection.attributes
+      // map the attributes as key value pairs and console log: 
+      let collection_attributesMap = collection_attributes.attributeList.map((attribute: any) => {
+        return {
+          [attribute.key]: attribute.value
+        }
+      })
+      console.log("Collection Attributes:", collection_attributesMap)
+      console.log("Collection fetched");
+
+
+
+
     });
   });
 });

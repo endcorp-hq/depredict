@@ -11,6 +11,10 @@ import { assert } from "chai";
 import { getUsdcMint, getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID } from "../helpers";
 import { getMint } from "@solana/spl-token";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import { fetchCollection } from '@metaplex-foundation/mpl-core'
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+
+const umi = createUmi(provider.connection)
 
 // At the top of your file:
 let numMarkets: anchor.BN;
@@ -282,6 +286,19 @@ describe("shortx-contract", () => {
 
       assert.ok(marketAccount.marketId.eq(marketId));
       assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
+
+      console.log("Fetching collection...");
+      const asset = await fetchCollection(umi, collectionPda.toString())
+      console.log(asset)
+      let attributes = asset.attributes
+      // map the attributes as key value pairs and console log: 
+      let attributesMap = attributes.attributeList.map((attribute: any) => {
+        return {
+          [attribute.key]: attribute.value
+        }
+      })
+      console.log("Attributes:", attributesMap)
+      console.log("Collection fetched");
     });
   });
 });
