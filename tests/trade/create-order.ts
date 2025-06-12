@@ -10,7 +10,9 @@ import { assert } from "chai";
 import { getUsdcMint, getNetworkConfig, FEE_VAULT, program, provider, USER, MARKET_ID, ADMIN } from "../helpers";
 import * as fs from "fs";
 
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import { fetchAsset, MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import { fetchCollection } from '@metaplex-foundation/mpl-core'
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 
 describe("shortx-contract", () => { 
 
@@ -46,9 +48,10 @@ describe("shortx-contract", () => {
     //   console.log("Transfer to USER successful");
     // }
 
-    // Devnet USDC mint address
-    const { mint } = await getUsdcMint();
-    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+    // Get the correct USDC mint and authority for the current network
+    const { mint: mintPubkey } = await getUsdcMint();
+    usdcMint = mintPubkey;
+    console.log("USDC Mint:", usdcMint.toString());
 
     // Get the market PDA for mint authority
     global.MARKET_ID = MARKET_ID;
@@ -89,26 +92,27 @@ describe("shortx-contract", () => {
 
       // Mint USDC to USER's ATA if needed
       const userUsdcBalance = await provider.connection.getTokenAccountBalance(userTokenAccount);
-      // if (Number(userUsdcBalance.value.amount) < 1000_000) { // less than 1 USDC
-        
-      //   console.log("Minting 1000 USDC to USER...");
-      //   await mintTo(
-      //     provider.connection,
-      //     ADMIN, // payer and mint authority
-      //     usdcMint,
-      //     userTokenAccount,
-      //     ADMIN, // mint authority
-      //     1000_000_000 // 1000 USDC (6 decimals)
-      //   );
-      //   console.log("Minted 1000 USDC to USER's ATA");
-      // }
+      const minUsdc = 1_000_000_000; // 1,000 USDC (6 decimals)
+      if (Number(userUsdcBalance.value.amount) < minUsdc) {
+        console.log(`Minting 1,000 USDC to USER (current balance: ${userUsdcBalance.value.amount})...`);
+        await mintTo(
+          provider.connection,
+          ADMIN, // payer
+          usdcMint,
+          userTokenAccount,
+          ADMIN, // mint authority
+          minUsdc
+        );
+        console.log("Minted 1,000 USDC to USER's ATA");
+      } else {
+        console.log(`User already has sufficient USDC: ${userUsdcBalance.value.amount}`);
+      }
     } catch (e) {
       console.error("Failed to get or create user USDC ATA:", e);
       throw e;
     }
 
     // Defensive check: Create market's USDC vault (ATA for market PDA)
-    let marketVault;
     try {
       marketVault = (
         await getOrCreateAssociatedTokenAccount(
