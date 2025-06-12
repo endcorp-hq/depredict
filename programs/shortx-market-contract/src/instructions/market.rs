@@ -290,16 +290,7 @@ impl<'info> MarketContext<'info> {
         msg!("Creating collection NFT");
 
         let market_nft_name = format!("SHORTX-MKT-{}", market_id);
-        // Create collection NFT
-        //let collection_name = String::from_utf8(b"SHORTX-Q1".to_vec()).unwrap();
-        
-        let update_authority = match &self.update_authority {
-            Some(update_authority) => Some(update_authority.to_account_info()),
-            None => None,
-        };
-
         let mut create_collection_cpi = CreateCollectionV2CpiBuilder::new(mpl_core_program);
-
         let mut plugins: Vec<PluginAuthorityPair> = vec![];
 
         let attributes = Attributes {
@@ -323,7 +314,7 @@ impl<'info> MarketContext<'info> {
         create_collection_cpi
         .collection(&self.collection.to_account_info())
         .payer(&payer)
-        .update_authority(update_authority.as_ref())
+        .update_authority(Some(&market.to_account_info()))
         .system_program(&system_program)
         .name(market_nft_name)
         .uri(args.metadata_uri)

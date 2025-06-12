@@ -9,8 +9,8 @@ use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 use std::str::FromStr;
 
-use crate::constants::{USDC_MINT};
-use crate::state::{Config, MarketStates, OpenPositionArgs, PayoutNftArgs, Position, PositionAccount, PositionDirection, PositionNftAccount, PositionStatus};
+use crate::constants::{MARKET, USDC_MINT};
+use crate::state::{Config, MarketStates, OpenPositionArgs, PayoutNftArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
     errors::ShortxError,
     state::{ MarketState, WinningDirection },
@@ -60,7 +60,10 @@ pub struct PositionContext<'info> {
     pub position_nft_account: UncheckedAccount<'info>,
 
 
-    #[account(mut)]
+    #[account(mut,
+        seeds = [MARKET.as_bytes(), &market_positions_account.market_id.to_le_bytes()],
+        bump
+    )]
     pub market: Box<Account<'info, MarketState>>,
 
     #[account(
@@ -94,10 +97,12 @@ pub struct PositionContext<'info> {
     #[account(address = MPL_CORE_ID)]
     /// CHECK: this account is checked by the address constraint
     pub mpl_core_program: UncheckedAccount<'info>,
-
-    #[account(mut, constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection)]
     /// CHECK: this account is checked by the address constraint
-    pub collection: AccountInfo<'info>,
+    #[account(
+        mut,
+        constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection
+    )]
+    pub collection: UncheckedAccount<'info>,
 }
 
 #[derive(Accounts)]
@@ -171,8 +176,6 @@ impl<'info> PositionContext<'info> {
         let next_position_id = self.market.next_position_id; // Store before increment
         let market = &mut self.market;
         let market_positions_account = &mut self.market_positions_account;
-    
-        let collection = &market.nft_collection.unwrap();
         let ts = Clock::get()?.unix_timestamp;
     
 
@@ -231,6 +234,7 @@ impl<'info> PositionContext<'info> {
             direction: args.direction,
             is_nft: false,
             authority: Some(self.signer.key()),
+            mint: None,
             created_at: ts,
             version: 0,
             position_nonce: position_nonce,
@@ -259,8 +263,7 @@ impl<'info> PositionContext<'info> {
             self.usdc_mint.decimals
         )?;
     
-        let current_position = market_positions_account.positions[position_index];
-    
+        let current_position = market_positions_account.positions[position_index];    
         market_positions_account.emit_position_event(current_position)?;
     
         let fee = self.config.fee_amount;
@@ -297,12 +300,24 @@ impl<'info> PositionContext<'info> {
                     value: market_positions_account.market_id.to_string(),
                 },
                 Attribute {
+                    key: "market_question".to_string(),
+                    value: String::from_utf8_lossy(&market.question).trim_end_matches('\0').to_string(),
+                },
+                Attribute {
                     key: "position_id".to_string(),
                     value: current_position.position_id.to_string(),
                 },
                 Attribute {
+                    key: "position_nonce".to_string(),
+                    value: current_position.position_nonce.to_string(),
+                },
+                Attribute {
                     key: "position_amount".to_string(),
                     value: current_position.amount.to_string(),
+                },
+                Attribute {
+                    key: "bet_direction".to_string(),
+                    value: current_position.direction.to_string(),
                 },
             ],
         };
@@ -316,6 +331,12 @@ impl<'info> PositionContext<'info> {
             market_id,
             &next_position_id.to_le_bytes(),
             &[position_nft_account_bump],
+        ];
+
+        let market_signer_seeds: &[&[u8]] = &[
+            b"market",
+            &self.market.market_id.to_le_bytes(),
+            &[bumps.market],
         ];
 
         msg!("NFT Signer Seeds: {:?}", nft_signer_seeds);
@@ -337,25 +358,20 @@ impl<'info> PositionContext<'info> {
         .name(nft_name)
         .uri(uri)
         .collection(Some(&self.collection.to_account_info()))
+        .authority(Some(&self.market.to_account_info()))
+        .owner(Some(&self.signer.to_account_info()))
         .payer(&self.signer.to_account_info())
         .plugins(vec![PluginAuthorityPair {
             plugin: Plugin::Attributes(attributes),
             authority: None,
         }])
         .system_program(&self.system_program.to_account_info())
-        .invoke_signed(&[nft_signer_seeds])?;
+        .invoke_signed(&[nft_signer_seeds, market_signer_seeds])?;
 
         msg!("NFT created");
 
-
-
-
-
-
-
-
-
-    
+        // update the position with the mint address
+        market_positions_account.positions[position_index].mint = Some(self.position_nft_account.key());
         Ok(())
     }
 

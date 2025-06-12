@@ -101,10 +101,6 @@ impl<'info> UpdateConfigContext<'info> {
             config.authority = authority;
         }
         if let Some(fee_vault) = fee_vault {
-            require!(
-                fee_vault == *self.fee_vault.key,
-                ShortxError::InvalidFeeVault
-            );
             config.fee_vault = fee_vault;
         }
         config.version = config.version.checked_add(1).unwrap();

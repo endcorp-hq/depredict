@@ -26,6 +26,7 @@ pub struct Position {
     pub ts: i64,                   // Timestamp
     pub is_nft: bool,              // Whether this position is represented as NFT
     pub authority: Option<Pubkey>, // Original bettor (None if converted to NFT)
+    pub mint: Option<Pubkey>,      // NFT mint address (None if not NFT)
     pub position_status: PositionStatus,
     pub position_nonce: u32,
     pub padding: [u8; 3],
@@ -43,6 +44,7 @@ impl Default for Position {
             ts: 0,
             is_nft: false,
             authority: None,
+            mint: None,
             position_status: PositionStatus::Init,
             position_nonce: 0,
             padding: [0; 3],
@@ -93,6 +95,15 @@ pub enum PositionDirection {
     #[default]
     Yes,
     No,
+}
+
+impl std::fmt::Display for PositionDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PositionDirection::Yes => write!(f, "Yes"),
+            PositionDirection::No => write!(f, "No"),
+        }
+    }
 }
 
 impl PositionAccount {

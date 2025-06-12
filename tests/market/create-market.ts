@@ -27,7 +27,7 @@ describe("shortx-contract", () => {
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
 
     const { mint } = await getUsdcMint();
-    usdcMint = mint;
+    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
     console.log("USDC Mint:", usdcMint.toString());
     collectionMintKeypair = Keypair.generate();
   });
@@ -82,29 +82,29 @@ describe("shortx-contract", () => {
 
       // Mint USDC to admin if needed
       const adminUsdcBalance = await provider.connection.getTokenAccountBalance(adminTokenAccount);
-      if (Number(adminUsdcBalance.value.amount) < 1000) {
-        console.log("Minting USDC to admin...");
-        const { keypair: usdcMintKeypair } = await getUsdcMint();
-        console.log("MintTo authority:", usdcMintKeypair.publicKey.toBase58());
-        await mintTo(
-          provider.connection,
-          ADMIN,
-          usdcMint,
-          adminTokenAccount,
-          ADMIN.publicKey, 
-          1000_000_000 // 1000 USDC with 6 decimals
-        );
-      }
+      // if (Number(adminUsdcBalance.value.amount) < 1000) {
+      //   console.log("Minting USDC to admin...");
+      //   const { keypair: usdcMintKeypair } = await getUsdcMint();
+      //   console.log("MintTo authority:", usdcMintKeypair.publicKey.toBase58());
+      //   await mintTo(
+      //     provider.connection,
+      //     ADMIN,
+      //     usdcMint,
+      //     adminTokenAccount,
+      //     ADMIN.publicKey, 
+      //     1000_000_000 // 1000 USDC with 6 decimals
+      //   );
+      // }
 
       const mintAmount = new anchor.BN(1_000_000 * 10 ** 6); // 1 Million tokens with 6 decimals
-      await mintTo(
-        provider.connection,
-        ADMIN, // Payer
-        usdcMint,
-        adminTokenAccount,
-        ADMIN.publicKey, // Mint Authority
-        mintAmount.toNumber() 
-      );
+      // await mintTo(
+      //   provider.connection,
+      //   ADMIN, // Payer
+      //   usdcMint,
+      //   adminTokenAccount,
+      //   ADMIN.publicKey, // Mint Authority
+      //   mintAmount.toNumber() 
+      // );
       console.log(`Minted ${mintAmount.toString()} tokens to admin ATA`);
     } catch (error) {
       console.error("Error minting tokens:", error);
@@ -212,27 +212,6 @@ describe("shortx-contract", () => {
       );
       console.log("Created collection mint account", mintId.toString());
 
-      const [collectionMetadataPda] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("metadata"),
-          METAPLEX_ID.toBuffer(),
-          collectionMintKeypair.publicKey.toBuffer(),
-        ],
-        METAPLEX_ID
-      );
-      console.log("Collection Metadata PDA:", collectionMetadataPda.toString());
-
-      const [collectionMasterEditionPda] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("metadata"),
-          METAPLEX_ID.toBuffer(),
-          collectionMintKeypair.publicKey.toBuffer(),
-          Buffer.from("edition"),
-        ],
-        METAPLEX_ID
-      );
-      console.log("Collection Master Edition PDA:", collectionMasterEditionPda.toString());
-
       // Create metadata URI for the collection
       const metadataUri = "https://arweave.net/your-metadata-uri"; // Replace with your actual metadata URI
 
@@ -287,6 +266,7 @@ describe("shortx-contract", () => {
       console.log("Oracle Pubkey:", marketAccount.oraclePubkey?.toString() || "None");
       console.log("Market State:", marketAccount.marketState);
       console.log("Winning Direction:", marketAccount.winningDirection);
+      console.log("Collection Mint:", marketAccount.nftCollection?.toString() || "None");
       console.log("=== End Market State Details ===\n");
       
       const configAccount = await program.account.config.fetch(configPda);
