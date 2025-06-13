@@ -31,7 +31,7 @@ const USER = Keypair.fromSecretKey(
 //   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
 // );
 
-export const MARKET_ID = new anchor.BN(12);
+export const MARKET_ID = new anchor.BN(13);
 
 
 // Export provider and program for use in tests

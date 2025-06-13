@@ -234,7 +234,6 @@ describe("shortx-contract", () => {
             collection: collectionPda,
             marketPositionsAccount: marketPositionsPda,
             oraclePubkey: oraclePubkey,
-            updateAuthority: ADMIN.publicKey,
             usdcMint: usdcMint,
             tokenProgram: TOKEN_PROGRAM_ID,
             config: configPda,

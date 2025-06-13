@@ -12,12 +12,10 @@ pub struct PriceEvent {
 
 #[event]
 pub struct PositionEvent {
-    pub authority: Option<Pubkey>,
     pub market_id: u64,
     pub amount: u64,
     pub direction: PositionDirection,
     pub position_status: PositionStatus,
-    pub is_nft: bool,
     pub ts: i64,
     pub created_at: i64,
 }

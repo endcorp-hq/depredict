@@ -63,9 +63,7 @@ pub struct MarketContext<'info> {
     pub fee_vault: AccountInfo<'info>,
 
     /// CHECK: oracle is checked in the implementation function
-    #[account(
-        mut
-    )]
+    #[account(mut)]
     pub oracle_pubkey: AccountInfo<'info>,
     
     #[account(mut)]
@@ -115,16 +113,13 @@ pub struct MarketContext<'info> {
     )]
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
+     /// CHECK: this account is checked by core program
+    #[account(address = MPL_CORE_ID)]
+    pub mpl_core_program: UncheckedAccount<'info>,
+
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
-
-    /// CHECK: this account will be checked by the mpl_core program
-    pub update_authority: Option<UncheckedAccount<'info>>,
-
-    #[account(address = MPL_CORE_ID)]
-    /// CHECK: this account is checked by the address constraint
-    pub mpl_core_program: UncheckedAccount<'info>,
 }
 
 // Create a separate context for the update_market instruction
@@ -224,10 +219,11 @@ impl<'info> MarketContext<'info> {
     pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &MarketContextBumps) -> Result<()> {
         let market = &mut self.market;
         let payer = &self.payer.to_account_info();
-        let ts = Clock::get()?.unix_timestamp;
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
+
+        let ts = Clock::get()?.unix_timestamp;
 
         // check if the oracle is valid
         // require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
@@ -263,7 +259,6 @@ impl<'info> MarketContext<'info> {
         let mut positions = [Position::default(); 10];
         for pos in positions.iter_mut() {
             pos.position_status = PositionStatus::Init;
-            pos.authority = None;
         }
 
         market_positions.set_inner(PositionAccount {
@@ -281,7 +276,6 @@ impl<'info> MarketContext<'info> {
         msg!("Initializing position slots:");
         for (i, pos) in market_positions.positions.iter().enumerate() {
             msg!("Position {}: status = {:?}", i, pos.position_status);
-            msg!("Position {}: authority = {:?}", i, pos.authority);
         }
     
         market.emit_market_event()?;
@@ -311,6 +305,12 @@ impl<'info> MarketContext<'info> {
 
         let system_program = &self.system_program.to_account_info();
 
+        let collection_signer_seeds: &[&[u8]] = &[
+            b"collection",
+            &market_id.to_le_bytes(),
+            &[bumps.collection],
+        ];
+
         create_collection_cpi
         .collection(&self.collection.to_account_info())
         .payer(&payer)
@@ -319,11 +319,7 @@ impl<'info> MarketContext<'info> {
         .name(market_nft_name)
         .uri(args.metadata_uri)
         .plugins(plugins)  
-        .invoke_signed(&[&[
-            b"collection",
-            &market_id.to_le_bytes(),
-            &[bumps.collection],
-        ]])?;
+        .invoke_signed(&[collection_signer_seeds])?;
 
 
         market.nft_collection = Some(self.collection.key());

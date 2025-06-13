@@ -67,19 +67,8 @@ pub mod shortx_contract {
         Ok(())
     }
 
-
-    pub fn settle_position(ctx: Context<PositionContext>, position_id: u64) -> Result<()> {
-        ctx.accounts.payout_position(position_id)?;
-        Ok(())
-    }
-
-    pub fn mint_position(ctx: Context<MintPositionContext>, args: MintPositionArgs) -> Result<()> {
-        ctx.accounts.mint_position(args)?;
-        Ok(())
-    }
-
-    pub fn settle_nft_position(ctx: Context<PayoutNftContext>, args: PayoutNftArgs) -> Result<()> {
-        ctx.accounts.payout_nft_position(args)?;
+    pub fn settle_position(ctx: Context<PayoutNftContext>) -> Result<()> {
+        ctx.accounts.payout_position()?;
         Ok(())
     }
 }

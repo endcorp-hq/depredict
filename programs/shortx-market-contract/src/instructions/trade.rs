@@ -4,13 +4,15 @@ use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
 
-use mpl_token_metadata::instructions::{BurnNftCpiBuilder};
+use mpl_core::accounts::{BaseAssetV1};
+use mpl_core::fetch_plugin;
+use mpl_core::instructions::BurnV1CpiBuilder;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 use std::str::FromStr;
 
 use crate::constants::{MARKET, USDC_MINT};
-use crate::state::{Config, MarketStates, OpenPositionArgs, PayoutNftArgs, Position, PositionAccount, PositionDirection, PositionStatus};
+use crate::state::{Config, MarketStates, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
     errors::ShortxError,
     state::{ MarketState, WinningDirection },
@@ -24,8 +26,7 @@ use mpl_core::{
         Attribute, 
         Attributes, 
         Plugin, 
-        PluginAuthorityPair, 
-        PluginAuthority
+        PluginAuthorityPair,
     },
 };
 
@@ -90,19 +91,21 @@ pub struct PositionContext<'info> {
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub config: Box<Account<'info, Config>>,
-
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
+    
     #[account(address = MPL_CORE_ID)]
     /// CHECK: this account is checked by the address constraint
     pub mpl_core_program: UncheckedAccount<'info>,
+
     /// CHECK: this account is checked by the address constraint
     #[account(
         mut,
         constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection
     )]
     pub collection: UncheckedAccount<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -142,25 +145,19 @@ pub struct PayoutNftContext<'info> {
     )]
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: We verify ownership through token account
+    /// CHECK: this account is checked by the address constraint
     #[account(mut)]
-    pub nft_mint: AccountInfo<'info>,
+    pub nft_mint: UncheckedAccount<'info>,
 
-    /// CHECK: Burn expects type of accountInfo so I guess checking happens in the CPI
-    #[account(mut)]
-    pub user_nft_token_account: AccountInfo<'info>,
+    /// CHECK: this account is checked by the address constraint
+    #[account(
+        mut,
+        constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection
+    )]
+    pub collection: UncheckedAccount<'info>,
 
-    /// CHECK: Burn expects type of accountInfo so I guess checking happens in the CPI
-    #[account(mut)]
-    pub nft_collection_metadata: AccountInfo<'info>,
-
-    /// CHECK: Verified by CPI
-    #[account(mut)]
-    pub nft_metadata_account: AccountInfo<'info>,
-
-    /// CHECK: Check by CPI
-    #[account(mut)]
-    pub nft_master_edition_account: AccountInfo<'info>,
+    /// CHECK: this account is checked by the address constraint
+    pub mpl_core_program: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
 
@@ -232,9 +229,7 @@ impl<'info> PositionContext<'info> {
             position_status: PositionStatus::Open,
             amount: net_amount,
             direction: args.direction,
-            is_nft: false,
-            authority: Some(self.signer.key()),
-            mint: None,
+            mint: Some(self.position_nft_account.key()),
             created_at: ts,
             version: 0,
             position_nonce: position_nonce,
@@ -299,10 +294,10 @@ impl<'info> PositionContext<'info> {
                     key: "market_id".to_string(),
                     value: market_positions_account.market_id.to_string(),
                 },
-                Attribute {
-                    key: "market_question".to_string(),
-                    value: String::from_utf8_lossy(&market.question).trim_end_matches('\0').to_string(),
-                },
+                // Attribute {
+                //     key: "market_question".to_string(),
+                //     value: String::from_utf8_lossy(&market.question).trim_end_matches('\0').to_string(),
+                // },
                 Attribute {
                     key: "position_id".to_string(),
                     value: current_position.position_id.to_string(),
@@ -345,7 +340,7 @@ impl<'info> PositionContext<'info> {
         msg!("position_nft_account_bump: {:?}", position_nft_account_bump);
 
 
-        let nft_name = format!("MID:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
+        let nft_name = format!("SHORTX MARKET:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
         let uri = format!("https://shortx.io/market/{}/{}/{} ", market_positions_account.market_id, current_position.position_id, current_position.position_nonce);
         let mpl_core_program = &self.mpl_core_program.to_account_info();
         
@@ -369,124 +364,17 @@ impl<'info> PositionContext<'info> {
         .invoke_signed(&[nft_signer_seeds, market_signer_seeds])?;
 
         msg!("NFT created");
-
-        // update the position with the mint address
-        market_positions_account.positions[position_index].mint = Some(self.position_nft_account.key());
-        Ok(())
-    }
-
-
-    pub fn payout_position(&mut self, position_id: u64) -> Result<()> {
-        let market = &mut self.market;
-        let market_positions_account = &mut self.market_positions_account;
-        let ts = Clock::get()?.unix_timestamp;
-    
-        require!(
-            market.winning_direction != WinningDirection::None,
-            ShortxError::MarketStillActive
-        );
-        require!(market.market_state == MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
-
-    
-        let position_index = market_positions_account.positions
-            .iter()
-            .position(|position| {
-                position.position_id == position_id &&
-                    position.position_status == PositionStatus::Open &&
-                    position.market_id == market.market_id
-            })
-            .ok_or(ShortxError::PositionNotFound)?;
-    
-        let position = market_positions_account.positions[position_index];
-    
-        let is_winner = match (position.direction, market.winning_direction) {
-            | (PositionDirection::Yes, WinningDirection::Yes)
-            | (PositionDirection::No, WinningDirection::No) => true,
-            _ => false,
-        };
-    
-        let mut payout = 0;
-    
-        if is_winner {
-
-            let (winning_liquidity, otherside_liquidity) = match position.direction {
-                PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
-                PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
-            };
-            
-
-            // Convert u64s to Decimals
-            let position_amount = Decimal::from(position.amount);
-            let winning_liquidity = Decimal::from(winning_liquidity);
-            let otherside_liquidity = Decimal::from(otherside_liquidity);
-
-            // Compute percentage share of the winning pool
-            let winning_percentage = position_amount
-                .checked_div(winning_liquidity)
-                .ok_or(ShortxError::ArithmeticOverflow)?;
-
-            // Compute share from otherside pool
-            let share_of_otherside = otherside_liquidity
-                .checked_mul(winning_percentage)
-                .ok_or(ShortxError::ArithmeticOverflow)?;
-
-            // Total payout = stake + winnings
-            let total_payout = share_of_otherside
-                .checked_add(position_amount)
-                .ok_or(ShortxError::ArithmeticOverflow)?;
-
-            // Convert back to u64 (this floors the value)
-            payout = total_payout.try_into().map_err(|_| ShortxError::ArithmeticOverflow)?;
-        }
-    
-        
-        if payout > 0 && is_winner {
-            let market_signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
-    
-            
-                transfer_checked(
-                    CpiContext::new_with_signer(
-                        self.token_program.to_account_info(),
-                        TransferChecked {
-                            from: self.market_usdc_vault.to_account_info(),
-                            mint: self.usdc_mint.to_account_info(),
-                            to: self.user_usdc_ata.to_account_info(),
-                            authority: market.to_account_info(),
-                        },
-                        market_signer
-                    ),
-                    payout,
-                    self.usdc_mint.decimals
-                )?;
-                
-            msg!("Market Liquidity {:?}", self.market_usdc_vault.amount);
-            msg!("Order Price {:?}", position.amount);
-            msg!("Payout {:?}", payout);
-        }
-    
-        market_positions_account.positions[position_index].position_status = PositionStatus::Closed;
-        market_positions_account.positions[position_index].ts = ts;
-    
-        market_positions_account.emit_position_event(market_positions_account.positions[position_index])?;
-    
-        require!(ts > market.update_ts, ShortxError::ConcurrentTransaction);
-    
-        market.update_ts = ts;
-    
-        market.emit_market_event()?;
-    
         Ok(())
     }
 }
 
 
 impl<'info> PayoutNftContext<'info> {
-    pub fn payout_nft_position(&mut self, args: PayoutNftArgs) -> Result<()> {
+    pub fn payout_position(&mut self) -> Result<()> {
         let market = &mut self.market;
         let market_positions_account = &mut self.market_positions_account;
         let ts = Clock::get()?.unix_timestamp;
 
-        msg!("Starting NFT payout for position {}", args.position_id);
         msg!("Market ID: {}", market.market_id);
         msg!("Market bump: {}", market.bump);
         msg!("Market authority: {}", market.authority);
@@ -500,17 +388,21 @@ impl<'info> PayoutNftContext<'info> {
         );
         require!(market.market_state == MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
 
+
+        let (_, attribute_list, _) = fetch_plugin::<BaseAssetV1, Attributes>(&self.nft_mint.to_account_info(), mpl_core::types::PluginType::Attributes)?;
+
+        msg!("Attribute list of nft: {:?}", attribute_list);
+
         // Verify market ID matches
-        require!(args.market_id == market.market_id, ShortxError::InvalidMarketId);
+        require!(attribute_list.attribute_list[0].value.parse::<u64>().unwrap() == market.market_id, ShortxError::InvalidMarketId);
 
         // Find position with this position ID
         let position_index = market_positions_account.positions
             .iter()
             .position(|pos| {
-                pos.position_id == args.position_id &&
-                pos.is_nft &&
+                pos.position_id == attribute_list.attribute_list[2].value.parse::<u64>().unwrap() &&
                 pos.position_status == PositionStatus::Open &&
-                pos.amount == args.amount
+                pos.amount == attribute_list.attribute_list[4].value.parse::<u64>().unwrap()
             })
             .ok_or(ShortxError::PositionNotFound)?;
 
@@ -530,7 +422,7 @@ impl<'info> PayoutNftContext<'info> {
         let mut payout = 0;
         if is_winner {
 
-            let (winning_liquidity, otherside_liquidity) = match args.direction {
+            let (winning_liquidity, otherside_liquidity) = match position.direction {
                 PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
                 PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
             };
@@ -582,34 +474,35 @@ impl<'info> PayoutNftContext<'info> {
                 self.usdc_mint.decimals
             )?;
 
-            // Burn the NFT
-            msg!("Starting NFT burn");
-            msg!("NFT token account: {}", self.user_nft_token_account.key());
-            msg!("NFT token account owner: {}", self.user_nft_token_account.owner);
-            msg!("NFT mint: {}", self.nft_mint.key());
-            msg!("Master edition: {}", self.nft_master_edition_account.key());
-            msg!("Metadata account: {}", self.nft_metadata_account.key());
+
+            let asset = self.nft_mint.to_account_info();
+            let collection = self.collection.to_account_info();
+            let payer = self.signer.to_account_info();
+            let system_program = self.system_program.to_account_info();
+
+            // let nft_signer_seeds: &[&[u8]] = &[
+            //     b"nft",
+            //     &market.market_id.to_le_bytes(),
+            //     &market_positions_account.positions[position_index].position_id.to_le_bytes(),
+            //     &[self.nft_mint.bump],
+            // ];
 
 
-            let owner = self.signer.to_account_info();
-            let metadata = self.nft_metadata_account.to_account_info();
-            let mint = self.nft_mint.to_account_info();
-            let token = self.user_nft_token_account.to_account_info();
-            let edition = self.nft_master_edition_account.to_account_info();
-            let spl_token = self.token_program.to_account_info();
-            let metadata_program_id = self.token_metadata_program.to_account_info();
-            let collection_metadata = self.nft_collection_metadata.to_account_info();
-    
-            BurnNftCpiBuilder::new(&metadata_program_id)
-            .metadata(&metadata)
-            // if your NFT is part of a collection you will need to pass in the collection metadata address.
-            .collection_metadata(Some(collection_metadata.as_ref()))
-            .owner(&owner)
-            .mint(&mint)
-            .token_account(&token)
-            .master_edition_account(&edition)
-            .spl_token_program(&spl_token)
-            .invoke()?;
+            let market_signer_seeds: &[&[u8]] = &[
+                b"market",
+                &market.market_id.to_le_bytes(),
+                &[market.bump],
+            ];
+
+        
+            msg!("Burning NFT");
+            BurnV1CpiBuilder::new(&self.mpl_core_program.to_account_info())
+            .asset(&asset)
+            .collection(Some(&collection))
+            .payer(&payer)
+            .authority(Some(&payer))
+            .system_program(Some(&system_program))
+            .invoke_signed(&[ market_signer_seeds])?;
 
             msg!("NFT burn successful");
         }

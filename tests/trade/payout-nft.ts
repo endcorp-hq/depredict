@@ -7,6 +7,7 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import { getUsdcMint, MARKET_ID, METAPLEX_ID, program, provider, USER } from "../helpers";
+import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
 describe("shortx-contract", () => {
 
@@ -17,8 +18,8 @@ describe("shortx-contract", () => {
   let usdcMint: PublicKey;
 
   before(async () => {
-    const { mint } = await getUsdcMint();
-    usdcMint = mint;
+    // const { mint } = await getUsdcMint();
+    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
   });
 
   describe("NFT Payout", () => {
@@ -45,6 +46,8 @@ describe("shortx-contract", () => {
       console.log("\n=== Market Resolution Status ===");
       console.log("Market State:", marketAccount.marketState);
       console.log("Winning Direction:", marketAccount.winningDirection);
+
+      const collection = marketAccount.nftCollection;
       
       // Verify market is resolved
       assert.ok(
@@ -61,8 +64,8 @@ describe("shortx-contract", () => {
       
       // Find NFT positions
       const nftPositions = positionAccount.positions.filter(p => 
-        p.isNft && 
         p.mint && 
+        Object.keys(p.direction)[0] === "yes" &&
         Object.keys(p.positionStatus)[0] === "open"
       );
 
@@ -78,14 +81,14 @@ describe("shortx-contract", () => {
         });
 
         // Get the NFT token account for user
-        const nftTokenAccount = getAssociatedTokenAddressSync(
-            position.mint,
-            user.publicKey,  // get the user's NFT token account address
-            false, // allowOwnerOffCurve
-            TOKEN_PROGRAM_ID
-          );
+        // const nftTokenAccount = getAssociatedTokenAddressSync(
+        //     position.mint,
+        //     user.publicKey,  // get the user's NFT token account address
+        //     false, // allowOwnerOffCurve
+        //     TOKEN_PROGRAM_ID
+        //   );
 
-        console.log("NFT Token Account:", nftTokenAccount.toString());
+        // console.log("NFT Token Account:", nftTokenAccount.toString());
 
         // Get the market vault - should be owned by market PDA
         const marketVault = getAssociatedTokenAddressSync(
@@ -107,15 +110,15 @@ describe("shortx-contract", () => {
         );
 
 
-        const [nftMetadataPda] = PublicKey.findProgramAddressSync(
-          [
-            Buffer.from("metadata"),
-            METAPLEX_ID.toBuffer(),
-            position.mint.toBuffer(),
-          ],
-          METAPLEX_ID
-        );
-        console.log("NFT Metadata PDA:", nftMetadataPda.toString());
+        // const [nftMetadataPda] = PublicKey.findProgramAddressSync(
+        //   [
+        //     Buffer.from("metadata"),
+        //     METAPLEX_ID.toBuffer(),
+        //     position.mint.toBuffer(),
+        //   ],
+        //   METAPLEX_ID
+        // );
+        // console.log("NFT Metadata PDA:", nftMetadataPda.toString());
 
         // Verify the market vault exists
         const marketVaultInfo = await provider.connection.getAccountInfo(marketVault);
@@ -135,43 +138,43 @@ describe("shortx-contract", () => {
         // Debug checks
         console.log("\nVerifying accounts before transaction:");
         console.log("1. NFT Token Account:");
-        const nftTokenAccountInfo = await provider.connection.getAccountInfo(nftTokenAccount);
-        console.log("   Owner:", nftTokenAccountInfo?.owner.toString());
-        console.log("   Data length:", nftTokenAccountInfo?.data.length);
-        console.log("   Executable:", nftTokenAccountInfo?.executable);
+        // const nftTokenAccountInfo = await provider.connection.getAccountInfo(nftTokenAccount);
+        // console.log("   Owner:", nftTokenAccountInfo?.owner.toString());
+        // console.log("   Data length:", nftTokenAccountInfo?.data.length);
+        // console.log("   Executable:", nftTokenAccountInfo?.executable);
 
         console.log("\n2. NFT Metadata Account:");
-        const metadataAccountInfo = await provider.connection.getAccountInfo(nftMetadataPda);
-        console.log("   Owner:", metadataAccountInfo?.owner.toString());
-        console.log("   Data length:", metadataAccountInfo?.data.length);
-        console.log("   Executable:", metadataAccountInfo?.executable);
+        // const metadataAccountInfo = await provider.connection.getAccountInfo(nftMetadataPda);
+        // console.log("   Owner:", metadataAccountInfo?.owner.toString());
+        // console.log("   Data length:", metadataAccountInfo?.data.length);
+        // console.log("   Executable:", metadataAccountInfo?.executable);
 
-        const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
-          [
-            Buffer.from("metadata"),
-            METAPLEX_ID.toBuffer(),
-            position.mint.toBuffer(),
-            Buffer.from("edition"),
-          ],
-          METAPLEX_ID
-        );
+        // const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
+        //   [
+        //     Buffer.from("metadata"),
+        //     METAPLEX_ID.toBuffer(),
+        //     position.mint.toBuffer(),
+        //     Buffer.from("edition"),
+        //   ],
+        //   METAPLEX_ID
+        // );
 
-        // Add edition PDA derivation
-        const [nftEditionPda] = PublicKey.findProgramAddressSync(
-          [
-            Buffer.from("metadata"),
-            METAPLEX_ID.toBuffer(),
-            position.mint.toBuffer(),
-          ],
-          METAPLEX_ID
-        );
+        // // Add edition PDA derivation
+        // const [nftEditionPda] = PublicKey.findProgramAddressSync(
+        //   [
+        //     Buffer.from("metadata"),
+        //     METAPLEX_ID.toBuffer(),
+        //     position.mint.toBuffer(),
+        //   ],
+        //   METAPLEX_ID
+        // );
 
-        console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
-        console.log("NFT Edition PDA:", nftEditionPda.toString());
+        // console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
+        // console.log("NFT Edition PDA:", nftEditionPda.toString());
 
-        // Verify NFT ownership
-        const tokenBalance = await provider.connection.getTokenAccountBalance(nftTokenAccount);
-        console.log("\nNFT Token Account Balance:", tokenBalance.value.uiAmount);
+        // // Verify NFT ownership
+        // const tokenBalance = await provider.connection.getTokenAccountBalance(nftTokenAccount);
+        // console.log("\nNFT Token Account Balance:", tokenBalance.value.uiAmount);
 
         // Additional debug info
         console.log("\n=== Additional Debug Info ===");
@@ -184,51 +187,45 @@ describe("shortx-contract", () => {
         console.log("Token Metadata Program ID:", METAPLEX_ID.toString());
 
         // Add token record PDA derivation
-        const [tokenRecordPda] = PublicKey.findProgramAddressSync(
-          [
-            Buffer.from("metadata"),
-            METAPLEX_ID.toBuffer(),
-            position.mint.toBuffer(),
-            Buffer.from("token_record"),
-            nftTokenAccount.toBuffer(),
-          ],
-          METAPLEX_ID
-        );
+        // const [tokenRecordPda] = PublicKey.findProgramAddressSync(
+        //   [
+        //     Buffer.from("metadata"),
+        //     METAPLEX_ID.toBuffer(),
+        //     position.mint.toBuffer(),
+        //     Buffer.from("token_record"),
+        //     nftTokenAccount.toBuffer(),
+        //   ],
+        //   METAPLEX_ID
+        // );
 
-        console.log("Token Record PDA:", tokenRecordPda.toString());
+        // console.log("Token Record PDA:", tokenRecordPda.toString());
 
         try {
           console.log("\n=== Executing Payout Transaction ===");
           
           // Log the instruction data we're about to send
-          console.log("Payout Arguments:", {
-            positionId: position.positionId.toString(),
-            marketId: MARKET_ID.toString(),
-            amount: position.amount.toString(),
-            direction: "yes"
-          });
+          // console.log("Payout Arguments:", {
+          //   positionId: position.positionId.toString(),
+          //   marketId: MARKET_ID.toString(),
+          //   amount: position.amount.toString(),
+          //   direction: "yes"
+          // });
 
           // Update the program call
           await program.methods
-            .settleNftPosition({
-              positionId: position.positionId,
-              marketId: MARKET_ID,
-              amount: position.amount,
-              direction: { yes: {} },
-            })
+            .settlePosition()
             .accountsPartial({
               signer: USER.publicKey,
               market: marketPda,
               marketPositionsAccount: positionAccountPda,
               nftMint: position.mint,
-              userNftTokenAccount: nftTokenAccount,
               userUsdcAta: userUsdcAta,
               marketUsdcVault: marketVault,
               usdcMint: usdcMint,
-              nftMasterEditionAccount: nftMasterEditionPda,
-              nftMetadataAccount: nftMetadataPda,
               tokenProgram: TOKEN_PROGRAM_ID,
               tokenMetadataProgram: METAPLEX_ID,
+              collection: collection,
+              mplCoreProgram: MPL_CORE_PROGRAM_ID,
               associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
               systemProgram: anchor.web3.SystemProgram.programId,
             }).signers([USER])

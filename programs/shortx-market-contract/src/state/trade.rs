@@ -24,9 +24,7 @@ pub struct Position {
     pub direction: PositionDirection, // YES/NO
     pub created_at: i64,
     pub ts: i64,                   // Timestamp
-    pub is_nft: bool,              // Whether this position is represented as NFT
-    pub authority: Option<Pubkey>, // Original bettor (None if converted to NFT)
-    pub mint: Option<Pubkey>,      // NFT mint address (None if not NFT)
+    pub mint: Option<Pubkey>,      // NFT asset mint address
     pub position_status: PositionStatus,
     pub position_nonce: u32,
     pub padding: [u8; 3],
@@ -42,8 +40,6 @@ impl Default for Position {
             direction: PositionDirection::default(),
             created_at: 0,
             ts: 0,
-            is_nft: false,
-            authority: None,
             mint: None,
             position_status: PositionStatus::Init,
             position_nonce: 0,
@@ -120,12 +116,10 @@ impl PositionAccount {
     pub fn emit_position_event(&self, position: Position) -> Result<()> {
         emit!(PositionEvent {
             ts: position.ts,
-            authority: position.authority,
             market_id: position.market_id,
             amount: position.amount,
             direction: position.direction,
             created_at: position.created_at,
-            is_nft: position.is_nft,
             position_status: position.position_status,
         });
 
