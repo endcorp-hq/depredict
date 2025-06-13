@@ -6,8 +6,6 @@ export type Market = {
   authority: string
   oraclePubkey: string
   nftCollectionMint: string
-  nftCollectionMetadata: string
-  nftCollectionMasterEdition: string
   marketUsdcVault: string
   marketId: string
   yesLiquidity: string
