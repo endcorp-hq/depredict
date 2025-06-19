@@ -8,7 +8,7 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getUsdcMint, getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID } from "../helpers";
+import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID, LOCAL_MINT } from "../helpers";
 import { getMint } from "@solana/spl-token";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { fetchCollection } from '@metaplex-foundation/mpl-core'
@@ -30,8 +30,8 @@ describe("shortx-contract", () => {
     const { isDevnet } = await getNetworkConfig();
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
 
-    const { mint } = await getUsdcMint();
-    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+    // Use local mint for testing
+    usdcMint = LOCAL_MINT.publicKey;
     console.log("USDC Mint:", usdcMint.toString());
     collectionMintKeypair = Keypair.generate();
   });
@@ -84,32 +84,24 @@ describe("shortx-contract", () => {
       const mintInfo = await getMint(provider.connection, usdcMint);
       console.log("Mint authority:", mintInfo.mintAuthority?.toBase58());
 
+
+
       // Mint USDC to admin if needed
       const adminUsdcBalance = await provider.connection.getTokenAccountBalance(adminTokenAccount);
-      // if (Number(adminUsdcBalance.value.amount) < 1000) {
-      //   console.log("Minting USDC to admin...");
-      //   const { keypair: usdcMintKeypair } = await getUsdcMint();
-      //   console.log("MintTo authority:", usdcMintKeypair.publicKey.toBase58());
-      //   await mintTo(
-      //     provider.connection,
-      //     ADMIN,
-      //     usdcMint,
-      //     adminTokenAccount,
-      //     ADMIN.publicKey, 
-      //     1000_000_000 // 1000 USDC with 6 decimals
-      //   );
-      // }
-
-      const mintAmount = new anchor.BN(1_000_000 * 10 ** 6); // 1 Million tokens with 6 decimals
-      // await mintTo(
-      //   provider.connection,
-      //   ADMIN, // Payer
-      //   usdcMint,
-      //   adminTokenAccount,
-      //   ADMIN.publicKey, // Mint Authority
-      //   mintAmount.toNumber() 
-      // );
-      console.log(`Minted ${mintAmount.toString()} tokens to admin ATA`);
+      if (Number(adminUsdcBalance.value.amount) < 1000_000_000) { // Less than 1000 USDC
+        console.log("Minting USDC to admin...");
+        await mintTo(
+          provider.connection,
+          ADMIN, // Payer
+          usdcMint,
+          adminTokenAccount,
+          LOCAL_MINT, // Use LOCAL_MINT as mint authority
+          1000_000_000 // 1000 USDC with 6 decimals
+        );
+        console.log("Minted 1000 USDC to admin");
+      } else {
+        console.log(`Admin already has sufficient USDC: ${adminUsdcBalance.value.amount}`);
+      }
     } catch (error) {
       console.error("Error minting tokens:", error);
     }
@@ -190,7 +182,7 @@ describe("shortx-contract", () => {
 
 
       // Use devnet oracle for testing
-      const oraclePubkey = new PublicKey("CYkBEhDgvVHutGKXafAg1gki92SGWDT4MnCxX8KLed6i");
+      const oraclePubkey = new PublicKey("4ZM78DGSfS8AtZ3UKGyfKN6vw7ZJSpRueYE6kPLbKsTK");
 
       const [collectionPda, collectionBump] = PublicKey.findProgramAddressSync(
         [

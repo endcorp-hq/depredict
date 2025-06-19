@@ -4,9 +4,10 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "../target/types/shortx_contract";
 
-// Devnet USDC mint address
-const DEVNET_USDC_MINT = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8"))));
+// Load the local mint keypair that we'll use for testing
+const LOCAL_MINT = Keypair.fromSecretKey(
+  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
+);
 
 const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 // Initialize provider and program
@@ -27,15 +28,10 @@ const USER = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
 );
 
-// const LOCAL_MINT = Keypair.fromSecretKey(
-//   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
-// );
+export const MARKET_ID = new anchor.BN(11);
 
-export const MARKET_ID = new anchor.BN(13);
-
-
-// Export provider and program for use in tests
-export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER };
+// Export provider, program, and keypairs for use in tests
+export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT };
 
 /**
  * Gets the network configuration based on Anchor.toml
@@ -97,21 +93,10 @@ export async function ensureAccountBalance(
 }
 
 /**
- * Gets the appropriate USDC mint based on the environment
- * @returns {Promise<{mint: PublicKey, keypair: Keypair}>} The USDC mint public key and keypair for local testing
+ * Gets the USDC mint for testing
+ * @returns {Promise<{mint: PublicKey}>} The USDC mint public key
  */
-export async function getUsdcMint(): Promise<{ mint: PublicKey; keypair: Keypair }> {
-  const { isDevnet } = await getNetworkConfig();
-
-  if (isDevnet) {
-    console.log("Using devnet USDC mint");
-    return { mint: DEVNET_USDC_MINT.publicKey, keypair: DEVNET_USDC_MINT };
-  } else
-   {
-    console.log("Using local USDC mint");
-    const localMint = Keypair.fromSecretKey(
-      Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
-    );
-    return { mint: localMint.publicKey, keypair: localMint };
-  }
+export async function getUsdcMint(): Promise<{ mint: PublicKey }> {
+  console.log("Using local USDC mint for testing:", LOCAL_MINT.publicKey.toString());
+  return { mint: LOCAL_MINT.publicKey };
 }
