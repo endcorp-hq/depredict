@@ -33,7 +33,10 @@ use crate::{constants::{
     POSITION, 
     USDC_MINT
     }, 
-    constraints::{get_oracle_value, is_valid_oracle}, 
+    constraints::{
+        get_oracle_value, 
+        is_valid_oracle
+    }, 
     state::{
         CloseMarketArgs, 
         Config, 
@@ -221,13 +224,11 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
-        let feed_account = self.oracle_pubkey.try_borrow_data()?;
 
         let ts = Clock::get()?.unix_timestamp;
 
         msg!("Checking if oracle is valid");
-        // check if the oracle is valid
-        require!(is_valid_oracle(feed_account)?, ShortxError::InvalidOracle);
+        require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
 
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
@@ -363,7 +364,8 @@ impl<'info> ResolveMarketContext<'info> {
         } else if direction == Decimal::from(11) {
             WinningDirection::Yes
         } else {
-            WinningDirection::None
+            msg!("Oracle not resolved");
+            return Err(ShortxError::OracleNotResolved.into());
         };
 
         require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
