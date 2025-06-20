@@ -20,6 +20,26 @@ yarn install
 anchor build
 ```
 
+## Test Setup
+
+Before running tests, please follow these steps:
+
+1. **Spin up the Crossbar Docker container**
+
+    We need to spin up a local crossbar server to avoid rate limits when interacting with oracles. We launch this in Docker, pass in our keypair for the oracle owner, and spin up a crossbar image supplied by Switchboard.
+
+    ```bash
+    cd tests 
+    WALLET_KEYPAIR_PATH=~/your/keypair/path/file.json docker-compose up
+    ```
+
+2. **Update `helpers.ts`**
+
+    There are a couple of manual steps involving `tests/helpers.ts`:
+
+    *   **Oracle Public Key**: Before running tests, you need to add your oracle pubkey to the `tests/helpers.ts` file.
+    *   **Market ID**: After you've created a market (e.g., by running `test-create-market`), you need to update the `tests/helpers.ts` file to select the new market ID for other tests.
+
 ## Running Tests
 
 The test suite is organized into several files, each testing different aspects of the contract:
@@ -90,3 +110,4 @@ Tests the complete order lifecycle:
 - Each test file is independent and can be run separately
 - Some tests require specific market IDs to be set correctly
 - The order flow test includes delays to ensure proper transaction sequencing
+

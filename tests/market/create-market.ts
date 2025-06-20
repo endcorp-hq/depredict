@@ -1,5 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";  
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -8,11 +8,14 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID, LOCAL_MINT } from "../helpers";
+import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID, LOCAL_MINT, ORACLE_KEY } from "../helpers";
 import { getMint } from "@solana/spl-token";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { fetchCollection } from '@metaplex-foundation/mpl-core'
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+import { PullFeed, getDefaultDevnetQueue, asV0Tx } from "@switchboard-xyz/on-demand";
+import { CrossbarClient } from "@switchboard-xyz/common";
+import fs from "fs";
 
 const umi = createUmi(provider.connection)
 
@@ -32,7 +35,7 @@ describe("shortx-contract", () => {
 
     // Use local mint for testing
     // usdcMint = LOCAL_MINT.publicKey;
-    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+    usdcMint = LOCAL_MINT.publicKey;
     console.log("USDC Mint:", usdcMint.toString());
     collectionMintKeypair = Keypair.generate();
   });
@@ -127,6 +130,73 @@ describe("shortx-contract", () => {
 
   describe("Market", () => {
     
+    it("Pulls oracle data", async () => {
+
+      const oracleOwner = Keypair.fromSecretKey(
+        new Uint8Array(
+            JSON.parse(fs.readFileSync("/Users/Andrew/.config/solana/id.json", "utf-8"))
+          )
+        );
+      console.log("Using Payer:", oracleOwner.publicKey.toBase58(), "\n");
+
+      const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
+      const connection = new Connection("https://api.devnet.solana.com");
+      const pullFeed = new PullFeed(queue.program, ORACLE_KEY);
+      const connectionEnhanced = pullFeed.program.provider.connection;
+
+      console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
+
+      // Use the local crossbar server
+      const crossbarClient = new CrossbarClient("http://localhost:8080");
+      console.log("Using local crossbar server\n");
+
+      try {
+        const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
+          gateway: "https://switchboard-oracle.everstake.one/devnet",
+          numSignatures: 3,
+          crossbarClient: crossbarClient,
+          chain: "solana",
+          network: "devnet",
+          
+        }, false, oracleOwner.publicKey);
+
+        if (!pullIx || pullIx.length === 0) {
+          throw new Error("Failed to fetch update from local crossbar server.");
+        }
+
+        const tx = await asV0Tx({
+          connection,
+          ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
+          signers: [oracleOwner],
+          computeUnitPrice: 200_000,
+          computeUnitLimitMultiple: 1.3,
+          lookupTables: luts,
+        });
+
+        // simulate and send
+        const sim = await connectionEnhanced.simulateTransaction(tx, {
+          commitment: "processed",
+        });
+        const sig = await connectionEnhanced.sendTransaction(tx, {
+          preflightCommitment: "processed",
+          skipPreflight: true,
+        });
+
+        console.log("Transaction sent:", sig);
+        await connectionEnhanced.confirmTransaction(sig, "processed");
+
+        for (let simulation of responses) {
+          console.log(`Feed Public Key ${simulation.value} job outputs: ${simulation.value}`);
+        }
+        return responses;
+      
+      } catch (error) {
+        console.error(
+          "Failed during fetchUpdateIx or transaction submission:", error
+        );
+      }
+  });
+
     it("Creates market", async () => {
       // --- Get validator time ---
       console.log("\n--- Fetching Validator Time ---");
@@ -181,10 +251,6 @@ describe("shortx-contract", () => {
 
       console.log("Market Positions PDA:", marketPositionsPda.toString());
 
-
-      // Use devnet oracle for testing
-      const oraclePubkey = new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL");
-
       const [collectionPda, collectionBump] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("collection"), 
@@ -226,7 +292,7 @@ describe("shortx-contract", () => {
             market: marketPda,
             collection: collectionPda,
             marketPositionsAccount: marketPositionsPda,
-            oraclePubkey: oraclePubkey,
+            oraclePubkey: ORACLE_KEY,
             usdcMint: usdcMint,
             tokenProgram: TOKEN_PROGRAM_ID,
             config: configPda,

@@ -1,0 +1,15 @@
+version: '3'
+services:
+  crossbar:
+    image: 'switchboardlabs/crossbar'
+    ports:
+      - '8080:8080' # Expose crossbar http port
+      - '9229:9229' # Expose crossbar debug port
+    environment:
+      - 'ANCHOR_WALLET=/app/keypair.json'
+      - 'ANCHOR_PROVIDER_URL=https://api.devnet.solana.com'
+      - 'IPFS_URL=https://api.ipfs.io'
+      - 'DEBUG=1'
+    volumes:
+      - ${WALLET_KEYPAIR_PATH:-./payer-keypair.json}:/app/keypair.json
+      - ./:/sb-wallet 
