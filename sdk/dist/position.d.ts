@@ -18,13 +18,11 @@ export default class Position {
      * @param user - User PublicKey
      *
      */
-    getPositionsForUser(user: PublicKey): Promise<import("./types/position").Position[]>;
     /**
      * Get User positions for a particular market
      * @param user - User PublicKey
      * @param marketId - Market ID
      */
-    getUserPositionsForMarket(user: PublicKey, marketId: number): Promise<import("./types/position").Position[]>;
     /**
      * Get the PDA for a position account
      * @param marketId - Market ID
@@ -52,9 +50,7 @@ export default class Position {
             });
             createdAt: BN;
             ts: BN;
-            isNft: boolean;
             mint: PublicKey | null;
-            authority: PublicKey | null;
             positionStatus: ({
                 open?: undefined;
                 closed?: undefined;
@@ -106,5 +102,4 @@ export default class Position {
         positionAccountPDA: PublicKey;
         ixs: TransactionInstruction[];
     }>;
-    mintExistingPosition(marketId: number, positionId: number, positionNonce: number, payer: PublicKey, metadataUri: string, collectionAuthority: PublicKey, options?: RpcOptions): Promise<import("@solana/web3.js").VersionedTransaction>;
 }

@@ -10,6 +10,19 @@ export const getMarketPDA = (programId, marketId) => {
 export const getConfigPDA = (programId) => {
     return PublicKey.findProgramAddressSync([Buffer.from('config')], programId)[0];
 };
+export const getCollectionPDA = (programId, marketId) => {
+    return PublicKey.findProgramAddressSync([
+        Buffer.from("collection"),
+        new BN(marketId).toArrayLike(Buffer, "le", 8)
+    ], programId)[0];
+};
+export const getPositionNftPDA = (programId, marketId, positionId) => {
+    return PublicKey.findProgramAddressSync([
+        Buffer.from("nft"),
+        new BN(marketId).toArrayLike(Buffer, "le", 8),
+        positionId.toArrayLike(Buffer, "le", 8),
+    ], programId)[0];
+};
 export const getNftMetadataPDA = (nftMint, metaplexProgramId) => {
     return PublicKey.findProgramAddressSync([
         Buffer.from("metadata"),

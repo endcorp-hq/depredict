@@ -116,7 +116,10 @@ impl PositionAccount {
     pub fn emit_position_event(&self, position: Position) -> Result<()> {
         emit!(PositionEvent {
             ts: position.ts,
+            position_id: position.position_id,
             market_id: position.market_id,
+            mint: position.mint,
+            position_nonce: position.position_nonce,
             amount: position.amount,
             direction: position.direction,
             created_at: position.created_at,

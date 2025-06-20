@@ -1,13 +1,14 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Keypair, PublicKey, } from "@solana/web3.js";
+import { PublicKey, } from "@solana/web3.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers";
-import { getConfigPDA, getMarketPDA, getNftMasterEditionPDA, getNftMetadataPDA, getPositionAccountPDA, getSubPositionAccountPDA, } from "./utils/pda/index";
-import sendVersionedTransaction from "./utils/sendVersionedTransaction";
+import { getCollectionPDA, getConfigPDA, getMarketPDA, getPositionAccountPDA, getPositionNftPDA, getSubPositionAccountPDA, } from "./utils/pda/index";
+import createVersionedTransaction from "./utils/sendVersionedTransaction";
 import { swap } from "./utils/swap";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, } from "@solana/spl-token";
 import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants";
 import Position from "./position";
+import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 export default class Trade {
     constructor(program, adminKey, feeVault, usdcMint) {
         this.program = program;
@@ -23,8 +24,15 @@ export default class Trade {
      *
      */
     async getAllMarkets() {
-        const marketV2 = await this.program.account.marketState.all();
-        return marketV2.map(({ account, publicKey }) => formatMarket(account, publicKey));
+        try {
+            const marketV2 = await this.program.account.marketState.all();
+            console.log("SDK:marketV2", marketV2);
+            return marketV2.map(({ account, publicKey }) => formatMarket(account, publicKey));
+        }
+        catch (error) {
+            console.log("SDK: getAllMarkets error", error);
+            throw error;
+        }
     }
     /**
      * Get Market By ID
@@ -70,9 +78,7 @@ export default class Trade {
         const marketPDA = getMarketPDA(this.program.programId, marketId);
         const marketPositionsPDA = getPositionAccountPDA(this.program.programId, marketId);
         // Create a new keypair for the collection mint
-        const collectionMint = Keypair.generate();
-        const collectionMetadataPda = getNftMetadataPDA(collectionMint.publicKey, this.METAPLEX_PROGRAM_ID);
-        const collectionMasterEditionPda = getNftMasterEditionPDA(collectionMint.publicKey, this.METAPLEX_PROGRAM_ID);
+        const collectionMintPDA = getCollectionPDA(this.program.programId, marketId);
         try {
             ixs.push(await this.program.methods
                 .createMarket({
@@ -82,25 +88,22 @@ export default class Trade {
                 metadataUri: metadataUri,
             })
                 .accountsPartial({
-                signer: payer,
+                payer: payer,
                 feeVault: this.FEE_VAULT,
                 config: configPDA,
                 oraclePubkey: oraclePubkey,
                 market: marketPDA,
                 marketPositionsAccount: marketPositionsPDA,
                 usdcMint: this.USDC_MINT,
-                nftCollectionMint: collectionMint.publicKey,
-                nftCollectionMetadata: collectionMetadataPda,
-                nftCollectionMasterEdition: collectionMasterEditionPda,
+                collection: collectionMintPDA,
                 tokenProgram: TOKEN_PROGRAM_ID,
+                mplCoreProgram: MPL_CORE_PROGRAM_ID,
                 associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
                 systemProgram: anchor.web3.SystemProgram.programId,
-                tokenMetadataProgram: METAPLEX_ID,
             })
                 .instruction());
-            const tx = await sendVersionedTransaction(this.program, ixs, payer, options);
-            tx.sign([collectionMint]);
-            return tx;
+            const tx = await createVersionedTransaction(this.program, ixs, payer, options);
+            return { tx, marketId };
         }
         catch (error) {
             console.log("error", error);
@@ -122,8 +125,13 @@ export default class Trade {
         const ixs = [];
         const addressLookupTableAccounts = [];
         const { positionAccountPDA, ixs: positionAccountIxs } = await this.position.getPositionAccountIxs(marketId, payer);
+        console.log("SDK: positions account in trade open", positionAccountPDA.toString());
         const marketPDA = getMarketPDA(this.program.programId, marketId);
+        const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+        const nextPositionId = marketAccount.nextPositionId;
         const configPDA = getConfigPDA(this.program.programId);
+        const collectionPDA = getCollectionPDA(this.program.programId, marketId);
+        const positionNftPDA = getPositionNftPDA(this.program.programId, marketId, nextPositionId);
         if (positionAccountIxs.length > 0) {
             ixs.push(...positionAccountIxs);
         }
@@ -157,6 +165,9 @@ export default class Trade {
                 market: marketPDA,
                 usdcMint: mint,
                 config: configPDA,
+                collection: collectionPDA,
+                mplCoreProgram: MPL_CORE_PROGRAM_ID,
+                positionNftAccount: positionNftPDA,
                 tokenProgram: TOKEN_PROGRAM_ID,
                 associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
                 systemProgram: anchor.web3.SystemProgram.programId,
@@ -252,52 +263,73 @@ export default class Trade {
         }
         return ixs;
     }
-    /**
-     * Payout Order
-     * @param args.marketId - The ID of the Market
-     * @param args.orderId - The ID of the Order to Payout
-     * @param args.userNonce - The nonce of the user
-     *
-     * @param options - RPC options
-     *
-     */
-    async payoutOrder(orders, payer, options) {
-        const ixs = [];
-        const configPDA = getConfigPDA(this.program.programId);
-        const marketIdBN = new BN(orders[0].marketId);
-        const marketPDA = getMarketPDA(this.program.programId, orders[0].marketId);
-        if (orders.length > 10) {
-            throw new Error("Max 10 orders per transaction");
-        }
-        for (const order of orders) {
-            let positionAccountPDA = getPositionAccountPDA(this.program.programId, order.marketId);
-            if (order.userNonce !== 0) {
-                const subPositionAccountPDA = getSubPositionAccountPDA(this.program.programId, order.marketId, marketPDA, order.userNonce);
-                positionAccountPDA = getPositionAccountPDA(this.program.programId, order.marketId, subPositionAccountPDA);
-            }
-            try {
-                ixs.push(await this.program.methods
-                    .settlePosition(new BN(order.orderId))
-                    .accountsPartial({
-                    signer: payer,
-                    feeVault: this.FEE_VAULT,
-                    marketPositionsAccount: positionAccountPDA,
-                    market: marketPDA,
-                    usdcMint: this.USDC_MINT,
-                    config: configPDA,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-                    systemProgram: anchor.web3.SystemProgram.programId,
-                })
-                    .instruction());
-            }
-            catch (error) {
-                console.log("error", error);
-                throw error;
-            }
-        }
-        return ixs;
-    }
+    // /**
+    //  * Payout Order
+    //  * @param args.marketId - The ID of the Market
+    //  * @param args.orderId - The ID of the Order to Payout
+    //  * @param args.userNonce - The nonce of the user
+    //  *
+    //  * @param options - RPC options
+    //  *
+    //  */
+    // async payoutOrder(
+    //   orders: {
+    //     marketId: number;
+    //     orderId: number;
+    //     userNonce: number;
+    //   }[],
+    //   payer: PublicKey,
+    //   options?: RpcOptions
+    // ) {
+    //   const ixs: TransactionInstruction[] = [];
+    //   const configPDA = getConfigPDA(this.program.programId);
+    //   const marketIdBN = new BN(orders[0].marketId);
+    //   const marketPDA = getMarketPDA(this.program.programId, orders[0].marketId);
+    //   if (orders.length > 10) {
+    //     throw new Error("Max 10 orders per transaction");
+    //   }
+    //   for (const order of orders) {
+    //     let positionAccountPDA = getPositionAccountPDA(
+    //       this.program.programId,
+    //       order.marketId
+    //     );
+    //     if (order.userNonce !== 0) {
+    //       const subPositionAccountPDA = getSubPositionAccountPDA(
+    //         this.program.programId,
+    //         order.marketId,
+    //         marketPDA,
+    //         order.userNonce
+    //       );
+    //       positionAccountPDA = getPositionAccountPDA(
+    //         this.program.programId,
+    //         order.marketId,
+    //         subPositionAccountPDA
+    //       );
+    //     }
+    //     try {
+    //       ixs.push(
+    //         await this.program.methods
+    //           .settlePosition(new BN(order.orderId))
+    //           .accountsPartial({
+    //             signer: payer,
+    //             feeVault: this.FEE_VAULT,
+    //             marketPositionsAccount: positionAccountPDA,
+    //             market: marketPDA,
+    //             usdcMint: this.USDC_MINT,
+    //             config: configPDA,
+    //             tokenProgram: TOKEN_PROGRAM_ID,
+    //             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+    //             systemProgram: anchor.web3.SystemProgram.programId,
+    //           })
+    //           .instruction()
+    //       );
+    //     } catch (error) {
+    //       console.log("error", error);
+    //       throw error;
+    //     }
+    //   }
+    //   return ixs;
+    // }
     /**
      * Update Market
      * @param marketId - The ID of the market
@@ -319,80 +351,54 @@ export default class Trade {
             .instruction());
         return ixs;
     }
-    async payoutNft(nftPositions, payer, options) {
+    async payoutPosition(marketId, payer, positionId, positionNonce, options) {
         const ixs = [];
-        const marketIdBN = new BN(nftPositions[0].marketId);
-        const marketPda = getMarketPDA(this.program.programId, nftPositions[0].marketId);
-        const marketAccount = await this.program.account.marketState.fetch(marketPda);
-        const nftCollectionMint = marketAccount.nftCollectionMint;
-        if (!nftCollectionMint) {
-            throw new Error("NFT collection mint not found");
-        }
+        const marketPda = getMarketPDA(this.program.programId, marketId);
+        const collectionPda = getCollectionPDA(this.program.programId, marketId);
         const userUsdcAta = getAssociatedTokenAddressSync(this.USDC_MINT, payer, false, TOKEN_PROGRAM_ID);
         const marketVault = getAssociatedTokenAddressSync(this.USDC_MINT, marketPda, true, // allowOwnerOffCurve since marketPda is a PDA
         TOKEN_PROGRAM_ID);
-        for (const position of nftPositions) {
-            if (position.marketId !== marketIdBN.toNumber()) {
-                throw new Error("Market ID mismatch"); //all positions must be for the same market
-            }
-            let positionAccountPDA = getPositionAccountPDA(this.program.programId, position.marketId);
-            if (position.positionNonce !== 0) {
-                // if a sub position account
-                const subPositionAccountPDA = getSubPositionAccountPDA(this.program.programId, position.marketId, marketPda, position.positionNonce);
-                positionAccountPDA = getPositionAccountPDA(this.program.programId, position.marketId, subPositionAccountPDA);
-            }
-            // get the position from the position account
-            const positionAccount = await this.program.account.positionAccount.fetch(positionAccountPDA);
-            const currentPosition = positionAccount.positions.find((p) => p.positionId.toNumber() === position.positionId);
-            if (!currentPosition) {
-                throw new Error("Position not found in position account");
-            }
-            const nftMint = currentPosition.mint;
-            if (!nftMint) {
-                throw new Error("Position is not an NFT");
-            }
-            const nftMetadataPda = getNftMetadataPDA(nftMint, this.METAPLEX_PROGRAM_ID);
-            console.log("NFT Metadata PDA:", nftMetadataPda.toString());
-            // Get the NFT master edition PDA
-            const nftMasterEditionPda = getNftMasterEditionPDA(nftMint, this.METAPLEX_PROGRAM_ID);
-            console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
-            const nftCollectionMetadataPda = getNftMetadataPDA(nftCollectionMint, this.METAPLEX_PROGRAM_ID);
-            console.log("NFT Collection Metadata PDA:", nftCollectionMetadataPda.toString());
-            const nftTokenAccount = getAssociatedTokenAddressSync(nftMint, payer, false, // allowOwnerOffCurve
-            TOKEN_PROGRAM_ID);
-            console.log("NFT Token Account:", nftTokenAccount.toString());
-            try {
-                ixs.push(await this.program.methods
-                    .settleNftPosition({
-                    positionId: new BN(position.positionId),
-                    marketId: marketIdBN,
-                    amount: new BN(currentPosition.amount),
-                    direction: currentPosition.direction,
-                })
-                    .accountsPartial({
-                    signer: payer,
-                    marketPositionsAccount: positionAccountPDA,
-                    nftMint: nftMint,
-                    userNftTokenAccount: nftTokenAccount,
-                    userUsdcAta: userUsdcAta,
-                    marketUsdcVault: marketVault,
-                    usdcMint: this.USDC_MINT,
-                    nftMetadataAccount: nftMetadataPda,
-                    nftMasterEditionAccount: nftMasterEditionPda,
-                    market: marketPda,
-                    nftCollectionMetadata: nftCollectionMetadataPda,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    tokenMetadataProgram: METAPLEX_ID,
-                    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-                    systemProgram: anchor.web3.SystemProgram.programId,
-                })
-                    .instruction());
-            }
-            catch (error) {
-                console.log("error", error);
-                throw error;
-            }
+        let positionAccountPDA = getPositionAccountPDA(this.program.programId, marketId);
+        if (positionNonce !== 0) {
+            // if a sub position account
+            const subPositionAccountPDA = getSubPositionAccountPDA(this.program.programId, marketId, marketPda, positionNonce);
+            positionAccountPDA = getPositionAccountPDA(this.program.programId, marketId, subPositionAccountPDA);
         }
-        return ixs;
+        // get the position from the position account
+        const positionAccount = await this.program.account.positionAccount.fetch(positionAccountPDA);
+        const currentPosition = positionAccount.positions.find((p) => p.positionId.toNumber() === positionId);
+        if (!currentPosition) {
+            throw new Error("Position not found in position account");
+        }
+        const nftMint = currentPosition.mint;
+        if (!nftMint) {
+            throw new Error("Position is not an NFT");
+        }
+        try {
+            ixs.push(await this.program.methods
+                .settlePosition()
+                .accountsPartial({
+                signer: payer,
+                marketPositionsAccount: positionAccountPDA,
+                nftMint: nftMint,
+                userUsdcAta: userUsdcAta,
+                marketUsdcVault: marketVault,
+                usdcMint: this.USDC_MINT,
+                market: marketPda,
+                collection: collectionPda,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                tokenMetadataProgram: METAPLEX_ID,
+                mplCoreProgram: MPL_CORE_PROGRAM_ID,
+                associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+                .instruction());
+        }
+        catch (error) {
+            console.log("error", error);
+            throw error;
+        }
+        const tx = await createVersionedTransaction(this.program, ixs, payer, options);
+        return tx;
     }
 }

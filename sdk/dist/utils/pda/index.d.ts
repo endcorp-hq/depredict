@@ -1,7 +1,10 @@
 import { PublicKey } from '@solana/web3.js';
+import BN from 'bn.js';
 export declare const getTokenATA: (address: PublicKey, Mint: PublicKey, program?: PublicKey) => PublicKey;
 export declare const getMarketPDA: (programId: PublicKey, marketId: number) => PublicKey;
 export declare const getConfigPDA: (programId: PublicKey) => PublicKey;
+export declare const getCollectionPDA: (programId: PublicKey, marketId: number) => PublicKey;
+export declare const getPositionNftPDA: (programId: PublicKey, marketId: number, positionId: BN) => PublicKey;
 export declare const getNftMetadataPDA: (nftMint: PublicKey, metaplexProgramId: PublicKey) => PublicKey;
 export declare const getNftMasterEditionPDA: (nftMint: PublicKey, metaplexProgramId: PublicKey) => PublicKey;
 export declare const getCustomerPDA: (programId: PublicKey, customerId: number) => PublicKey;

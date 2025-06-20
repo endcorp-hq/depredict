@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/shortx_contract.json`.
  */
 export type ShortxContract = {
-  "address": "2gPyynVwHkCZPKGKYkvSGdmTYmTvdgjPU4WwNXLcq3N7",
+  "address": "HWEeUwnYT7PN5LdJ2t4dyYSqpEn1rcs9coFkqCqMuCiF",
   "metadata": {
     "name": "shortxContract",
     "version": "0.1.0",
@@ -2054,6 +2054,20 @@ export type ShortxContract = {
       "type": {
         "kind": "struct",
         "fields": [
+          {
+            "name": "positionId",
+            "type": "u64"
+          },
+          {
+            "name": "mint",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "positionNonce",
+            "type": "u32"
+          },
           {
             "name": "marketId",
             "type": "u64"

@@ -44,7 +44,10 @@ export default class Trade {
      * @param options - RPC options
      *
      */
-    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<anchor.web3.VersionedTransaction>;
+    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<{
+        tx: anchor.web3.VersionedTransaction;
+        marketId: number;
+    }>;
     /**
      * Open Order
      * @param args.marketId - The ID of the Market
@@ -92,20 +95,6 @@ export default class Trade {
      */
     closeMarket(marketId: number, payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
     /**
-     * Payout Order
-     * @param args.marketId - The ID of the Market
-     * @param args.orderId - The ID of the Order to Payout
-     * @param args.userNonce - The nonce of the user
-     *
-     * @param options - RPC options
-     *
-     */
-    payoutOrder(orders: {
-        marketId: number;
-        orderId: number;
-        userNonce: number;
-    }[], payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
-    /**
      * Update Market
      * @param marketId - The ID of the market
      * @param marketEnd - The end time of the market
@@ -113,9 +102,5 @@ export default class Trade {
      *
      */
     updateMarket(marketId: number, marketEnd: number, payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
-    payoutNft(nftPositions: {
-        marketId: number;
-        positionId: number;
-        positionNonce: number;
-    }[], payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
+    payoutPosition(marketId: number, payer: PublicKey, positionId: number, positionNonce: number, options?: RpcOptions): Promise<anchor.web3.VersionedTransaction>;
 }
