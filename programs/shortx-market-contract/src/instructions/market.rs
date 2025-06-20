@@ -227,6 +227,7 @@ impl<'info> MarketContext<'info> {
 
         let ts = Clock::get()?.unix_timestamp;
 
+        msg!("Checking if oracle is valid");
         // check if the oracle is valid
         require!(is_valid_oracle(feed_account)?, ShortxError::InvalidOracle);
 

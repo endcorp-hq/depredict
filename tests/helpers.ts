@@ -28,7 +28,7 @@ const USER = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
 );
 
-export const MARKET_ID = new anchor.BN(11);
+export const MARKET_ID = new anchor.BN(1);
 
 // Export provider, program, and keypairs for use in tests
 export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT };

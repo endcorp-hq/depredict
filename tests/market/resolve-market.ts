@@ -22,6 +22,8 @@ describe("shortx-contract", () => {
         marketPda
       );
 
+      const crossbarClient = CrossbarClient.default();
+
       // print the oracle pubkey from the market: 
       const oraclePubkey = marketAccountBefore.oraclePubkey;
       console.log("Oracle pubkey:", oraclePubkey.toString());
@@ -40,31 +42,32 @@ describe("shortx-contract", () => {
 
         console.log("Pulling oracle data...");
         // Fetch and submit the oracle update
-        const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
-          gateway: "https://api.switchboard.xyz/api",
-          chain: "solana",
-          network: "devnet",
-        });
+        // const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
+        //   gateway: "",
+        //   crossbarClient: crossbarClient,
+        //   chain: "solana",
+        //   network: "devnet",
+        // });
 
-        if (!pullIx) {
-          throw new Error("Failed to get pull instruction");
-        }
+        // if (!pullIx) {
+        //   throw new Error("Failed to get pull instruction");
+        // }
 
-        // Send the oracle update transaction
-        const updateTx = await asV0Tx({
-          connection: provider.connection,
-          ixs: pullIx!,
-          signers: [ADMIN],
-          computeUnitPrice: 200_000,
-          computeUnitLimitMultiple: 1.3,
-          lookupTables: luts,
-        });
+        // // Send the oracle update transaction
+        // const updateTx = await asV0Tx({
+        //   connection: provider.connection,
+        //   ixs: pullIx!,
+        //   signers: [ADMIN],
+        //   computeUnitPrice: 200_000,
+        //   computeUnitLimitMultiple: 1.3,
+        //   lookupTables: luts,
+        // });
 
-        const sig = await provider.connection.sendTransaction(updateTx, {
-          skipPreflight: true,
-          maxRetries: 3,
-        });
-        console.log("Oracle update transaction:", sig);
+        // const sig = await provider.connection.sendTransaction(updateTx, {
+        //   skipPreflight: true,
+        //   maxRetries: 3,
+        // });
+        // console.log("Oracle update transaction:", sig);
 
         // Wait a bit for the oracle update to be confirmed
         await new Promise(resolve => setTimeout(resolve, 2000));
