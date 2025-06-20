@@ -20,34 +20,13 @@ export type Market = {
   winningDirection: WinningDirection
 }
 
-export type FilteredMarket = {
-  address: string
-  bump: number
-  authority: string
-  oraclePubkey: string
-  nftCollectionMint: string
-  nftCollectionMetadata: string
-  nftCollectionMasterEdition: string
-  marketUsdcVault: string
-  marketId: string
-  yesLiquidity: string
-  noLiquidity: string
-  volume: string
-  updateTs: string
-  nextPositionId: string
-  marketState: string
-  marketStart: string
-  marketEnd: string
-  question: string
-  winningDirection: string
+
+export enum MarketStates {
+  ACTIVE = 'active',
+  ENDED = 'ended',
+  RESOLVING = 'resolving',
+  RESOLVED = 'resolved'
 }
-
-
-export type MarketStates =
-  | { active: {} }
-  | { ended: {} }
-  | { resolving: {} }
-  | { resolved: {} }
 
 
 export enum WinningDirection {
@@ -92,7 +71,6 @@ export type OpenOrderArgs = {
 }
 
 export type CreateMarketArgs = {
-  marketId: number
   startTime: number
   endTime: number
   question: string

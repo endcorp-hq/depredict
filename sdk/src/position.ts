@@ -2,30 +2,20 @@ import { BN, Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "./types/shortx";
 import { formatPositionAccount } from "./utils/helpers";
 import {
-  Keypair,
   PublicKey,
   SystemProgram,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
   TransactionInstruction,
 } from "@solana/web3.js";
 
 import {
   getMarketPDA,
-  getNftMasterEditionPDA,
-  getNftMetadataPDA,
   getPositionAccountPDA,
   getSubPositionAccountPDA,
 } from "./utils/pda";
 import { RpcOptions } from "./types";
 import { PositionAccount, PositionStatus } from "./types/position";
 import { METAPLEX_ID } from "./utils/constants";
-import {
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddressSync,
-  TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
-import createVersionedTransaction from "./utils/sendVersionedTransaction";
 
 export default class Position {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
@@ -208,6 +198,8 @@ export default class Position {
         break;
       }
 
+      console.log("SDK: positionAccount", positionAccount);
+
       let freeSlots = 0;
 
       positionAccount.positions.forEach((position) => {
@@ -242,6 +234,8 @@ export default class Position {
       return getPositionAccountPDA(this.program.programId, Number(marketId));
     }
 
+    console.log("SDK: nonce", nonce);
+
     const subPositionAccountPDA = getSubPositionAccountPDA(
       this.program.programId,
       Number(marketId),
@@ -272,11 +266,15 @@ export default class Position {
       marketId
     );
 
+    console.log("SDK: marketPositionsAccount from positions", marketPositionsAccount.toString());
+
     const ixs: TransactionInstruction[] = [];
 
     let positionAccounts: PositionAccount[] = [];
 
     positionAccounts = await this.getPositionsAccountsForMarket(marketId);
+
+    console.log("SDK: initial positionAccounts", positionAccounts);
 
     if (positionAccounts.length === 0) {
       throw new Error(
@@ -285,32 +283,45 @@ export default class Position {
     }
 
     try {
-      const positionAccountPDA = this.getPositionAccountNonceWithSlots(
+      const positionAccountWithSlots = this.getPositionAccountNonceWithSlots(
         positionAccounts,
         payer
       );
 
-      return { positionAccountPDA, ixs };
+      console.log("SDK: returned positionAccountPDA", positionAccountWithSlots);
+
+      return { positionAccountPDA: positionAccountWithSlots, ixs };
     } catch {
       const mainPositionAccount = positionAccounts.find(
         (positionAccount) => !positionAccount.isSubPosition
       );
+
       if (!mainPositionAccount) {
         throw new Error(
           "Main position account not found. Cannot determine next sub-position nonce."
         );
       }
 
-      const subPositionAccountPDA = getSubPositionAccountPDA(
+      const subPositionAccountKey = getSubPositionAccountPDA(
         this.program.programId,
         marketId,
         marketAddress,
         Number(mainPositionAccount.nonce) + 1
       );
 
+      console.log("SDK: subPositionAccountKey", subPositionAccountKey.toString());
+
+      const subPositionAccountPDA = getPositionAccountPDA(
+        this.program.programId,
+        marketId,
+        subPositionAccountKey
+      );
+
+      console.log("SDK: subPositionAccountPDA", subPositionAccountPDA.toString());
+
       ixs.push(
         await this.program.methods
-          .createSubPositionAccount(subPositionAccountPDA)
+          .createSubPositionAccount(subPositionAccountKey)
           .accountsPartial({
             signer: payer,
             market: marketAddress,
@@ -322,11 +333,7 @@ export default class Position {
       );
 
       return {
-        positionAccountPDA: getPositionAccountPDA(
-          this.program.programId,
-          marketId,
-          subPositionAccountPDA
-        ),
+        positionAccountPDA: subPositionAccountPDA,
         ixs,
       };
     }

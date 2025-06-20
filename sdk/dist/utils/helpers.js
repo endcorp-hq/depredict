@@ -20,9 +20,7 @@ export const formatMarket = (account, address) => {
         noLiquidity: account.noLiquidity.toString(),
         volume: account.volume.toString(),
         oraclePubkey: account.oraclePubkey ? account.oraclePubkey.toString() : '',
-        nftCollectionMint: account.nftCollectionMint ? account.nftCollectionMint.toString() : '',
-        nftCollectionMetadata: account.nftCollectionMetadata ? account.nftCollectionMetadata.toString() : '',
-        nftCollectionMasterEdition: account.nftCollectionMasterEdition ? account.nftCollectionMasterEdition.toString() : '',
+        nftCollectionMint: account.nftCollection ? account.nftCollection.toString() : '',
         marketUsdcVault: account.marketUsdcVault ? account.marketUsdcVault.toString() : '',
         marketState: getMarketState(account.marketState),
         updateTs: account.updateTs.toString(),
@@ -44,15 +42,12 @@ export const formatPositionAccount = (account, marketId) => {
     };
 };
 export const formatPosition = (position) => {
-    console.log("formatPosition SDK", position.positionId.toString(), position.isNft);
     return {
         ts: position.ts.toString(),
-        authority: position.authority?.toBase58() || '',
         positionNonce: position.positionNonce.toString(),
         createdAt: position.createdAt ? position.createdAt.toString() : '',
         positionId: position.positionId.toString(),
         marketId: position.marketId.toString(),
-        isNft: position.isNft,
         mint: position.mint ? position.mint.toString() : '',
         positionStatus: getPositionStatus(position.positionStatus),
         direction: getPositionDirection(position.direction),
