@@ -43,7 +43,6 @@ use crate::{constants::{
         Position, 
         PositionAccount, 
         PositionStatus, 
-        ResolveMarketArgs, 
         UpdateMarketArgs,
         WinningDirection
     }
@@ -136,14 +135,13 @@ pub struct UpdateMarketContext<'info> {
 
 // Context for resolving the market
 #[derive(Accounts)]
-#[instruction(args: ResolveMarketArgs)]
 pub struct ResolveMarketContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
     #[account(
         mut,
-        constraint = market.market_id == args.market_id @ ShortxError::InvalidMarketId
+        constraint = market.authority == signer.key() @ ShortxError::Unauthorized
     )]
     pub market: Box<Account<'info, MarketState>>,
 
@@ -347,7 +345,7 @@ impl<'info> UpdateMarketContext<'info> {
 }
 
 impl<'info> ResolveMarketContext<'info> {
-    pub fn resolve_market(&mut self, args: ResolveMarketArgs) -> Result<()> {
+    pub fn resolve_market(&mut self) -> Result<()> {
         let market = &mut self.market;
         let signer = &self.signer;
 
@@ -369,10 +367,11 @@ impl<'info> ResolveMarketContext<'info> {
         };
 
         require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
-
+        msg!("Winning direction: {:?}", winning_direction);
         // Update market state
+
+        market.winning_direction = winning_direction;
         market.market_state = MarketStates::Resolved;
-        market.winning_direction = args.winning_direction;
         market.update_ts = ts;
 
         market.emit_market_event()?;

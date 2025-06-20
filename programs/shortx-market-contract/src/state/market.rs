@@ -57,12 +57,6 @@ pub struct CloseMarketArgs {
     pub market_id: u64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct ResolveMarketArgs {
-    pub market_id: u64,
-    pub winning_direction: WinningDirection,
-}
-
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, PartialEq, Eq, Debug)]
 pub enum MarketStates {
     //market is active and can be voted on by users
