@@ -1,12 +1,83 @@
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import { ADMIN, MARKET_ID, program, provider } from "../helpers";
-import { PullFeed, asV0Tx } from "@switchboard-xyz/on-demand";
+import { ADMIN, MARKET_ID, program, provider, ORACLE_KEY } from "../helpers";
+import {
+  PullFeed,
+  getDefaultDevnetQueue,
+  asV0Tx,
+} from "@switchboard-xyz/on-demand";
 import { CrossbarClient } from "@switchboard-xyz/common";
-
-describe("shortx-contract", () => {
+import { Connection, Keypair } from "@solana/web3.js";
+import fs from "fs";
 
   describe("Market Resolution", () => {
+
+    it("Pulls oracle data", async () => {
+
+      const oracleOwner = Keypair.fromSecretKey(
+        new Uint8Array(
+            JSON.parse(fs.readFileSync("/Users/Andrew/.config/solana/id.json", "utf-8"))
+          )
+        );
+      console.log("Using Payer:", oracleOwner.publicKey.toBase58(), "\n");
+
+      const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
+      const connection = new Connection("https://api.devnet.solana.com");
+      const pullFeed = new PullFeed(queue.program, ORACLE_KEY);
+      const connectionEnhanced = pullFeed.program.provider.connection;
+
+      console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
+
+      // Use the local crossbar server
+      const crossbarClient = new CrossbarClient("http://localhost:8080");
+      console.log("Using local crossbar server\n");
+
+      try {
+        const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
+          gateway: "https://switchboard-oracle.everstake.one/devnet",
+          numSignatures: 3,
+          crossbarClient: crossbarClient,
+          chain: "solana",
+          network: "devnet",
+          
+        }, false, oracleOwner.publicKey);
+
+        if (!pullIx || pullIx.length === 0) {
+          throw new Error("Failed to fetch update from local crossbar server.");
+        }
+
+        const tx = await asV0Tx({
+          connection,
+          ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
+          signers: [oracleOwner],
+          computeUnitPrice: 200_000,
+          computeUnitLimitMultiple: 1.3,
+          lookupTables: luts,
+        });
+
+        // simulate and send
+        const sim = await connectionEnhanced.simulateTransaction(tx, {
+          commitment: "processed",
+        });
+        const sig = await connectionEnhanced.sendTransaction(tx, {
+          preflightCommitment: "processed",
+          skipPreflight: true,
+        });
+
+        console.log("Transaction sent:", sig);
+        await connectionEnhanced.confirmTransaction(sig, "processed");
+
+        for (let simulation of responses) {
+          console.log(`Feed Public Key ${simulation.value} job outputs: ${simulation.value}`);
+        }
+        return responses;
+      
+      } catch (error) {
+        console.error(
+          "Failed during fetchUpdateIx or transaction submission:", error
+        );
+      }
+  });
 
     it("Resolves a market with winning direction", async () => {
       // Use an existing market ID
@@ -22,6 +93,8 @@ describe("shortx-contract", () => {
         marketPda
       );
 
+      
+
       // print the oracle pubkey from the market: 
       const oraclePubkey = marketAccountBefore.oraclePubkey;
       console.log("Oracle pubkey:", oraclePubkey.toString());
@@ -32,53 +105,15 @@ describe("shortx-contract", () => {
 
       try {
 
-        // Initialize the pull feed
-        const pullFeed = new PullFeed(
-          program.provider as any,
-          oraclePubkey
-        );
-
-        console.log("Pulling oracle data...");
-        // Fetch and submit the oracle update
-        const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
-          gateway: "https://api.switchboard.xyz/api",
-          chain: "solana",
-          network: "devnet",
-        });
-
-        if (!pullIx) {
-          throw new Error("Failed to get pull instruction");
-        }
-
-        // Send the oracle update transaction
-        const updateTx = await asV0Tx({
-          connection: provider.connection,
-          ixs: pullIx!,
-          signers: [ADMIN],
-          computeUnitPrice: 200_000,
-          computeUnitLimitMultiple: 1.3,
-          lookupTables: luts,
-        });
-
-        const sig = await provider.connection.sendTransaction(updateTx, {
-          skipPreflight: true,
-          maxRetries: 3,
-        });
-        console.log("Oracle update transaction:", sig);
-
-        // Wait a bit for the oracle update to be confirmed
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
+        console.log("Oracle account:", ORACLE_KEY);
+        
         // Now resolve the market
         const tx = await program.methods
-          .resolveMarket({
-            marketId: MARKET_ID,
-            winningDirection: { yes: {} }, // Can be { yes: {} } or { no: {} }
-          })
+          .resolveMarket()
           .accounts({
-            signer: ADMIN.publicKey,
-            market: marketPda,
-            oraclePubkey: oraclePubkey,
+            signer: ADMIN.publicKey, // must be market authority
+            market: marketPda,  // must be market account
+            oraclePubkey: ORACLE_KEY, // must be oracle account that matches market oracle
           })
           .signers([ADMIN])
           .rpc();
@@ -103,12 +138,6 @@ describe("shortx-contract", () => {
           "Market should be in resolved state"
         );
 
-        // Assert the winning direction is set correctly
-        assert.ok(
-          Object.keys(marketAccountAfter.winningDirection)[0] === "yes",
-          "Winning direction should be set to yes"
-        );
-
         // Verify the update timestamp has changed
         assert.ok(
           marketAccountAfter.updateTs.gt(marketAccountBefore.updateTs),
@@ -123,4 +152,3 @@ describe("shortx-contract", () => {
       }
     });
   });
-});

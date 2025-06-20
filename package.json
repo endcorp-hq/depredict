@@ -9,7 +9,9 @@
     "@metaplex-foundation/mpl-core": "^1.4.0",
     "@metaplex-foundation/umi": "^1.2.0",
     "@metaplex-foundation/umi-bundle-defaults": "^1.2.0",
-    "@solana/spl-token": "^0.4.13"
+    "@solana/spl-token": "^0.4.13",
+    "@switchboard-xyz/common": "^3.4.1",
+    "@switchboard-xyz/on-demand": "^2.10.4"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",

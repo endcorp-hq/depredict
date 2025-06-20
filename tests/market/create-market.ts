@@ -1,5 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";  
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -8,11 +8,14 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID, LOCAL_MINT } from "../helpers";
+import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID, LOCAL_MINT, ORACLE_KEY } from "../helpers";
 import { getMint } from "@solana/spl-token";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { fetchCollection } from '@metaplex-foundation/mpl-core'
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+import { PullFeed, getDefaultDevnetQueue, asV0Tx } from "@switchboard-xyz/on-demand";
+import { CrossbarClient } from "@switchboard-xyz/common";
+import fs from "fs";
 
 const umi = createUmi(provider.connection)
 
@@ -31,80 +34,81 @@ describe("shortx-contract", () => {
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
 
     // Use local mint for testing
+    // usdcMint = LOCAL_MINT.publicKey;
     usdcMint = LOCAL_MINT.publicKey;
     console.log("USDC Mint:", usdcMint.toString());
     collectionMintKeypair = Keypair.generate();
   });
 
   before(async () => {
-    // Request airdrop for admin if needed
-    const balance = await provider.connection.getBalance(ADMIN.publicKey);
-    if (balance < 1_000_000_000) { // Less than 1 SOL
-      console.log("Requesting airdrop for admin...");
-      const signature = await provider.connection.requestAirdrop(ADMIN.publicKey, 2_000_000_000); // 2 SOL
-      const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
-      await provider.connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
-    }
+    // // Request airdrop for admin if needed
+    // const balance = await provider.connection.getBalance(ADMIN.publicKey);
+    // if (balance < 1_000_000_000) { // Less than 1 SOL
+    //   console.log("Requesting airdrop for admin...");
+    //   const signature = await provider.connection.requestAirdrop(ADMIN.publicKey, 2_000_000_000); // 2 SOL
+    //   const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
+    //   await provider.connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+    // }
 
-    try {
-      await createMint(
-        provider.connection,
-        ADMIN, // Payer
-        ADMIN.publicKey, // Mint Authority
-        ADMIN.publicKey, // Freeze Authority (optional)
-        0, // Decimals
-        collectionMintKeypair // Mint Keypair
-      );
-      console.log(
-        `Initialized mint account ${usdcMint.toString()} on-chain.`
-      );
-    } catch (error) {
-      // Log error if mint already exists (might happen in specific test setups, though unlikely with anchor test)
-      if (error.message.includes("already in use")) {
-        console.log(
-          `Mint account ${usdcMint.toString()} already exists.`
-        );
-      } else {
-        throw error; // Re-throw other errors
-      }
-    }
-    try {
-      const adminTokenAccount = (
-        await getOrCreateAssociatedTokenAccount(
-          provider.connection,
-          ADMIN, // Payer
-          usdcMint,
-          ADMIN.publicKey
-        )
-      ).address;
-      console.log(
-        `Admin ATA (${usdcMint.toString()}): ${adminTokenAccount.toString()}`
-      );
+    // try {
+    //   await createMint(
+    //     provider.connection,
+    //     ADMIN, // Payer
+    //     ADMIN.publicKey, // Mint Authority
+    //     ADMIN.publicKey, // Freeze Authority (optional)
+    //     0, // Decimals
+    //     collectionMintKeypair // Mint Keypair
+    //   );
+    //   console.log(
+    //     `Initialized mint account ${usdcMint.toString()} on-chain.`
+    //   );
+    // } catch (error) {
+    //   // Log error if mint already exists (might happen in specific test setups, though unlikely with anchor test)
+    //   if (error.message.includes("already in use")) {
+    //     console.log(
+    //       `Mint account ${usdcMint.toString()} already exists.`
+    //     );
+    //   } else {
+    //     throw error; // Re-throw other errors
+    //   }
+    // }
+    // try {
+    //   const adminTokenAccount = (
+    //     await getOrCreateAssociatedTokenAccount(
+    //       provider.connection,
+    //       ADMIN, // Payer
+    //       usdcMint,
+    //       ADMIN.publicKey
+    //     )
+    //   ).address;
+    //   console.log(
+    //     `Admin ATA (${usdcMint.toString()}): ${adminTokenAccount.toString()}`
+    //   );
       
-      const mintInfo = await getMint(provider.connection, usdcMint);
-      console.log("Mint authority:", mintInfo.mintAuthority?.toBase58());
+    //   const mintInfo = await getMint(provider.connection, usdcMint);
+    //   console.log("Mint authority:", mintInfo.mintAuthority?.toBase58());
 
 
 
-      // Mint USDC to admin if needed
-      const adminUsdcBalance = await provider.connection.getTokenAccountBalance(adminTokenAccount);
-      if (Number(adminUsdcBalance.value.amount) < 1000_000_000) { // Less than 1000 USDC
-        console.log("Minting USDC to admin...");
-        await mintTo(
-          provider.connection,
-          ADMIN, // Payer
-          usdcMint,
-          adminTokenAccount,
-          LOCAL_MINT, // Use LOCAL_MINT as mint authority
-          1000_000_000 // 1000 USDC with 6 decimals
-        );
-        console.log("Minted 1000 USDC to admin");
-      } else {
-        console.log(`Admin already has sufficient USDC: ${adminUsdcBalance.value.amount}`);
-      }
-    } catch (error) {
-      console.error("Error minting tokens:", error);
-    }
+    //   // Mint USDC to admin if needed
+    //   const adminUsdcBalance = await provider.connection.getTokenAccountBalance(adminTokenAccount);
+    //   if (Number(adminUsdcBalance.value.amount) < 1000_000_000) { // Less than 1000 USDC
+    //     console.log("Minting USDC to admin...");
+    //     await mintTo(
+    //       provider.connection,
+    //       ADMIN, // Payer
+    //       usdcMint,
+    //       adminTokenAccount,
+    //       LOCAL_MINT, // Use LOCAL_MINT as mint authority
+    //       1000_000_000 // 1000 USDC with 6 decimals
+    //     );
+    //     console.log("Minted 1000 USDC to admin");
+    //   } else {
+    //     console.log(`Admin already has sufficient USDC: ${adminUsdcBalance.value.amount}`);
+    //   }
+    // } catch (error) {
+    //   console.error("Error minting tokens:", error);
+    // }
 
     // Assign to file-level configPda
     configPda = PublicKey.findProgramAddressSync(
@@ -126,6 +130,73 @@ describe("shortx-contract", () => {
 
   describe("Market", () => {
     
+    it("Pulls oracle data", async () => {
+
+      const oracleOwner = Keypair.fromSecretKey(
+        new Uint8Array(
+            JSON.parse(fs.readFileSync("/Users/Andrew/.config/solana/id.json", "utf-8"))
+          )
+        );
+      console.log("Using Payer:", oracleOwner.publicKey.toBase58(), "\n");
+
+      const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
+      const connection = new Connection("https://api.devnet.solana.com");
+      const pullFeed = new PullFeed(queue.program, ORACLE_KEY);
+      const connectionEnhanced = pullFeed.program.provider.connection;
+
+      console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
+
+      // Use the local crossbar server
+      const crossbarClient = new CrossbarClient("http://localhost:8080");
+      console.log("Using local crossbar server\n");
+
+      try {
+        const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
+          gateway: "https://switchboard-oracle.everstake.one/devnet",
+          numSignatures: 3,
+          crossbarClient: crossbarClient,
+          chain: "solana",
+          network: "devnet",
+          
+        }, false, oracleOwner.publicKey);
+
+        if (!pullIx || pullIx.length === 0) {
+          throw new Error("Failed to fetch update from local crossbar server.");
+        }
+
+        const tx = await asV0Tx({
+          connection,
+          ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
+          signers: [oracleOwner],
+          computeUnitPrice: 200_000,
+          computeUnitLimitMultiple: 1.3,
+          lookupTables: luts,
+        });
+
+        // simulate and send
+        const sim = await connectionEnhanced.simulateTransaction(tx, {
+          commitment: "processed",
+        });
+        const sig = await connectionEnhanced.sendTransaction(tx, {
+          preflightCommitment: "processed",
+          skipPreflight: true,
+        });
+
+        console.log("Transaction sent:", sig);
+        await connectionEnhanced.confirmTransaction(sig, "processed");
+
+        for (let simulation of responses) {
+          console.log(`Feed Public Key ${simulation.value} job outputs: ${simulation.value}`);
+        }
+        return responses;
+      
+      } catch (error) {
+        console.error(
+          "Failed during fetchUpdateIx or transaction submission:", error
+        );
+      }
+  });
+
     it("Creates market", async () => {
       // --- Get validator time ---
       console.log("\n--- Fetching Validator Time ---");
@@ -151,7 +222,7 @@ describe("shortx-contract", () => {
           marketStart.toNumber() * 1000
         ).toISOString()})`
       );
-      console.log("Number of existing markets:", numMarkets.toNumber());
+      console.log("Number of existing markets:", numMarkets);
       // Generate a market ID based on the number of existing markets
       // const marketId = numMarkets.add(new anchor.BN(1));
       // console.log("Using market ID:", marketId.toNumber());
@@ -179,10 +250,6 @@ describe("shortx-contract", () => {
       );
 
       console.log("Market Positions PDA:", marketPositionsPda.toString());
-
-
-      // Use devnet oracle for testing
-      const oraclePubkey = new PublicKey("4ZM78DGSfS8AtZ3UKGyfKN6vw7ZJSpRueYE6kPLbKsTK");
 
       const [collectionPda, collectionBump] = PublicKey.findProgramAddressSync(
         [
@@ -225,7 +292,7 @@ describe("shortx-contract", () => {
             market: marketPda,
             collection: collectionPda,
             marketPositionsAccount: marketPositionsPda,
-            oraclePubkey: oraclePubkey,
+            oraclePubkey: ORACLE_KEY,
             usdcMint: usdcMint,
             tokenProgram: TOKEN_PROGRAM_ID,
             config: configPda,

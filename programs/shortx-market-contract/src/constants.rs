@@ -4,5 +4,5 @@ pub const CONFIG: &str = "config";
 pub const USER: &str = "user";
 pub const MARKET: &str = "market";
 pub const POSITION: &str = "position";
-pub const MAX_STALE_SLOTS: u64 = 100;
-pub const MIN_SAMPLES: u32 = 5;
+// pub const MAX_STALE_SLOTS: u64 = 150;
+// pub const MIN_SAMPLES: u32 = 1;

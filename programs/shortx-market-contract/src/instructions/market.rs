@@ -33,7 +33,10 @@ use crate::{constants::{
     POSITION, 
     USDC_MINT
     }, 
-    constraints::{get_oracle_value, is_valid_oracle}, 
+    constraints::{
+        get_oracle_value, 
+        is_valid_oracle
+    }, 
     state::{
         CloseMarketArgs, 
         Config, 
@@ -43,7 +46,6 @@ use crate::{constants::{
         Position, 
         PositionAccount, 
         PositionStatus, 
-        ResolveMarketArgs, 
         UpdateMarketArgs,
         WinningDirection
     }
@@ -136,14 +138,13 @@ pub struct UpdateMarketContext<'info> {
 
 // Context for resolving the market
 #[derive(Accounts)]
-#[instruction(args: ResolveMarketArgs)]
 pub struct ResolveMarketContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
     #[account(
         mut,
-        constraint = market.market_id == args.market_id @ ShortxError::InvalidMarketId
+        constraint = market.authority == signer.key() @ ShortxError::Unauthorized
     )]
     pub market: Box<Account<'info, MarketState>>,
 
@@ -223,12 +224,11 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
-        let feed_account = self.oracle_pubkey.try_borrow_data()?;
 
         let ts = Clock::get()?.unix_timestamp;
 
-        // check if the oracle is valid
-        require!(is_valid_oracle(feed_account)?, ShortxError::InvalidOracle);
+        msg!("Checking if oracle is valid");
+        require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
 
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
@@ -346,7 +346,7 @@ impl<'info> UpdateMarketContext<'info> {
 }
 
 impl<'info> ResolveMarketContext<'info> {
-    pub fn resolve_market(&mut self, args: ResolveMarketArgs) -> Result<()> {
+    pub fn resolve_market(&mut self) -> Result<()> {
         let market = &mut self.market;
         let signer = &self.signer;
 
@@ -364,14 +364,16 @@ impl<'info> ResolveMarketContext<'info> {
         } else if direction == Decimal::from(11) {
             WinningDirection::Yes
         } else {
-            WinningDirection::None
+            msg!("Oracle not resolved");
+            return Err(ShortxError::OracleNotResolved.into());
         };
 
         require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
-
+        msg!("Winning direction: {:?}", winning_direction);
         // Update market state
+
+        market.winning_direction = winning_direction;
         market.market_state = MarketStates::Resolved;
-        market.winning_direction = args.winning_direction;
         market.update_ts = ts;
 
         market.emit_market_event()?;
