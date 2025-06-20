@@ -20,7 +20,7 @@ export default class Config {
         ixs.push(await this.program.methods
             .initializeConfig(feeAmountBN)
             .accountsPartial({
-            signer: this.ADMIN_KEY,
+            signer: payer,
             feeVault: this.FEE_VAULT,
             config: configPDA,
             systemProgram: anchor.web3.SystemProgram.programId,

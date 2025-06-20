@@ -12,11 +12,9 @@ export type Position = {
     marketId: string;
     positionStatus: PositionStatus;
     amount: string;
-    isNft: boolean;
     mint: string;
     direction: PositionDirection;
     positionNonce: string;
-    authority: string;
     createdAt: string;
 };
 export declare enum PositionDirection {

@@ -59,10 +59,16 @@ export default class Trade {
    *
    */
   async getAllMarkets() {
-    const marketV2 = await this.program.account.marketState.all();
-    return marketV2.map(({ account, publicKey }) =>
-      formatMarket(account, publicKey)
-    );
+    try {
+      const marketV2 = await this.program.account.marketState.all();
+      console.log("SDK:marketV2", marketV2);
+      return marketV2.map(({ account, publicKey }) =>
+        formatMarket(account, publicKey)
+      );
+    } catch (error) {
+      console.log("SDK: getAllMarkets error", error);
+      throw error;
+    }
   }
 
   /**
@@ -168,7 +174,7 @@ export default class Trade {
         payer,
         options
       );
-      return tx;
+      return {tx, marketId};
     } catch (error) {
       console.log("error", error);
       throw error;
@@ -195,6 +201,8 @@ export default class Trade {
 
     const { positionAccountPDA, ixs: positionAccountIxs } =
       await this.position.getPositionAccountIxs(marketId, payer);
+
+    console.log("SDK: positions account in trade open", positionAccountPDA.toString());
 
     const marketPDA = getMarketPDA(this.program.programId, marketId);
 
@@ -483,36 +491,36 @@ export default class Trade {
   //   return ixs;
   // }
 
-  // /**
-  //  * Update Market
-  //  * @param marketId - The ID of the market
-  //  * @param marketEnd - The end time of the market
-  //  * @param options - RPC options
-  //  *
-  //  */
-  // async updateMarket(
-  //   marketId: number,
-  //   marketEnd: number,
-  //   payer: PublicKey,
-  //   options?: RpcOptions
-  // ) {
-  //   const ixs: TransactionInstruction[] = [];
+  /**
+   * Update Market
+   * @param marketId - The ID of the market
+   * @param marketEnd - The end time of the market
+   * @param options - RPC options
+   *
+   */
+  async updateMarket(
+    marketId: number,
+    marketEnd: number,
+    payer: PublicKey,
+    options?: RpcOptions
+  ) {
+    const ixs: TransactionInstruction[] = [];
 
-  //   ixs.push(
-  //     await this.program.methods
-  //       .updateMarket({
-  //         marketId: new BN(marketId),
-  //         marketEnd: new BN(marketEnd),
-  //       })
-  //       .accounts({
-  //         signer: payer,
-  //         market: getMarketPDA(this.program.programId, marketId),
-  //       })
-  //       .instruction()
-  //   );
+    ixs.push(
+      await this.program.methods
+        .updateMarket({
+          marketId: new BN(marketId),
+          marketEnd: new BN(marketEnd),
+        })
+        .accounts({
+          signer: payer,
+          market: getMarketPDA(this.program.programId, marketId),
+        })
+        .instruction()
+    );
 
-  //   return ixs;
-  // }
+    return ixs;
+  }
 
   async payoutPosition(
     marketId: number,
@@ -525,14 +533,7 @@ export default class Trade {
 
     const marketPda = getMarketPDA(this.program.programId, marketId);
 
-    const marketAccount = await this.program.account.marketState.fetch(
-      marketPda
-    );
-    const nftCollectionMint = marketAccount.nftCollection;
-
-    if (!nftCollectionMint) {
-      throw new Error("NFT collection mint not found");
-    }
+    const collectionPda = getCollectionPDA(this.program.programId, marketId);
 
     const userUsdcAta = getAssociatedTokenAddressSync(
       this.USDC_MINT,
@@ -598,6 +599,7 @@ export default class Trade {
             marketUsdcVault: marketVault,
             usdcMint: this.USDC_MINT,
             market: marketPda,
+            collection: collectionPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             tokenMetadataProgram: METAPLEX_ID,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,

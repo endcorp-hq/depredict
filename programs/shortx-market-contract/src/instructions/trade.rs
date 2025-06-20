@@ -400,9 +400,9 @@ impl<'info> PayoutNftContext<'info> {
         let position_index = market_positions_account.positions
             .iter()
             .position(|pos| {
-                pos.position_id == attribute_list.attribute_list[2].value.parse::<u64>().unwrap() &&
+                pos.position_id == attribute_list.attribute_list[1].value.parse::<u64>().unwrap() &&
                 pos.position_status == PositionStatus::Open &&
-                pos.amount == attribute_list.attribute_list[4].value.parse::<u64>().unwrap()
+                pos.amount == attribute_list.attribute_list[3].value.parse::<u64>().unwrap()
             })
             .ok_or(ShortxError::PositionNotFound)?;
 
