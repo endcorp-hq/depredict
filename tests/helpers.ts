@@ -9,6 +9,9 @@ const LOCAL_MINT = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
 );
 
+// Oracle Key
+const ORACLE_KEY = new PublicKey("6DnHLH6t2TnvgxihKRyH36u2x7fYBjqHfu1zMLRUMntM");
+
 const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 // Initialize provider and program
 const provider = anchor.AnchorProvider.env();
@@ -28,10 +31,10 @@ const USER = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
 );
 
-export const MARKET_ID = new anchor.BN(1);
+const MARKET_ID = new anchor.BN(15);
 
 // Export provider, program, and keypairs for use in tests
-export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT };
+export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT, ORACLE_KEY, MARKET_ID };
 
 /**
  * Gets the network configuration based on Anchor.toml
