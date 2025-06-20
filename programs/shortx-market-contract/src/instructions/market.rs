@@ -27,13 +27,13 @@ use mpl_core::{
     }
 };
 
-// use switchboard_on_demand::{prelude::rust_decimal::Decimal};
+use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
     MARKET, 
     POSITION, 
     USDC_MINT
     }, 
-    // constraints::{get_oracle_price}, 
+    constraints::{get_oracle_value, is_valid_oracle}, 
     state::{
         CloseMarketArgs, 
         Config, 
@@ -44,7 +44,8 @@ use crate::{constants::{
         PositionAccount, 
         PositionStatus, 
         ResolveMarketArgs, 
-        UpdateMarketArgs
+        UpdateMarketArgs,
+        WinningDirection
     }
 };
 use crate::errors::ShortxError;
@@ -149,7 +150,7 @@ pub struct ResolveMarketContext<'info> {
     /// CHECK: oracle is same as the market's oracle pubkey
     #[account(
         mut,
-        // constraint = oracle_pubkey.key() == market.oracle_pubkey @ ShortxError::InvalidOracle
+        // constraint = oracle_pubkey.key() == market.oracle_pubkey.unwrap() @ ShortxError::InvalidOracle
     )]
     pub oracle_pubkey: AccountInfo<'info>,
 }
@@ -222,12 +223,12 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
+        let feed_account = self.oracle_pubkey.try_borrow_data()?;
 
         let ts = Clock::get()?.unix_timestamp;
 
         // check if the oracle is valid
-        // require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
-        msg!("Skipping oracle check");
+        require!(is_valid_oracle(feed_account)?, ShortxError::InvalidOracle);
 
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
@@ -354,18 +355,19 @@ impl<'info> ResolveMarketContext<'info> {
         require!(market.authority == *signer.key, ShortxError::Unauthorized);
         require!(market.market_state == MarketStates::Active || market.market_state == MarketStates::Ended, ShortxError::MarketAlreadyResolved);
 
-        // // Get oracle price data
-        // let direction = get_oracle_price(&self.oracle_pubkey)?;
-        // // Determine winning direction based on price
-        // let winning_direction = if direction == Decimal::from(0) {
-        //     WinningDirection::No
-        // } else if direction == Decimal::from(1) {
-        //     WinningDirection::Yes
-        // } else {
-        //     WinningDirection::None
-        // };
+        // Get oracle price data
+        let direction = get_oracle_value(&self.oracle_pubkey)?;
+        msg!("Oracle value: {:?}", direction);
+        // Determine winning direction based on price
+        let winning_direction = if direction == Decimal::from(10) {
+            WinningDirection::No
+        } else if direction == Decimal::from(11) {
+            WinningDirection::Yes
+        } else {
+            WinningDirection::None
+        };
 
-        // require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
+        require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
 
         // Update market state
         market.market_state = MarketStates::Resolved;

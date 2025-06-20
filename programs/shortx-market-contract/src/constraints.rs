@@ -1,3 +1,4 @@
+use std::cell::Ref;
 
 use crate::{constants::{MAX_STALE_SLOTS, MIN_SAMPLES}, errors::ShortxError};
 
@@ -6,14 +7,7 @@ use anchor_lang::prelude::*;
 use switchboard_on_demand::{prelude::rust_decimal::Decimal, PullFeedAccountData};
 
 
-// pub fn is_authority_for_user_trade(
-//     user_trade: &Account<UserTrade>,
-//     signer: &Signer
-// ) -> anchor_lang::Result<bool> {
-//     Ok(user_trade.authority.eq(signer.key))
-// }
-
-pub fn get_oracle_price(oracle_account: &AccountInfo) -> anchor_lang::Result<Decimal> {
+pub fn get_oracle_value(oracle_account: &AccountInfo) -> anchor_lang::Result<Decimal> {
     let account_data = oracle_account.try_borrow_data()
         .map_err(|_| ShortxError::InvalidOracle)?;
 
@@ -29,19 +23,20 @@ pub fn get_oracle_price(oracle_account: &AccountInfo) -> anchor_lang::Result<Dec
     let min_samples = MIN_SAMPLES;
 
     // Get the value
-    let price = oracle_data.get_value(&clock, max_stale_slots, min_samples, true)
+    let value = oracle_data.get_value(&clock, max_stale_slots, min_samples, true)
         .map_err(|e| {
             msg!("Error getting price: {:?}", e);
             ShortxError::InvalidOracle
         })?;
 
-    msg!("Oracle price: {:?}", price);
-    Ok(price)
+    msg!("Oracle value: {:?}", value);
+    Ok(value)
 }
 
 // Refactor this to check if the oracle is valid
-// pub fn is_valid_oracle(oracle_account: &AccountInfo) -> anchor_lang::Result<bool> {
-//     let price = get_oracle_price(oracle_account)?;
-//     // initial price should be 2 as 0 is regarded as no and 1 is regarded as yes. 2 is considered a null value
-//     Ok(price == Decimal::from(2))
-// }
+pub fn is_valid_oracle(feed_account: Ref<'_, &mut [u8]>) -> anchor_lang::Result<bool> {
+    let clock = Clock::get().unwrap();
+    let feed = PullFeedAccountData::parse(feed_account).unwrap();
+    msg!("valid price: {:?}", feed.value(&clock));
+    Ok(true)
+}

@@ -7,17 +7,23 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getUsdcMint, getNetworkConfig, FEE_VAULT, program, provider, USER, MARKET_ID, ADMIN } from "../helpers";
+import { getNetworkConfig, FEE_VAULT, program, provider, USER, MARKET_ID, ADMIN, LOCAL_MINT } from "../helpers";
 
 import { fetchAsset, MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { fetchCollection } from '@metaplex-foundation/mpl-core'
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+import fs from "fs";
 
 describe("shortx-contract", () => { 
 
   let usdcMint: PublicKey;
   let userTokenAccount: PublicKey;
   let marketVault: PublicKey; 
+
+  // Load local wallet from ~/.config/solana/id.json
+  const localKeypair = Keypair.fromSecretKey(
+    Buffer.from(JSON.parse(fs.readFileSync(`${process.env.HOME}/.config/solana/id.json`, "utf-8")))
+  );
 
   before(async () => {
     // Get network configuration
@@ -26,32 +32,34 @@ describe("shortx-contract", () => {
     console.log("USER:", USER.publicKey.toString());
 
     // Ensure USER has enough SOL for rent and fees by transferring from local wallet if needed
-    // const userBalance = await provider.connection.getBalance(USER.publicKey);
-    // const minBalance = 1_000_000_000; // 1 SOL
-    // if (userBalance < minBalance) {
-    //   // Load local wallet from ~/.config/solana/id.json
-    //   const localKeypair = Keypair.fromSecretKey(
-    //     Buffer.from(JSON.parse(fs.readFileSync(`${process.env.HOME}/.config/solana/id.json`, "utf-8")))
-    //   );
-    //   console.log("Transferring 2 SOL from local wallet to USER...");
-    //   const recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-    //   const transferIx = SystemProgram.transfer({
-    //     fromPubkey: localKeypair.publicKey,
-    //     toPubkey: USER.publicKey,
-    //     lamports: 2 * LAMPORTS_PER_SOL,
-    //   });
-    //   const transaction = new anchor.web3.Transaction().add(transferIx);
-    //   transaction.recentBlockhash = recentBlockhash;
-    //   transaction.feePayer = localKeypair.publicKey;
-    //   const signature = await provider.connection.sendTransaction(transaction, [localKeypair]);
-    //   await provider.connection.confirmTransaction(signature);
-    //   console.log("Transfer to USER successful");
-    // }
+    const userBalance = await provider.connection.getBalance(USER.publicKey);
+    const minBalance = 1_000_000_000; // 1 SOL
+    if (userBalance < minBalance) {
+      console.log("Transferring 2 SOL from local wallet to USER...");
+      const recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+      const transferIx = SystemProgram.transfer({
+        fromPubkey: localKeypair.publicKey,
+        toPubkey: USER.publicKey,
+        lamports: 2 * LAMPORTS_PER_SOL,
+      });
+      const transaction = new anchor.web3.Transaction().add(transferIx);
+      transaction.recentBlockhash = recentBlockhash;
+      transaction.feePayer = localKeypair.publicKey;
+      const signature = await provider.connection.sendTransaction(transaction, [localKeypair]);
+      await provider.connection.confirmTransaction(signature);
+      console.log("Transfer to USER successful");
+    }
 
-    // Get the correct USDC mint and authority for the current network
-    // const { mint: mintPubkey } = await getUsdcMint();
-    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+    // Get the USDC mint
+    usdcMint = LOCAL_MINT.publicKey;
     console.log("USDC Mint:", usdcMint.toString());
+
+    // Print out account information for comparison
+    console.log("\nAccount Information:");
+    console.log("ADMIN public key:", ADMIN.publicKey.toString());
+    console.log("USER public key:", USER.publicKey.toString());
+    console.log("Local wallet public key:", localKeypair.publicKey.toString());
+    console.log("USDC mint authority (LOCAL_MINT):", LOCAL_MINT.publicKey.toString());
 
     // Get the market PDA for mint authority
     global.MARKET_ID = MARKET_ID;
@@ -78,39 +86,38 @@ describe("shortx-contract", () => {
     // console.log("Required rent-exempt amount for token account:", tokenAccountRentExempt, "lamports");
 
     // Defensive check: Create user's USDC token account
+    try {
+      userTokenAccount = (
+        await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          USER, // Payer
+          usdcMint,
+          USER.publicKey
+        )
+      ).address;
+      console.log(`User USDC ATA: ${userTokenAccount.toString()}`);
 
-    // try {
-    //   // userTokenAccount = (
-    //   //   await getOrCreateAssociatedTokenAccount(
-    //   //     provider.connection,
-    //   //     USER, // Payer
-    //   //     usdcMint,
-    //   //     USER.publicKey
-    //   //   )
-    //   // ).address;
-    //   // console.log(`User USDC ATA: ${userTokenAccount.toString()}`);
-
-    //   // Mint USDC to USER's ATA if needed
-    //   // const userUsdcBalance = await provider.connection.getTokenAccountBalance(userTokenAccount);
-    //   // const minUsdc = 1_000_000_000; // 1,000 USDC (6 decimals)
-    //   // if (Number(userUsdcBalance.value.amount) < minUsdc) {
-    //   //   console.log(`Minting 1,000 USDC to USER (current balance: ${userUsdcBalance.value.amount})...`);
-    //   //   await mintTo(
-    //   //     provider.connection,
-    //   //     ADMIN, // payer
-    //   //     usdcMint,
-    //   //     userTokenAccount,
-    //   //     ADMIN, // mint authority
-    //   //     minUsdc
-    //   //   );
-    //   //   console.log("Minted 1,000 USDC to USER's ATA");
-    //   // } else {
-    //   //   console.log(`User already has sufficient USDC: ${userUsdcBalance.value.amount}`);
-    //   // }
-    // } catch (e) {
-    //   console.error("Failed to get or create user USDC ATA:", e);
-    //   throw e;
-    // }
+      // Mint USDC to USER's ATA if needed
+      const userUsdcBalance = await provider.connection.getTokenAccountBalance(userTokenAccount);
+      const minUsdc = 1_000_000_000; // 1,000 USDC (6 decimals)
+      if (Number(userUsdcBalance.value.amount) < minUsdc) {
+        console.log(`Minting 1,000 USDC to USER (current balance: ${userUsdcBalance.value.amount})...`);
+        await mintTo(
+          provider.connection,
+          ADMIN, // payer
+          usdcMint,
+          userTokenAccount,
+          LOCAL_MINT, // mint authority
+          minUsdc
+        );
+        console.log("Minted 1,000 USDC to USER's ATA");
+      } else {
+        console.log(`User already has sufficient USDC: ${userUsdcBalance.value.amount}`);
+      }
+    } catch (e) {
+      console.error("Failed to get or create user USDC ATA:", e);
+      throw e;
+    }
 
     // Defensive check: Create market's USDC vault (ATA for market PDA)
     // try {
