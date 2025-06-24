@@ -3,9 +3,10 @@ import { ShortxContract } from "./types/shortx";
 import * as anchor from "@coral-xyz/anchor";
 import {
   AddressLookupTableAccount,
-  Keypair,
+  Connection,
   PublicKey,
   TransactionInstruction,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import { CreateMarketArgs, OpenOrderArgs, MarketStates } from "./types/trade";
 import { RpcOptions } from "./types/index";
@@ -15,8 +16,6 @@ import {
   getCollectionPDA,
   getConfigPDA,
   getMarketPDA,
-  getNftMasterEditionPDA,
-  getNftMetadataPDA,
   getPositionAccountPDA,
   getPositionNftPDA,
   getSubPositionAccountPDA,
@@ -25,15 +24,18 @@ import createVersionedTransaction from "./utils/sendVersionedTransaction";
 import { swap } from "./utils/swap";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createInitializeMint2Instruction,
   getAssociatedTokenAddressSync,
-  getMinimumBalanceForRentExemptMint,
-  MINT_SIZE,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants";
 import Position from "./position";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import {
+  PullFeed,
+  getDefaultDevnetQueue,
+  asV0Tx,
+} from "@switchboard-xyz/on-demand";
+import { CrossbarClient } from "@switchboard-xyz/common";
 
 export default class Trade {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
@@ -168,16 +170,93 @@ export default class Trade {
           })
           .instruction()
       );
-      const tx = await createVersionedTransaction(
+      const createMarketTx = await createVersionedTransaction(
         this.program,
         ixs,
         payer,
         options
       );
-      return {tx, marketId};
+
+      let crankOracleTx: VersionedTransaction | undefined = undefined;
+      try {
+        if (oraclePubkey) {
+          crankOracleTx = await this.crankOracle(oraclePubkey, payer);
+        }
+      } catch (error) {
+        console.log("error cranking oracle", error);
+        // throw error;
+      }
+
+      let txs: VersionedTransaction[] = [createMarketTx];
+
+      if (crankOracleTx) {
+        txs.unshift(crankOracleTx);
+      }
+      return { txs, marketId };
     } catch (error) {
       console.log("error", error);
       throw error;
+    }
+  }
+
+  async crankOracle(
+    oraclePubkey: PublicKey,
+    payer: PublicKey
+  ): Promise<VersionedTransaction | undefined> {
+    if (!oraclePubkey) {
+      throw new Error("Oracle pubkey is required");
+    }
+
+    if (!payer) {
+      throw new Error("Payer is required");
+    }
+
+    const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
+
+    const connection = new Connection("https://api.devnet.solana.com");
+    const pullFeed = new PullFeed(queue.program, oraclePubkey);
+
+    console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
+
+    // Use the default crossbar server
+    const crossbarClient = CrossbarClient.default();
+
+    try {
+      const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx(
+        {
+          gateway: "https://switchboard-oracle.everstake.one/devnet",
+          numSignatures: 3,
+          crossbarClient: crossbarClient,
+          chain: "solana",
+          network: "devnet",
+        },
+        false,
+        payer
+      );
+
+      if (!pullIx || pullIx.length === 0) {
+        throw new Error("Failed to fetch update from local crossbar server.");
+      }
+
+      const tx = await asV0Tx({
+        connection,
+        ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
+        computeUnitPrice: 200_000,
+        computeUnitLimitMultiple: 1.3,
+        lookupTables: luts,
+      });
+
+      for (let simulation of responses) {
+        console.log(
+          `Feed Public Key ${simulation.value} job outputs: ${simulation.value}`
+        );
+      }
+      return tx;
+    } catch (error) {
+      console.error(
+        "Failed during fetchUpdateIx or transaction submission:",
+        error
+      );
     }
   }
 
@@ -202,11 +281,16 @@ export default class Trade {
     const { positionAccountPDA, ixs: positionAccountIxs } =
       await this.position.getPositionAccountIxs(marketId, payer);
 
-    console.log("SDK: positions account in trade open", positionAccountPDA.toString());
+    console.log(
+      "SDK: positions account in trade open",
+      positionAccountPDA.toString()
+    );
 
     const marketPDA = getMarketPDA(this.program.programId, marketId);
 
-    const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPDA
+    );
 
     const nextPositionId = marketAccount.nextPositionId;
 
@@ -214,7 +298,11 @@ export default class Trade {
 
     const collectionPDA = getCollectionPDA(this.program.programId, marketId);
 
-    const positionNftPDA = getPositionNftPDA(this.program.programId, marketId, nextPositionId);
+    const positionNftPDA = getPositionNftPDA(
+      this.program.programId,
+      marketId,
+      nextPositionId
+    );
 
     if (positionAccountIxs.length > 0) {
       ixs.push(...positionAccountIxs);

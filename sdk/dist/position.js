@@ -182,7 +182,6 @@ export default class Position {
             if (!mainPositionAccount) {
                 throw new Error("Main position account not found. Cannot determine next sub-position nonce.");
             }
-            console.log("Did not find positions, have to create sub position account");
             const subPositionAccountKey = getSubPositionAccountPDA(this.program.programId, marketId, marketAddress, Number(mainPositionAccount.nonce) + 1);
             console.log("SDK: subPositionAccountKey", subPositionAccountKey.toString());
             const subPositionAccountPDA = getPositionAccountPDA(this.program.programId, marketId, subPositionAccountKey);

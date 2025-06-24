@@ -1,7 +1,7 @@
 import { Program } from "@coral-xyz/anchor";
 import { ShortxContract } from "./types/shortx";
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { CreateMarketArgs, OpenOrderArgs, MarketStates } from "./types/trade";
 import { RpcOptions } from "./types/index";
 import Position from "./position";
@@ -45,9 +45,10 @@ export default class Trade {
      *
      */
     createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<{
-        tx: anchor.web3.VersionedTransaction;
+        txs: anchor.web3.VersionedTransaction[];
         marketId: number;
     }>;
+    crankOracle(oraclePubkey: PublicKey, payer: PublicKey): Promise<VersionedTransaction | undefined>;
     /**
      * Open Order
      * @param args.marketId - The ID of the Market

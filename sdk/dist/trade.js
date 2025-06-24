@@ -1,5 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey, } from "@solana/web3.js";
+import { Connection, PublicKey, } from "@solana/web3.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers";
 import { getCollectionPDA, getConfigPDA, getMarketPDA, getPositionAccountPDA, getPositionNftPDA, getSubPositionAccountPDA, } from "./utils/pda/index";
@@ -9,6 +9,8 @@ import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_PROGR
 import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants";
 import Position from "./position";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import { PullFeed, getDefaultDevnetQueue, asV0Tx, } from "@switchboard-xyz/on-demand";
+import { CrossbarClient } from "@switchboard-xyz/common";
 export default class Trade {
     constructor(program, adminKey, feeVault, usdcMint) {
         this.program = program;
@@ -102,12 +104,68 @@ export default class Trade {
                 systemProgram: anchor.web3.SystemProgram.programId,
             })
                 .instruction());
-            const tx = await createVersionedTransaction(this.program, ixs, payer, options);
-            return { tx, marketId };
+            const createMarketTx = await createVersionedTransaction(this.program, ixs, payer, options);
+            let crankOracleTx = undefined;
+            try {
+                if (oraclePubkey) {
+                    crankOracleTx = await this.crankOracle(oraclePubkey, payer);
+                }
+            }
+            catch (error) {
+                console.log("error cranking oracle", error);
+                // throw error;
+            }
+            let txs = [createMarketTx];
+            if (crankOracleTx) {
+                txs.unshift(crankOracleTx);
+            }
+            return { txs, marketId };
         }
         catch (error) {
             console.log("error", error);
             throw error;
+        }
+    }
+    async crankOracle(oraclePubkey, payer) {
+        if (!oraclePubkey) {
+            throw new Error("Oracle pubkey is required");
+        }
+        if (!payer) {
+            throw new Error("Payer is required");
+        }
+        const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
+        const connection = new Connection("https://api.devnet.solana.com");
+        const pullFeed = new PullFeed(queue.program, oraclePubkey);
+        const connectionEnhanced = pullFeed.program.provider.connection;
+        console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
+        // Use the local crossbar server
+        const crossbarClient = CrossbarClient.default();
+        console.log("Using local crossbar server\n");
+        try {
+            const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
+                gateway: "https://switchboard-oracle.everstake.one/devnet",
+                numSignatures: 3,
+                crossbarClient: crossbarClient,
+                chain: "solana",
+                network: "devnet",
+            }, false, payer);
+            if (!pullIx || pullIx.length === 0) {
+                throw new Error("Failed to fetch update from local crossbar server.");
+            }
+            const tx = await asV0Tx({
+                connection,
+                ixs: pullIx, // after the pullIx you can add whatever transactions you'd like
+                computeUnitPrice: 200000,
+                computeUnitLimitMultiple: 1.3,
+                lookupTables: luts,
+            });
+            for (let simulation of responses) {
+                console.log(`Feed Public Key ${simulation.value} job outputs: ${simulation.value}`);
+            }
+            return tx;
+        }
+        catch (error) {
+            console.error("Failed during fetchUpdateIx or transaction submission:", error);
         }
     }
     /**
