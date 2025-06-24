@@ -118,7 +118,8 @@ pub struct PayoutNftContext<'info> {
 
     #[account(
         mut,
-        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId
+        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId,
+        constraint = market_positions_account.authority == signer.key() @ ShortxError::Unauthorized
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
@@ -145,6 +146,7 @@ pub struct PayoutNftContext<'info> {
     )]
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    // TODO: Check nft_mint address against the position.mint address.
     /// CHECK: this account is checked by the address constraint
     #[account(mut)]
     pub nft_mint: UncheckedAccount<'info>,
@@ -156,13 +158,12 @@ pub struct PayoutNftContext<'info> {
     )]
     pub collection: UncheckedAccount<'info>,
 
-    /// CHECK: this account is checked by the address constraint
-    pub mpl_core_program: UncheckedAccount<'info>,
-
+     #[account(
+        address = MPL_CORE_ID,
+        constraint = mpl_core_program.key() == MPL_CORE_ID @ ShortxError::InvalidMplCoreProgram
+    )]
+     pub mpl_core_program: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
-
-    /// CHECK: Check by CPI
-    pub token_metadata_program: AccountInfo<'info>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }

@@ -116,9 +116,12 @@ pub struct MarketContext<'info> {
     )]
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-     /// CHECK: this account is checked by core program
-    #[account(address = MPL_CORE_ID)]
-    pub mpl_core_program: UncheckedAccount<'info>,
+     
+     #[account(
+        address = MPL_CORE_ID,
+        constraint = mpl_core_program.key() == MPL_CORE_ID @ ShortxError::InvalidMplCoreProgram
+    )]
+     pub mpl_core_program: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -131,7 +134,10 @@ pub struct UpdateMarketContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
-    #[account(mut)] // Market must exist already
+    #[account(
+        mut,
+        constraint = market.authority == signer.key() @ ShortxError::Unauthorized
+    )] // Market must exist already, signer must be the market authority
     pub market: Box<Account<'info, MarketState>>,
     pub system_program: Program<'info, System>,
 }
@@ -151,7 +157,7 @@ pub struct ResolveMarketContext<'info> {
     /// CHECK: oracle is same as the market's oracle pubkey
     #[account(
         mut,
-        // constraint = oracle_pubkey.key() == market.oracle_pubkey.unwrap() @ ShortxError::InvalidOracle
+        constraint = oracle_pubkey.key() == market.oracle_pubkey.unwrap() @ ShortxError::InvalidOracle
     )]
     pub oracle_pubkey: AccountInfo<'info>,
 }
