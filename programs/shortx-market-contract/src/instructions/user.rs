@@ -12,6 +12,7 @@ pub struct UserContext<'info> {
         payer = signer,
         space = 8 + User::INIT_SPACE,
         seeds = [USER.as_bytes(), signer.key.as_ref()],
+        constraint = signer.key == &user.authority @ ShortxError::Unauthorized,
         bump
     )]
     pub user: Box<Account<'info, User>>,

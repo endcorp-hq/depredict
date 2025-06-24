@@ -62,6 +62,7 @@ pub struct CloseConfigContext<'info> {
         mut,
         seeds = [CONFIG.as_bytes()],
         bump = config.bump,
+        close = signer
     )]
     pub config: Box<Account<'info, Config>>,
     pub system_program: Program<'info, System>,
@@ -124,7 +125,7 @@ impl<'info> CloseConfigContext<'info> {
 
         // Close the account
         self.config.to_account_info().assign(&System::id());
-        self.config.to_account_info().realloc(0, false)?;
+        self.config.to_account_info().resize(0)?;
 
         Ok(())
     }

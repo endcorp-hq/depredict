@@ -471,7 +471,7 @@ impl<'info> CloseMarketContext<'info> {
 
         // Mark the market account data as closed by zeroizing (optional but good practice)
         // market_account_info.assign(&System::id()); // This reassigns owner
-        // market_account_info.realloc(0, false)?; // This might fail if rent epoch not met
+        // market_account_info.resize(0)?; // This might fail if rent epoch not met
         // A common way is to zero out the data manually if needed, 
         // but closing typically involves just reclaiming lamports.
         // Since Anchor doesn't have a direct `close_account_manually_to_recipient`,
