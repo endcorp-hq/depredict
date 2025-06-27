@@ -93,11 +93,17 @@ import fs from "fs";
         marketPda
       );
 
+      console.log("Market USDC VAULT:", marketAccountBefore.marketUsdcVault.toString());
       
 
       // print the oracle pubkey from the market: 
       const oraclePubkey = marketAccountBefore.oraclePubkey;
-      console.log("Oracle pubkey:", oraclePubkey.toString());
+      console.log("Oracle pubkey from market:", oraclePubkey.toString());
+      console.log("ORACLE_KEY passed in:", ORACLE_KEY.toString());
+      console.log(
+        "Are they equal?",
+        oraclePubkey.toString() === ORACLE_KEY.toString() ? "YES" : "NO"
+      );
       console.log(
         "Market state before resolution:",
         marketAccountBefore.marketState

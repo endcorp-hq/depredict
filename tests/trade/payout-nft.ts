@@ -6,34 +6,59 @@ import {
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getUsdcMint, MARKET_ID, METAPLEX_ID, program, provider, USER } from "../helpers";
+import { MARKET_ID, METAPLEX_ID, program, provider, USER, LOCAL_MINT } from "../helpers";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { fetchAsset } from '@metaplex-foundation/mpl-core';
 
 describe("shortx-contract", () => {
 
   const user = USER;
+  const usdcMint = LOCAL_MINT.publicKey;
+
+
+
 
   console.log("User:", user.publicKey.toString());
 
-  let usdcMint: PublicKey;
-
-  before(async () => {
-    // const { mint } = await getUsdcMint();
-    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
-  });
-
   describe("NFT Payout", () => {
+
+
+
+
+    
     it("Checks market resolution and processes NFT payout", async () => {
 
 
       // Get the market PDA
-      const [marketPda,] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("market"),
-          MARKET_ID.toArrayLike(Buffer, "le", 8),
-        ],
+      const [marketPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("market"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
+        // Get the market vault - should be owned by market PDA
+        const marketVault = getAssociatedTokenAddressSync(
+          usdcMint,
+          marketPda,
+          true, // allowOwnerOffCurve since marketPda is a PDA
+          TOKEN_PROGRAM_ID
+        );
+
+        console.log("Market Vault:", marketVault.toString());
+
+        // Get user's USDC token account (payout goes to NFT owner)
+        // Let the program create this if needed
+        const userUsdcAta = getAssociatedTokenAddressSync(
+          usdcMint,
+          user.publicKey,
+          false,
+          TOKEN_PROGRAM_ID
+        );
+      // Get the initial market state
+      const marketAccountBefore = await program.account.marketState.fetch(
+        marketPda
+      );
+
+      console.log("Market USDC VAULT:", marketAccountBefore.marketUsdcVault.toString());
 
       // Get the position account PDA
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
@@ -72,203 +97,141 @@ describe("shortx-contract", () => {
       console.log("\n=== NFT Positions Found ===");
       console.log("Number of NFT positions:", nftPositions.length);
       
-      for (const position of nftPositions) {
-        console.log("\nProcessing position:", {
-          positionId: position.positionId.toString(),
-          direction: Object.keys(position.direction)[0],
-          amount: position.amount.toString(),
-          mint: position.mint?.toString()
-        });
+      const position = nftPositions[0];
+      if (!position) {
+        throw new Error("No NFT positions found to settle.");
+      }
+      const umi = createUmi(provider.connection);
 
-        // Get the NFT token account for user
-        // const nftTokenAccount = getAssociatedTokenAddressSync(
-        //     position.mint,
-        //     user.publicKey,  // get the user's NFT token account address
-        //     false, // allowOwnerOffCurve
-        //     TOKEN_PROGRAM_ID
-        //   );
+      // Derive the NFT PDA as you do in create-order.ts
+      const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("nft"),
+          MARKET_ID.toArrayLike(Buffer, "le", 8),
+          position.positionId.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId
+      );
 
-        // console.log("NFT Token Account:", nftTokenAccount.toString());
+      const asset = await fetchAsset(umi, positionNftAccountPda.toString(), {
+        skipDerivePlugins: false,
+      });
 
-        // Get the market vault - should be owned by market PDA
-        const marketVault = getAssociatedTokenAddressSync(
-          usdcMint,
-          marketPda,
-          true, // allowOwnerOffCurve since marketPda is a PDA
-          TOKEN_PROGRAM_ID
+      console.log("NFT Asset:", asset)
+
+      console.log("NFT Asset Owner:", asset.owner.toString());
+      console.log("User Public Key:", user.publicKey.toString());
+      console.log("Are they equal?", asset.owner.toString() === user.publicKey.toString() ? "YES" : "NO");
+
+      // Assert ownership
+      assert.equal(
+        asset.owner.toString(),
+        user.publicKey.toString(),
+        "User must own the NFT asset to claim payout"
+      );
+
+      console.log("\nProcessing position:", {
+        positionId: position.positionId.toString(),
+        direction: Object.keys(position.direction)[0],
+        amount: position.amount.toString(),
+        mint: position.mint?.toString()
+      });
+
+      // Get the user's associated token account for the NFT mint
+      const userNftAta = getAssociatedTokenAddressSync(
+        position.mint,
+        user.publicKey,
+        false,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Log balances before payout
+      const userUsdcBalanceBefore = await provider.connection.getTokenAccountBalance(userUsdcAta);
+      console.log("User USDC balance before payout:", userUsdcBalanceBefore.value.uiAmount);
+
+      // Additional debug info
+      console.log("\n=== Additional Debug Info ===");
+      console.log("Market PDA Authority:", marketPda.toString());
+      console.log("Market Vault Authority:", marketPda.toString());
+      console.log("User Public Key:", user.publicKey.toString());
+      console.log("NFT Mint:", position.mint.toString());
+      console.log("Token Program ID:", TOKEN_PROGRAM_ID.toString());
+      console.log("Associated Token Program ID:", ASSOCIATED_TOKEN_PROGRAM_ID.toString());
+      console.log("Token Metadata Program ID:", METAPLEX_ID.toString());
+
+      try {
+        console.log("\n=== Executing Payout Transaction ===");
+        
+        // Update the program call
+        await program.methods
+          .settlePosition()
+          .accountsPartial({
+            signer: USER.publicKey,
+            market: marketPda,
+            marketPositionsAccount: positionAccountPda,
+            nftMint: asset.publicKey,
+            userUsdcAta: userUsdcAta,
+            marketUsdcVault: marketVault,
+            usdcMint: usdcMint,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            collection: collection,
+            mplCoreProgram: MPL_CORE_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          }).signers([USER])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+            maxRetries: 3,
+            preflightCommitment: "confirmed"
+          });
+
+        // Verify position status after payout
+        const updatedPositionAccount = await program.account.positionAccount.fetch(positionAccountPda);
+        const updatedPosition = updatedPositionAccount.positions.find(p => 
+          p.positionId.eq(position.positionId)
         );
 
-        console.log("Market Vault:", marketVault.toString());
+        assert.ok(
+          Object.keys(updatedPosition!.positionStatus)[0] === "closed",
+          "Position should be marked as closed after payout"
+        );
 
-        // Get user's USDC token account (payout goes to NFT owner)
-        // Let the program create this if needed
-        const userUsdcAta = getAssociatedTokenAddressSync(
-          usdcMint,
-          user.publicKey,
-          false,
-          TOKEN_PROGRAM_ID
+        // Check USDC balance change
+        const userUsdcBalanceAfter = await provider.connection.getTokenAccountBalance(userUsdcAta);
+        console.log("User USDC balance after payout:", userUsdcBalanceAfter.value.uiAmount);
+        console.log("USDC balance change:", 
+          userUsdcBalanceAfter.value.uiAmount! - userUsdcBalanceBefore.value.uiAmount!
         );
 
 
-        // const [nftMetadataPda] = PublicKey.findProgramAddressSync(
-        //   [
-        //     Buffer.from("metadata"),
-        //     METAPLEX_ID.toBuffer(),
-        //     position.mint.toBuffer(),
-        //   ],
-        //   METAPLEX_ID
-        // );
-        // console.log("NFT Metadata PDA:", nftMetadataPda.toString());
 
-        // Verify the market vault exists
-        const marketVaultInfo = await provider.connection.getAccountInfo(marketVault);
-        if (!marketVaultInfo) {
-          throw new Error("Market vault does not exist. Please ensure it was created during market initialization.");
-        }
-
-        // Verify the market vault is owned by the market PDA
-        if (marketVaultInfo.owner.toString() !== TOKEN_PROGRAM_ID.toString()) {
-          throw new Error("Market vault is not a token account");
-        }
-
-        // Log balances before payout
-        const userUsdcBalanceBefore = await provider.connection.getTokenAccountBalance(userUsdcAta);
-        console.log("User USDC balance before payout:", userUsdcBalanceBefore.value.uiAmount);
-
-        // Debug checks
-        console.log("\nVerifying accounts before transaction:");
-        console.log("1. NFT Token Account:");
-        // const nftTokenAccountInfo = await provider.connection.getAccountInfo(nftTokenAccount);
-        // console.log("   Owner:", nftTokenAccountInfo?.owner.toString());
-        // console.log("   Data length:", nftTokenAccountInfo?.data.length);
-        // console.log("   Executable:", nftTokenAccountInfo?.executable);
-
-        console.log("\n2. NFT Metadata Account:");
-        // const metadataAccountInfo = await provider.connection.getAccountInfo(nftMetadataPda);
-        // console.log("   Owner:", metadataAccountInfo?.owner.toString());
-        // console.log("   Data length:", metadataAccountInfo?.data.length);
-        // console.log("   Executable:", metadataAccountInfo?.executable);
-
-        // const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
-        //   [
-        //     Buffer.from("metadata"),
-        //     METAPLEX_ID.toBuffer(),
-        //     position.mint.toBuffer(),
-        //     Buffer.from("edition"),
-        //   ],
-        //   METAPLEX_ID
-        // );
-
-        // // Add edition PDA derivation
-        // const [nftEditionPda] = PublicKey.findProgramAddressSync(
-        //   [
-        //     Buffer.from("metadata"),
-        //     METAPLEX_ID.toBuffer(),
-        //     position.mint.toBuffer(),
-        //   ],
-        //   METAPLEX_ID
-        // );
-
-        // console.log("NFT Master Edition PDA:", nftMasterEditionPda.toString());
-        // console.log("NFT Edition PDA:", nftEditionPda.toString());
-
-        // // Verify NFT ownership
-        // const tokenBalance = await provider.connection.getTokenAccountBalance(nftTokenAccount);
-        // console.log("\nNFT Token Account Balance:", tokenBalance.value.uiAmount);
-
-        // Additional debug info
-        console.log("\n=== Additional Debug Info ===");
-        console.log("Market PDA Authority:", marketPda.toString());
-        console.log("Market Vault Authority:", marketPda.toString());
+        console.log("NFT Asset Owner:", asset.owner.toString());
         console.log("User Public Key:", user.publicKey.toString());
-        console.log("NFT Mint:", position.mint.toString());
-        console.log("Token Program ID:", TOKEN_PROGRAM_ID.toString());
-        console.log("Associated Token Program ID:", ASSOCIATED_TOKEN_PROGRAM_ID.toString());
-        console.log("Token Metadata Program ID:", METAPLEX_ID.toString());
+        console.log("Are they equal?", asset.owner.toString() === user.publicKey.toString() ? "YES" : "NO");
 
-        // Add token record PDA derivation
-        // const [tokenRecordPda] = PublicKey.findProgramAddressSync(
-        //   [
-        //     Buffer.from("metadata"),
-        //     METAPLEX_ID.toBuffer(),
-        //     position.mint.toBuffer(),
-        //     Buffer.from("token_record"),
-        //     nftTokenAccount.toBuffer(),
-        //   ],
-        //   METAPLEX_ID
-        // );
+        // Assert ownership
+        assert.equal(
+          asset.owner.toString(),
+          user.publicKey.toString(),
+          "User must own the NFT asset to claim payout"
+        );
 
-        // console.log("Token Record PDA:", tokenRecordPda.toString());
-
-        try {
-          console.log("\n=== Executing Payout Transaction ===");
-          
-          // Log the instruction data we're about to send
-          // console.log("Payout Arguments:", {
-          //   positionId: position.positionId.toString(),
-          //   marketId: MARKET_ID.toString(),
-          //   amount: position.amount.toString(),
-          //   direction: "yes"
-          // });
-
-          // Update the program call
-          await program.methods
-            .settlePosition()
-            .accountsPartial({
-              signer: USER.publicKey,
-              market: marketPda,
-              marketPositionsAccount: positionAccountPda,
-              nftMint: position.mint,
-              userUsdcAta: userUsdcAta,
-              marketUsdcVault: marketVault,
-              usdcMint: usdcMint,
-              tokenProgram: TOKEN_PROGRAM_ID,
-              tokenMetadataProgram: METAPLEX_ID,
-              collection: collection,
-              mplCoreProgram: MPL_CORE_PROGRAM_ID,
-              associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-              systemProgram: anchor.web3.SystemProgram.programId,
-            }).signers([USER])
-            .rpc({
-              skipPreflight: false,
-              commitment: "confirmed",
-              maxRetries: 3,
-              preflightCommitment: "confirmed"
-            });
-
-          // Verify position status after payout
-          const updatedPositionAccount = await program.account.positionAccount.fetch(positionAccountPda);
-          const updatedPosition = updatedPositionAccount.positions.find(p => 
-            p.positionId.eq(position.positionId)
-          );
-
-          assert.ok(
-            Object.keys(updatedPosition!.positionStatus)[0] === "closed",
-            "Position should be marked as closed after payout"
-          );
-
-          // Check USDC balance change
-          const userUsdcBalanceAfter = await provider.connection.getTokenAccountBalance(userUsdcAta);
-          console.log("User USDC balance after payout:", userUsdcBalanceAfter.value.uiAmount);
-          console.log("USDC balance change:", 
-            userUsdcBalanceAfter.value.uiAmount! - userUsdcBalanceBefore.value.uiAmount!
-          );
-
-        } catch (error) {
-          console.error("\n=== Error Details ===");
-          console.error("Error processing payout for position", position.positionId.toString(), ":", error);
-          if (error.logs) {
-            console.error("\nProgram Logs:");
-            error.logs.forEach((log: string, index: number) => {
-              console.error(`${index + 1}. ${log}`);
-            });
-          }
-          if (error.stack) {
-            console.error("\nStack Trace:", error.stack);
-          }
-          throw error;
+      } catch (error) {
+        console.error("\n=== Error Details ===");
+        console.error("Error processing payout for position", position.positionId.toString(), ":", error);
+        if (error.logs) {
+          console.error("\nProgram Logs:");
+          error.logs.forEach((log: string, index: number) => {
+            console.error(`${index + 1}. ${log}`);
+          });
         }
+        if (error.stack) {
+          console.error("\nStack Trace:", error.stack);
+        }
+        throw error;
       }
     });
   });
+
 });
