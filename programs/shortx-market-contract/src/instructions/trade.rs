@@ -296,10 +296,6 @@ impl<'info> PositionContext<'info> {
                     key: "market_id".to_string(),
                     value: market_positions_account.market_id.to_string(),
                 },
-                // Attribute {
-                //     key: "market_question".to_string(),
-                //     value: String::from_utf8_lossy(&market.question).trim_end_matches('\0').to_string(),
-                // },
                 Attribute {
                     key: "position_id".to_string(),
                     value: current_position.position_id.to_string(),

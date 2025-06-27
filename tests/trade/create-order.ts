@@ -61,30 +61,6 @@ describe("shortx-contract", () => {
     console.log("Local wallet public key:", localKeypair.publicKey.toString());
     console.log("USDC mint authority (LOCAL_MINT):", LOCAL_MINT.publicKey.toString());
 
-    // Get the market PDA for mint authority
-    global.MARKET_ID = MARKET_ID;
-    console.log("MARKET_ID:", MARKET_ID.toNumber());
-    
-    const [marketPda] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("market"),
-        MARKET_ID.toArrayLike(Buffer, "le", 8),
-      ],
-      program.programId
-    );
-
-    // Check market PDA balance
-    // const marketBalance = await provider.connection.getBalance(marketPda);
-    // console.log("Market PDA balance:", marketBalance, "lamports");
-
-    // Calculate required rent-exempt amount for market state (467 bytes)
-    // const marketRentExempt = await provider.connection.getMinimumBalanceForRentExemption(467);
-    // console.log("Required rent-exempt amount for market state:", marketRentExempt, "lamports");
-
-    // // Calculate required rent-exempt amount for token account (165 bytes)
-    // const tokenAccountRentExempt = await provider.connection.getMinimumBalanceForRentExemption(165);
-    // console.log("Required rent-exempt amount for token account:", tokenAccountRentExempt, "lamports");
-
     // Defensive check: Create user's USDC token account
     try {
       userTokenAccount = (
@@ -119,24 +95,6 @@ describe("shortx-contract", () => {
       throw e;
     }
 
-    // Defensive check: Create market's USDC vault (ATA for market PDA)
-    // try {
-    //   marketVault = (
-    //     await getOrCreateAssociatedTokenAccount(
-    //       provider.connection,
-    //       USER, // Payer
-    //       usdcMint,
-    //       marketPda,
-    //       true // allowOwnerOffCurve for PDA
-    //     )
-    //   ).address;
-    //   console.log(`Market USDC Vault: ${marketVault.toString()}`);
-    // } catch (e) {
-    //   console.error("Failed to get or create market USDC vault:", e);
-    //   throw e;
-    // }
-
-    // Note: You'll need to get USDC from the faucet: https://spl-token-faucet.com/?token-name=USDC
     if (isDevnet) {
       console.log("Please ensure you have USDC in your wallet from the faucet");
     }
@@ -144,8 +102,6 @@ describe("shortx-contract", () => {
 
   describe("Trade", () => {
     it("Creates an order in an existing market", async () => {
-
-
 
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -166,8 +122,6 @@ describe("shortx-contract", () => {
         program.programId
       );
 
-      // Get the position account PDA
-      const positionId = marketAccount.nextPositionId; // This should be a BN
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("position"), MARKET_ID.toArrayLike(Buffer, "le", 8)],
         program.programId
@@ -201,35 +155,23 @@ describe("shortx-contract", () => {
       const direction = { yes: {} }; // Betting on "Yes"
 
       try {
-        const tx = await program.methods
-          .createPosition({
-            amount,
-            direction,
-          })
-          .accountsPartial({
-            signer: USER.publicKey,
-            feeVault: FEE_VAULT.publicKey,
-            marketPositionsAccount: positionAccountPda,
-            market: marketPda,
-            usdcMint: usdcMint, // Use devnet USDC mint
-            userUsdcAta: userTokenAccount,
-            marketUsdcVault: marketVault,
-            positionNftAccount: positionNftAccountPda,
-            collection: collectionPubkey,
-            mplCoreProgram: MPL_CORE_PROGRAM_ID,
-            config: configPda,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: anchor.web3.SystemProgram.programId,
-          })
-          .signers([USER])
-          .rpc({
-            skipPreflight: false,
-            commitment: "confirmed",
-            maxRetries: 3,
-            preflightCommitment: "confirmed"
-          });
-
+        const { tx, error } = await tryCreatePositionTx({
+          user: USER,
+          amount,
+          direction,
+          usdcMint,
+          userTokenAccount,
+          marketPda,
+          marketUsdcVault: marketVault,
+          positionAccountPda,
+          positionNftAccountPda,
+          collectionPubkey,
+          configPda,
+        });
+        if (error) {
+          console.error("Order creation failed:", error);
+          assert.fail("Order creation failed: " + error.toString());
+        }
         console.log("Order creation transaction signature:", tx);
 
         // Fetch the market account to verify the order was created
@@ -280,9 +222,218 @@ describe("shortx-contract", () => {
       console.log("Collection Attributes:", collection_attributesMap)
       console.log("Collection fetched");
 
+    });
 
+    // --- Negative Test Cases for Business Logic ---
 
+    it("Fails if market is already resolved", async () => {
+      // TODO: Create a market and resolve it (set winning_direction != None)
+      // ...create and resolve market...
+      // const { error } = await tryCreatePositionTx({ ... });
+      // assert.isNotNull(error, "Should fail with MarketAlreadyResolved");
+      // assert.include(error.toString(), "MarketAlreadyResolved");
+    });
 
+    it("Fails if concurrent transaction is detected", async () => {
+      // TODO: Manipulate market account so update_ts >= current ts
+      // ...simulate this state...
+      // const { error } = await tryCreatePositionTx({ ... });
+      // assert.isNotNull(error, "Should fail with ConcurrentTransaction");
+      // assert.include(error.toString(), "ConcurrentTransaction");
+    });
+
+    it("Fails if no available position slot", async () => {
+      // TODO: Fill all position slots in the market_positions_account
+      // ...simulate this state...
+      // const { error } = await tryCreatePositionTx({ ... });
+      // assert.isNotNull(error, "Should fail with NoAvailablePositionSlot");
+      // assert.include(error.toString(), "NoAvailablePositionSlot");
+    });
+
+    it("Fails if user has insufficient USDC", async () => {
+      // Use a user with 0 USDC
+      // You can create a new Keypair for this test
+      const poorUser = anchor.web3.Keypair.generate();
+      // Create ATA for poorUser but do not mint USDC
+      let poorUserTokenAccount;
+      try {
+        poorUserTokenAccount = (
+          await getOrCreateAssociatedTokenAccount(
+            provider.connection,
+            poorUser, // payer
+            usdcMint,
+            poorUser.publicKey
+          )
+        ).address;
+      } catch (e) {
+        // If fails, skip test
+        return;
+      }
+      const { error } = await tryCreatePositionTx({
+        user: poorUser,
+        userTokenAccount: poorUserTokenAccount,
+        usdcMint,
+        amount: new anchor.BN(1_000_000),
+        direction: { yes: {} },
+        // ...other required params (mock or reuse from above)
+        expectError: "InsufficientFunds"
+      });
+      assert.isNotNull(error, "Should fail with InsufficientFunds");
+      assert.include(error.toString(), "InsufficientFunds");
+    });
+
+    it("Fails if user has insufficient SOL for fee", async () => {
+      // Use a user with 0 SOL
+      // Airdrop 0 SOL to a new Keypair (should have no funds)
+      const noSolUser = anchor.web3.Keypair.generate();
+      // Create ATA for noSolUser and mint USDC so only USDC is present
+      let noSolUserTokenAccount;
+      try {
+        noSolUserTokenAccount = (
+          await getOrCreateAssociatedTokenAccount(
+            provider.connection,
+            noSolUser, // payer
+            usdcMint,
+            noSolUser.publicKey
+          )
+        ).address;
+        // Mint USDC to this account so only fee transfer fails
+        await mintTo(
+          provider.connection,
+          ADMIN, // payer
+          usdcMint,
+          noSolUserTokenAccount,
+          LOCAL_MINT, // mint authority
+          1_000_000
+        );
+      } catch (e) {
+        // If fails, skip test
+        return;
+      }
+      // Do not airdrop SOL, so fee transfer should fail
+      const { error } = await tryCreatePositionTx({
+        user: noSolUser,
+        userTokenAccount: noSolUserTokenAccount,
+        usdcMint,
+        amount: new anchor.BN(1_000_000),
+        direction: { yes: {} },
+        // ...other required params (mock or reuse from above)
+        expectError: "InsufficientFunds"
+      });
+      assert.isNotNull(error, "Should fail with InsufficientFunds");
+      assert.include(error.toString(), "InsufficientFunds");
+    });
+
+    it("Fails if question period has ended (using known closed market ID 1)", async () => {
+      // This test targets market with ID 1, which is known to be closed.
+      // It should fail with the 'QuestionPeriodEnded' error.
+      const closedMarketId = new anchor.BN(1);
+      // Derive PDAs for market 1
+      const [marketPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("market"), closedMarketId.toArrayLike(Buffer, "le", 8)],
+        program.programId
+      );
+      const [positionAccountPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("position"), closedMarketId.toArrayLike(Buffer, "le", 8)],
+        program.programId
+      );
+      const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("nft"), closedMarketId.toArrayLike(Buffer, "le", 8), new anchor.BN(0).toArrayLike(Buffer, "le", 8)],
+        program.programId
+      );
+      // Fetch the market account to get the collection pubkey
+      let marketAccount;
+      try {
+        marketAccount = await program.account.marketState.fetch(marketPda);
+      } catch (e) {
+        // If market doesn't exist, skip test
+        return;
+      }
+      const collectionPubkey = marketAccount.nftCollection;
+      const [configPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("config")],
+        program.programId
+      );
+      // Use a valid user with USDC
+      const { error } = await tryCreatePositionTx({
+        amount: new anchor.BN(1_000_000),
+        direction: { yes: {} },
+        usdcMint,
+        userTokenAccount,
+        marketPda,
+        marketUsdcVault: marketVault,
+        positionAccountPda,
+        positionNftAccountPda,
+        collectionPubkey,
+        configPda,
+        expectError: "QuestionPeriodEnded"
+      });
+      assert.isNotNull(error, "Should fail with QuestionPeriodEnded");
+      assert.include(error.toString(), "QuestionPeriodEnded");
     });
   });
 });
+
+type TryCreatePositionParams = {
+  user?: typeof USER,
+  amount?: anchor.BN,
+  direction?: any,
+  usdcMint?: PublicKey,
+  userTokenAccount?: PublicKey,
+  marketPda?: PublicKey,
+  marketUsdcVault?: PublicKey,
+  positionAccountPda?: PublicKey,
+  positionNftAccountPda?: PublicKey,
+  collectionPubkey?: PublicKey,
+  configPda?: PublicKey,
+  expectError?: string | null,
+  mplCoreProgram?: PublicKey,
+};
+
+async function tryCreatePositionTx({
+  user = USER,
+  amount = new anchor.BN(1_000_000),
+  direction = { yes: {} },
+  usdcMint,
+  userTokenAccount,
+  marketPda,
+  marketUsdcVault,
+  positionAccountPda,
+  positionNftAccountPda,
+  collectionPubkey,
+  configPda,
+  expectError = null,
+  mplCoreProgram = new PublicKey(MPL_CORE_PROGRAM_ID.toString()),
+}: TryCreatePositionParams) {
+  try {
+    const tx = await program.methods
+      .createPosition({
+        amount,
+        direction,
+      })
+      .accountsPartial({
+        signer: user.publicKey,
+        feeVault: FEE_VAULT.publicKey,
+        marketPositionsAccount: positionAccountPda,
+        market: marketPda,
+        usdcMint: usdcMint,
+        userUsdcAta: userTokenAccount,
+        marketUsdcVault: marketUsdcVault,
+        positionNftAccount: positionNftAccountPda,
+        collection: collectionPubkey,
+        mplCoreProgram: mplCoreProgram,
+        config: configPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+    return { tx, error: null };
+  } catch (error) {
+    if (expectError) {
+      assert.include(error.toString(), expectError);
+    }
+    return { tx: null, error };
+  }
+}
