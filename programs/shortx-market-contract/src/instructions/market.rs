@@ -116,7 +116,7 @@ pub struct MarketContext<'info> {
     )]
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-     
+     /// CHECK: this account is checked by the address constraint and in MPL core.
      #[account(
         address = MPL_CORE_ID,
         constraint = mpl_core_program.key() == MPL_CORE_ID @ ShortxError::InvalidMplCoreProgram
