@@ -31,6 +31,7 @@ use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
     MARKET, 
     POSITION, 
+    NFT_COLLECTION,
     USDC_MINT
     }, 
     constraints::{
@@ -94,7 +95,7 @@ pub struct MarketContext<'info> {
     #[account(
         mut,
         seeds = [ 
-            b"collection", 
+            NFT_COLLECTION.as_bytes(), 
             &config.next_market_id.to_le_bytes()
         ],
         bump
@@ -313,7 +314,7 @@ impl<'info> MarketContext<'info> {
         let system_program = &self.system_program.to_account_info();
 
         let collection_signer_seeds: &[&[u8]] = &[
-            b"collection",
+            NFT_COLLECTION.as_bytes(),
             &market_id.to_le_bytes(),
             &[bumps.collection],
         ];

@@ -10,7 +10,7 @@ use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 use std::str::FromStr;
 
-use crate::constants::{MARKET, USDC_MINT};
+use crate::constants::{MARKET, NFT, USDC_MINT};
 use crate::state::{Config, MarketStates, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
     errors::ShortxError,
@@ -54,7 +54,7 @@ pub struct PositionContext<'info> {
     #[account(
         mut,
         seeds = [ 
-            b"nft", 
+            NFT.as_bytes(), 
             market_positions_account.market_id.to_le_bytes().as_ref(), 
             market.next_position_id.to_le_bytes().as_ref(),
         ],
@@ -324,14 +324,14 @@ impl<'info> PositionContext<'info> {
         let market_id = &market_positions_account.market_id.to_le_bytes();
 
         let nft_signer_seeds: &[&[u8]] = &[
-            b"nft",
+            NFT.as_bytes(),
             market_id,
             &next_position_id.to_le_bytes(),
             &[position_nft_account_bump],
         ];
 
         let market_signer_seeds: &[&[u8]] = &[
-            b"market",
+            MARKET.as_bytes(),
             &self.market.market_id.to_le_bytes(),
             &[bumps.market],
         ];
@@ -467,7 +467,7 @@ impl<'info> PayoutNftContext<'info> {
 
         if payout > 0 && is_winner {
             // Transfer payout
-            let market_signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
+            let market_signer: &[&[&[u8]]] = &[&[MARKET.as_bytes(), &market.market_id.to_le_bytes(), &[market.bump]]];
             msg!("Using signer seeds: {:?}", market_signer);
             msg!("Market vault amount before transfer: {}", self.market_usdc_vault.amount);
             msg!("User ATA amount before transfer: {}", self.user_usdc_ata.amount);
@@ -494,7 +494,7 @@ impl<'info> PayoutNftContext<'info> {
             let system_program = self.system_program.to_account_info();
 
             // let nft_signer_seeds: &[&[u8]] = &[
-            //     b"nft",
+            //     NFT.as_bytes(),
             //     &market.market_id.to_le_bytes(),
             //     &market_positions_account.positions[position_index].position_id.to_le_bytes(),
             //     &[self.nft_mint.bump],
@@ -502,7 +502,7 @@ impl<'info> PayoutNftContext<'info> {
 
 
             let market_signer_seeds: &[&[u8]] = &[
-                b"market",
+                MARKET.as_bytes(),
                 &market.market_id.to_le_bytes(),
                 &[market.bump],
             ];
