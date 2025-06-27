@@ -237,6 +237,10 @@ impl<'info> MarketContext<'info> {
         msg!("Checking if oracle is valid");
         require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
 
+        msg!("Checking USDC mint is valid");
+        require!(self.usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap(), ShortxError::InvalidMint);
+
+
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
 
