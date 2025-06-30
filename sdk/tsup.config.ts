@@ -2,17 +2,14 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: ['src/index.ts'],
-  format: ['esm', 'cjs'], // 🔁 dual build
+  format: ['cjs'], // Only CommonJS, no ESM
   outDir: 'dist',
   splitting: false,
   sourcemap: true,
-  clean: true,
-  dts: {
-    resolve: true,
-    entry: 'src/index.ts'
-  },
+  clean: false, // Don't clean - we want to keep tsc files
+  dts: false, // Let tsc handle type declarations
   loader: {
-    '.json': 'copy'
+    '.json': 'json'
   },
   onSuccess: 'cp -r src/types dist/'
 });

@@ -10,3 +10,6 @@ user.json
 keypair.json
 local-mint.json
 admin.json
+
+sdk/dist/
+sdk/dist/**/*

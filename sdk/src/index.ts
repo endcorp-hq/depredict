@@ -1,7 +1,7 @@
 import { Program } from '@coral-xyz/anchor'
 import { Connection, PublicKey } from '@solana/web3.js'
 import { ShortxContract } from './types/shortx.js'
-import fs from 'fs';
+import IDL from './types/idl_shortx.json'  // tsup will handle this
 import Trade from './trade.js'
 import Config from './config.js'
 import Position from './position.js'
@@ -14,14 +14,9 @@ export default class ShortXClient {
   ADMIN_KEY: PublicKey
   FEE_VAULT: PublicKey
   USDC_MINT: PublicKey
+  
   constructor(connection: Connection, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
-    const IDL = JSON.parse(
-      fs.readFileSync(
-        require.resolve('shortx-sdk/idl'),
-        'utf-8'
-      )
-    );
-    this.program = new Program(IDL as ShortxContract,{connection})
+    this.program = new Program(IDL as ShortxContract, { connection })
     this.trade = new Trade(this.program, adminKey, feeVault, usdcMint)
     this.position = new Position(this.program)
     this.config = new Config(this.program, adminKey, feeVault, usdcMint)
@@ -30,7 +25,6 @@ export default class ShortXClient {
     this.USDC_MINT = usdcMint
   }
 }
-
 
 //export types
 export * from './types/trade.js'
