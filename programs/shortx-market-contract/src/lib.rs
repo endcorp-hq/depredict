@@ -44,8 +44,8 @@ pub mod shortx_contract {
         Ok(())
     }
     
-    pub fn resolve_market(ctx: Context<ResolveMarketContext>) -> Result<()> {
-        ctx.accounts.resolve_market()?;
+    pub fn resolve_market(ctx: Context<ResolveMarketContext>, args: ResolveMarketArgs) -> Result<()> {
+        ctx.accounts.resolve_market(args)?;
         Ok(())
     }
 
