@@ -39,7 +39,7 @@ use crate::{constants::{
         is_valid_oracle
     }, 
     state::{
-        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
+        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, OracleType, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
     }
 };
 use crate::errors::ShortxError;
@@ -222,13 +222,19 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
-        let manual_resolve = args.manual_resolve;
 
         let ts = Clock::get()?.unix_timestamp;
 
-        if !manual_resolve {
-            msg!("Checking if oracle is valid");
-            require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        match args.oracle_type {
+            OracleType::None => {
+                msg!("No oracle type provided");
+                market.oracle_pubkey = None;
+            }
+            OracleType::Switchboard => {
+                msg!("Checking if oracle is valid");
+                require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+                market.oracle_pubkey = Some(self.oracle_pubkey.key());
+            }
         }
 
         msg!("Checking USDC mint is valid");
@@ -246,9 +252,8 @@ impl<'info> MarketContext<'info> {
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
-            oracle_pubkey: if manual_resolve { None } else { Some(self.oracle_pubkey.key()) },
             market_usdc_vault: Some(self.market_usdc_vault.key()),
-            manual_resolve: manual_resolve,
+            oracle_type: args.oracle_type,
             ..Default::default()
         });
 
@@ -355,7 +360,7 @@ impl<'info> ResolveMarketContext<'info> {
     pub fn resolve_market(&mut self, args: ResolveMarketArgs) -> Result<()> {
         let market = &mut self.market;
         let signer = &self.signer;
-        let manual_resolve = market.manual_resolve;
+        let oracle_type = market.oracle_type;
 
         let ts = Clock::get()?.unix_timestamp;
 
@@ -363,12 +368,14 @@ impl<'info> ResolveMarketContext<'info> {
         require!(market.market_state == MarketStates::Active || market.market_state == MarketStates::Ended, ShortxError::MarketAlreadyResolved);
 
         // Get oracle price data
-        let direction = if manual_resolve {
-            let value = args.oracle_value.unwrap();
-            Decimal::from(value)
-        } else {
-            get_oracle_value(&self.oracle_pubkey)?
-        };
+        let direction = match oracle_type {
+            OracleType::None => {
+                let value = args.oracle_value.unwrap();
+                Decimal::from(value)
+            },
+            OracleType::Switchboard => get_oracle_value(&self.oracle_pubkey)?,
+        };  
+        
         msg!("Oracle or manual value: {:?}", direction);
         // Determine winning direction based on price
         let winning_direction = if direction == Decimal::from(10) {
