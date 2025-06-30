@@ -1,28 +1,34 @@
-import * as anchor from "@coral-xyz/anchor";  
+import * as anchor from "@coral-xyz/anchor";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   createMint,
-  getOrCreateAssociatedTokenAccount,
-  mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID, LOCAL_MINT, ORACLE_KEY } from "../helpers";
-import { getMint } from "@solana/spl-token";
+import {
+  getNetworkConfig,
+  ADMIN,
+  FEE_VAULT,
+  program,
+  provider,
+  ORACLE_KEY,
+} from "../helpers";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
-import { fetchCollection } from '@metaplex-foundation/mpl-core'
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
-import { PullFeed, getDefaultDevnetQueue, asV0Tx } from "@switchboard-xyz/on-demand";
+import { fetchCollection } from "@metaplex-foundation/mpl-core";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import {
+  PullFeed,
+  getDefaultDevnetQueue,
+  asV0Tx,
+} from "@switchboard-xyz/on-demand";
 import { CrossbarClient } from "@switchboard-xyz/common";
-import fs from "fs";
 
-const umi = createUmi(provider.connection)
+const umi = createUmi(provider.connection);
 
 // At the top of your file:
 let numMarkets: anchor.BN;
 let configPda: PublicKey;
-
 
 describe("shortx-contract", () => {
   let usdcMint: PublicKey;
@@ -35,7 +41,7 @@ describe("shortx-contract", () => {
 
     // Use local mint for testing
     // usdcMint = LOCAL_MINT.publicKey;
-    usdcMint = LOCAL_MINT.publicKey;
+    usdcMint = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
     console.log("USDC Mint:", usdcMint.toString());
     collectionMintKeypair = Keypair.generate();
   });
@@ -84,11 +90,9 @@ describe("shortx-contract", () => {
     //   console.log(
     //     `Admin ATA (${usdcMint.toString()}): ${adminTokenAccount.toString()}`
     //   );
-      
+
     //   const mintInfo = await getMint(provider.connection, usdcMint);
     //   console.log("Mint authority:", mintInfo.mintAuthority?.toBase58());
-
-
 
     //   // Mint USDC to admin if needed
     //   const adminUsdcBalance = await provider.connection.getTokenAccountBalance(adminTokenAccount);
@@ -122,24 +126,16 @@ describe("shortx-contract", () => {
     const configAccount = await program.account.config.fetch(configPda);
     numMarkets = configAccount.nextMarketId; // assign to file-level variable
     console.log("Num Markets:", numMarkets);
-
-
-
-
   });
 
   describe("Market", () => {
-    
-    it("Pulls oracle data", async () => {
+    it("Pulls oracle data", async () => {      
 
-      const oracleOwner = Keypair.fromSecretKey(
-        new Uint8Array(
-            JSON.parse(fs.readFileSync("/Users/Andrew/.config/solana/id.json", "utf-8"))
-          )
-        );
-      console.log("Using Payer:", oracleOwner.publicKey.toBase58(), "\n");
+      console.log("Using Payer:", ADMIN.publicKey.toBase58(), "\n");
 
-      const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
+      const queue = await getDefaultDevnetQueue(
+        "https://api.devnet.solana.com"
+      );
       const connection = new Connection("https://api.devnet.solana.com");
       const pullFeed = new PullFeed(queue.program, ORACLE_KEY);
       const connectionEnhanced = pullFeed.program.provider.connection;
@@ -147,18 +143,21 @@ describe("shortx-contract", () => {
       console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
 
       // Use the local crossbar server
-      const crossbarClient = new CrossbarClient("http://localhost:8080");
+      const crossbarClient = CrossbarClient.default();
       console.log("Using local crossbar server\n");
 
       try {
-        const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx({
-          gateway: "https://switchboard-oracle.everstake.one/devnet",
-          numSignatures: 3,
-          crossbarClient: crossbarClient,
-          chain: "solana",
-          network: "devnet",
-          
-        }, false, oracleOwner.publicKey);
+        const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx(
+          {
+            gateway: "https://switchboard-oracle.everstake.one/devnet",
+            numSignatures: 3,
+            crossbarClient: crossbarClient,
+            chain: "solana",
+            network: "devnet",
+          },
+          false,
+          ADMIN.publicKey
+        );
 
         if (!pullIx || pullIx.length === 0) {
           throw new Error("Failed to fetch update from local crossbar server.");
@@ -167,7 +166,7 @@ describe("shortx-contract", () => {
         const tx = await asV0Tx({
           connection,
           ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
-          signers: [oracleOwner],
+          signers: [ADMIN],
           computeUnitPrice: 200_000,
           computeUnitLimitMultiple: 1.3,
           lookupTables: luts,
@@ -186,16 +185,18 @@ describe("shortx-contract", () => {
         await connectionEnhanced.confirmTransaction(sig, "processed");
 
         for (let simulation of responses) {
-          console.log(`Feed Public Key ${simulation.value} job outputs: ${simulation.value}`);
+          console.log(
+            `Feed Public Key ${simulation.value} job outputs: ${simulation.value}`
+          );
         }
         return responses;
-      
       } catch (error) {
         console.error(
-          "Failed during fetchUpdateIx or transaction submission:", error
+          "Failed during fetchUpdateIx or transaction submission:",
+          error
         );
       }
-  });
+    });
 
     it("Creates market", async () => {
       // --- Get validator time ---
@@ -232,37 +233,31 @@ describe("shortx-contract", () => {
       console.log("Market ID:", marketId.toNumber());
 
       const [marketPda, marketBump] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("market"),
-          marketId.toArrayLike(Buffer, "le", 8),
-        ],
+        [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
       console.log("Market PDA:", marketPda.toString());
 
       const [marketPositionsPda] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("position"),
-          marketId.toArrayLike(Buffer, "le", 8),
-        ],
+        [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
       console.log("Market Positions PDA:", marketPositionsPda.toString());
 
       const [collectionPda, collectionBump] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("collection"), 
-          marketId.toArrayLike(Buffer, "le", 8)
-        ],
+        [Buffer.from("collection"), marketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
       console.log("Collection PDA:", collectionPda.toString());
 
       // Create a new keypair for the collection mint
       const collectionMintKeypair = Keypair.generate();
-      console.log("Collection Mint:", collectionMintKeypair.publicKey.toString());
+      console.log(
+        "Collection Mint:",
+        collectionMintKeypair.publicKey.toString()
+      );
 
       // Initialize the collection mint using SPL Token program
       const mintId = await createMint(
@@ -284,7 +279,8 @@ describe("shortx-contract", () => {
             question,
             marketStart,
             marketEnd,
-            metadataUri
+            metadataUri,
+            manualResolve: false,
           })
           .accountsPartial({
             payer: ADMIN.publicKey,
@@ -305,10 +301,9 @@ describe("shortx-contract", () => {
             skipPreflight: false,
             commitment: "confirmed",
             maxRetries: 3,
-            preflightCommitment: "confirmed"
+            preflightCommitment: "confirmed",
           });
         console.log("Transaction signature:", tx);
-        
       } catch (error) {
         console.error("Full error:", error);
         if (error.logs) {
@@ -321,16 +316,31 @@ describe("shortx-contract", () => {
       console.log("\n=== Market State Details ===");
       console.log("Market ID:", marketAccount.marketId.toString());
       console.log("Authority:", marketAccount.authority.toString());
-      console.log("Market Start:", new Date(marketAccount.marketStart.toNumber() * 1000).toISOString());
-      console.log("Market End:", new Date(marketAccount.marketEnd.toNumber() * 1000).toISOString());
+      console.log(
+        "Market Start:",
+        new Date(marketAccount.marketStart.toNumber() * 1000).toISOString()
+      );
+      console.log(
+        "Market End:",
+        new Date(marketAccount.marketEnd.toNumber() * 1000).toISOString()
+      );
       console.log("Question:", Buffer.from(marketAccount.question).toString());
-      console.log("Update Timestamp:", new Date(marketAccount.updateTs.toNumber() * 1000).toISOString());
-      console.log("Oracle Pubkey:", marketAccount.oraclePubkey?.toString() || "None");
+      console.log(
+        "Update Timestamp:",
+        new Date(marketAccount.updateTs.toNumber() * 1000).toISOString()
+      );
+      console.log(
+        "Oracle Pubkey:",
+        marketAccount.oraclePubkey?.toString() || "None"
+      );
       console.log("Market State:", marketAccount.marketState);
       console.log("Winning Direction:", marketAccount.winningDirection);
-      console.log("Collection Mint:", marketAccount.nftCollection?.toString() || "None");
+      console.log(
+        "Collection Mint:",
+        marketAccount.nftCollection?.toString() || "None"
+      );
       console.log("=== End Market State Details ===\n");
-      
+
       const configAccount = await program.account.config.fetch(configPda);
       console.log("\n=== Config State Details ===");
       console.log("Number of markets:", configAccount.nextMarketId.toNumber());
@@ -340,22 +350,20 @@ describe("shortx-contract", () => {
       console.log("Version:", configAccount.version.toString());
       console.log("=== End Config State Details ===\n");
 
-
-
       assert.ok(marketAccount.marketId.eq(marketId));
       assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
 
       console.log("Fetching collection...");
-      const asset = await fetchCollection(umi, collectionPda.toString())
-      console.log(asset)
-      let attributes = asset.attributes
-      // map the attributes as key value pairs and console log: 
+      const asset = await fetchCollection(umi, collectionPda.toString());
+      console.log(asset);
+      let attributes = asset.attributes;
+      // map the attributes as key value pairs and console log:
       let attributesMap = attributes.attributeList.map((attribute: any) => {
         return {
-          [attribute.key]: attribute.value
-        }
-      })
-      console.log("Attributes:", attributesMap)
+          [attribute.key]: attribute.value,
+        };
+      });
+      console.log("Attributes:", attributesMap);
       console.log("Collection fetched");
     });
   });

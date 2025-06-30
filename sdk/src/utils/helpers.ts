@@ -2,12 +2,12 @@ import {
   Market,
   WinningDirection,
   MarketStates
-} from '../types/trade'
+} from '../types/trade.js'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { IdlAccounts } from '@coral-xyz/anchor'
-import { ShortxContract } from '../types/shortx'
-import { PositionAccount, Position, PositionDirection, PositionStatus } from '../types/position'
+import { ShortxContract } from '../types/shortx.js'
+import { PositionAccount, Position, PositionDirection, PositionStatus } from '../types/position.js'
 
 export const encodeString = (value: string, alloc = 32): number[] => {
   const buffer = Buffer.alloc(alloc, 32)

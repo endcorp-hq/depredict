@@ -1,5 +1,5 @@
 {
-  "address": "HWEeUwnYT7PN5LdJ2t4dyYSqpEn1rcs9coFkqCqMuCiF",
+  "address": "5uqv2VWyhNk57QwxmZqRXe7M6z2id4MW9nY83WMmhtiG",
   "metadata": {
     "name": "shortx_contract",
     "version": "0.1.0",
@@ -1632,6 +1632,10 @@
           {
             "name": "metadata_uri",
             "type": "string"
+          },
+          {
+            "name": "manual_resolve",
+            "type": "bool"
           }
         ]
       }
@@ -1777,7 +1781,7 @@
             "type": {
               "array": [
                 "u8",
-                8
+                7
               ]
             }
           },
@@ -1821,6 +1825,10 @@
           {
             "name": "version",
             "type": "u64"
+          },
+          {
+            "name": "manual_resolve",
+            "type": "bool"
           },
           {
             "name": "padding",
@@ -1870,6 +1878,10 @@
                 "name": "PositionDirection"
               }
             }
+          },
+          {
+            "name": "metadata_uri",
+            "type": "string"
           }
         ]
       }
@@ -2147,15 +2159,9 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "market_id",
-            "type": "u64"
-          },
-          {
-            "name": "winning_direction",
+            "name": "oracle_value",
             "type": {
-              "defined": {
-                "name": "WinningDirection"
-              }
+              "option": "u32"
             }
           }
         ]

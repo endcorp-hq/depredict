@@ -341,7 +341,7 @@ impl<'info> PositionContext<'info> {
 
 
         let nft_name = format!("SHORTX MARKET:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
-        let uri = format!("https://shortx.io/market/{}/{}/{} ", market_positions_account.market_id, current_position.position_id, current_position.position_nonce);
+        let uri = args.metadata_uri;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
         
         msg!("Collection: {:?}", self.collection.key());

@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("HWEeUwnYT7PN5LdJ2t4dyYSqpEn1rcs9coFkqCqMuCiF");
+declare_id!("5uqv2VWyhNk57QwxmZqRXe7M6z2id4MW9nY83WMmhtiG");
 
 #[program]
 pub mod shortx_contract {
@@ -46,8 +46,8 @@ pub mod shortx_contract {
         Ok(())
     }
 
-    pub fn resolve_market(ctx: Context<ResolveMarketContext>) -> Result<()> {
-        ctx.accounts.resolve_market()?;
+    pub fn resolve_market(ctx: Context<ResolveMarketContext>, args: ResolveMarketArgs) -> Result<()> {
+        ctx.accounts.resolve_market(args)?;
         Ok(())
     }
 

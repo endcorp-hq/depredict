@@ -53,6 +53,7 @@ impl Default for Position {
 pub struct OpenPositionArgs {
     pub amount: u64,
     pub direction: PositionDirection,
+    pub metadata_uri: String,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]

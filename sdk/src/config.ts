@@ -1,9 +1,8 @@
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "./types/shortx";
+import { Program, BN, web3 } from "@coral-xyz/anchor";
+import { ShortxContract } from "./types/shortx.js";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
-import { getConfigPDA } from "./utils/pda";
-import * as anchor from "@coral-xyz/anchor";
-import Trade from "./trade";
+import { getConfigPDA } from "./utils/pda/index.js";
+import Trade from "./trade.js";
 
 export default class Config {
   ADMIN_KEY: PublicKey;
@@ -24,7 +23,7 @@ export default class Config {
   async createConfig(feeAmount: number, payer: PublicKey) {
     const configPDA = getConfigPDA(this.program.programId);
     const ixs: TransactionInstruction[] = [];
-    const feeAmountBN = new anchor.BN(feeAmount);
+    const feeAmountBN = new BN(feeAmount);
     ixs.push(
       await this.program.methods
         .initializeConfig(feeAmountBN)
@@ -32,7 +31,7 @@ export default class Config {
           signer: payer,
           feeVault: this.FEE_VAULT,
           config: configPDA,
-          systemProgram: anchor.web3.SystemProgram.programId,
+          systemProgram: web3.SystemProgram.programId,
         })
         .instruction()
     );
@@ -66,7 +65,7 @@ export default class Config {
   ) {
     const configPDA = getConfigPDA(this.program.programId);
     const ixs: TransactionInstruction[] = [];
-    const feeAmountBN = feeAmount ? new anchor.BN(feeAmount) : null;
+    const feeAmountBN = feeAmount ? new BN(feeAmount) : null;
     const authorityBN = authority || null;
     const feeVaultBN = feeVault || null;
     ixs.push(
@@ -76,7 +75,7 @@ export default class Config {
           signer: this.ADMIN_KEY,
           feeVault: this.FEE_VAULT,
           config: configPDA,
-          systemProgram: anchor.web3.SystemProgram.programId,
+          systemProgram: web3.SystemProgram.programId,
         })
         .instruction()
     );
@@ -101,7 +100,7 @@ export default class Config {
       await this.program.methods.closeConfig().accountsPartial({
         signer: this.ADMIN_KEY,
         config: configPDA,
-        systemProgram: anchor.web3.SystemProgram.programId,
+        systemProgram: web3.SystemProgram.programId,
       }).instruction()
     );
   }catch(error){

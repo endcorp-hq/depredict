@@ -1,12 +1,24 @@
 {
   "name": "shortx-sdk",
-  "version": "0.1.74",
+  "version": "0.1.95",
   "description": "SDK for interacting with the ShortX Protocol Solana contract",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
   "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.mjs"
+    },
+    "./idl": {
+      "require": "./dist/types/idl_shortx.json",
+      "import": "./dist/types/idl_shortx.json"
+    }
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -33,6 +45,7 @@
     "bs58": "^6.0.0"
   },
   "devDependencies": {
+    "tsup": "^8.5.0",
     "typescript": "^5.0.0"
   },
   "files": [

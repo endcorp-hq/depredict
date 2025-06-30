@@ -124,7 +124,7 @@ impl<'info> CloseConfigContext<'info> {
 
         // Close the account
         self.config.to_account_info().assign(&System::id());
-        self.config.to_account_info().realloc(0, false)?;
+        self.config.to_account_info().resize(0)?;
 
         Ok(())
     }

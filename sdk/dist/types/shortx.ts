@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/shortx_contract.json`.
  */
 export type ShortxContract = {
-  "address": "5uqv2VWyhNk57QwxmZqRXe7M6z2id4MW9nY83WMmhtiG",
+  "address": "3eYQqCNDGWGJ7s76C7YFzrGHwT8cy94q2xyUr2ZNA3G2",
   "metadata": {
     "name": "shortxContract",
     "version": "0.1.0",
@@ -989,16 +989,7 @@ export type ShortxContract = {
           "writable": true
         }
       ],
-      "args": [
-        {
-          "name": "args",
-          "type": {
-            "defined": {
-              "name": "resolveMarketArgs"
-            }
-          }
-        }
-      ]
+      "args": []
     },
     {
       "name": "settlePosition",
@@ -1638,10 +1629,6 @@ export type ShortxContract = {
           {
             "name": "metadataUri",
             "type": "string"
-          },
-          {
-            "name": "manualResolve",
-            "type": "bool"
           }
         ]
       }
@@ -1787,7 +1774,7 @@ export type ShortxContract = {
             "type": {
               "array": [
                 "u8",
-                7
+                8
               ]
             }
           },
@@ -1831,10 +1818,6 @@ export type ShortxContract = {
           {
             "name": "version",
             "type": "u64"
-          },
-          {
-            "name": "manualResolve",
-            "type": "bool"
           },
           {
             "name": "padding",
@@ -2155,20 +2138,6 @@ export type ShortxContract = {
           {
             "name": "timestamp",
             "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "resolveMarketArgs",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "oracleValue",
-            "type": {
-              "option": "u32"
-            }
           }
         ]
       }

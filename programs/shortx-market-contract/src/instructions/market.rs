@@ -38,16 +38,7 @@ use crate::{constants::{
         is_valid_oracle
     }, 
     state::{
-        CloseMarketArgs, 
-        Config, 
-        CreateMarketArgs, 
-        MarketState, 
-        MarketStates, 
-        Position, 
-        PositionAccount, 
-        PositionStatus, 
-        UpdateMarketArgs,
-        WinningDirection
+        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
     }
 };
 use crate::errors::ShortxError;
@@ -224,11 +215,14 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
+        let manual_resolve = args.manual_resolve;
 
         let ts = Clock::get()?.unix_timestamp;
 
-        msg!("Checking if oracle is valid");
-        require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        if !manual_resolve {
+            msg!("Checking if oracle is valid");
+            require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+        }
 
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
@@ -241,8 +235,9 @@ impl<'info> MarketContext<'info> {
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
-            oracle_pubkey: Some(self.oracle_pubkey.key()),
+            oracle_pubkey: if manual_resolve { None } else { Some(self.oracle_pubkey.key()) },
             market_usdc_vault: Some(self.market_usdc_vault.key()),
+            manual_resolve: manual_resolve,
             ..Default::default()
         });
 
@@ -346,9 +341,10 @@ impl<'info> UpdateMarketContext<'info> {
 }
 
 impl<'info> ResolveMarketContext<'info> {
-    pub fn resolve_market(&mut self) -> Result<()> {
+    pub fn resolve_market(&mut self, args: ResolveMarketArgs) -> Result<()> {
         let market = &mut self.market;
         let signer = &self.signer;
+        let manual_resolve = market.manual_resolve;
 
         let ts = Clock::get()?.unix_timestamp;
 
@@ -356,8 +352,13 @@ impl<'info> ResolveMarketContext<'info> {
         require!(market.market_state == MarketStates::Active || market.market_state == MarketStates::Ended, ShortxError::MarketAlreadyResolved);
 
         // Get oracle price data
-        let direction = get_oracle_value(&self.oracle_pubkey)?;
-        msg!("Oracle value: {:?}", direction);
+        let direction = if manual_resolve {
+            let value = args.oracle_value.unwrap();
+            Decimal::from(value)
+        } else {
+            get_oracle_value(&self.oracle_pubkey)?
+        };
+        msg!("Oracle or manual value: {:?}", direction);
         // Determine winning direction based on price
         let winning_direction = if direction == Decimal::from(10) {
             WinningDirection::No

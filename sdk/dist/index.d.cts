@@ -1,11 +1,15 @@
+import * as anchor from '@coral-xyz/anchor';
+import { Program, BN, web3 } from '@coral-xyz/anchor';
+import { PublicKey, TransactionInstruction, Connection } from '@solana/web3.js';
+
 /**
  * Program IDL in camelCase format in order to be used in JS/TS.
  *
  * Note that this is only a type helper and is not the actual IDL. The original
  * IDL can be found at `target/idl/shortx_contract.json`.
  */
-export type ShortxContract = {
-    "address": "HWEeUwnYT7PN5LdJ2t4dyYSqpEn1rcs9coFkqCqMuCiF";
+type ShortxContract = {
+    "address": "3eYQqCNDGWGJ7s76C7YFzrGHwT8cy94q2xyUr2ZNA3G2";
     "metadata": {
         "name": "shortxContract";
         "version": "0.1.0";
@@ -989,16 +993,7 @@ export type ShortxContract = {
                     "writable": true;
                 }
             ];
-            "args": [
-                {
-                    "name": "args";
-                    "type": {
-                        "defined": {
-                            "name": "resolveMarketArgs";
-                        };
-                    };
-                }
-            ];
+            "args": [];
         },
         {
             "name": "settlePosition";
@@ -1876,6 +1871,10 @@ export type ShortxContract = {
                                 "name": "positionDirection";
                             };
                         };
+                    },
+                    {
+                        "name": "metadataUri";
+                        "type": "string";
                     }
                 ];
             };
@@ -2148,26 +2147,6 @@ export type ShortxContract = {
             };
         },
         {
-            "name": "resolveMarketArgs";
-            "type": {
-                "kind": "struct";
-                "fields": [
-                    {
-                        "name": "marketId";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "winningDirection";
-                        "type": {
-                            "defined": {
-                                "name": "winningDirection";
-                            };
-                        };
-                    }
-                ];
-            };
-        },
-        {
             "name": "updateMarketArgs";
             "type": {
                 "kind": "struct";
@@ -2234,3 +2213,352 @@ export type ShortxContract = {
         }
     ];
 };
+
+type Market = {
+    address: string;
+    bump: number;
+    authority: string;
+    oraclePubkey: string;
+    nftCollectionMint: string;
+    marketUsdcVault: string;
+    marketId: string;
+    yesLiquidity: string;
+    noLiquidity: string;
+    volume: string;
+    updateTs: string;
+    nextPositionId: string;
+    marketState: MarketStates;
+    marketStart: string;
+    marketEnd: string;
+    question: string;
+    winningDirection: WinningDirection;
+};
+declare enum MarketStates {
+    ACTIVE = "active",
+    ENDED = "ended",
+    RESOLVING = "resolving",
+    RESOLVED = "resolved"
+}
+declare enum WinningDirection {
+    NONE = "None",
+    YES = "Yes",
+    NO = "No",
+    DRAW = "Draw"
+}
+type InitializeMarketArgs = {
+    marketId: number;
+    startTime: number;
+    endTime: number;
+    question: string;
+    feeBps: number;
+    customer: PublicKey | null;
+};
+type CreateCustomerArgs = {
+    id: number;
+    name: string;
+    authority: PublicKey;
+    feeRecipient: PublicKey;
+};
+type OpenOrderArgs = {
+    marketId: number;
+    amount: number;
+    token: string;
+    direction: {
+        yes: {};
+    } | {
+        no: {};
+    };
+    mint: PublicKey;
+    payer: PublicKey;
+    feeVaultAccount: PublicKey;
+    usdcMintAddress: PublicKey;
+    metadataUri: string;
+};
+type CreateMarketArgs = {
+    startTime: number;
+    endTime: number;
+    question: string;
+    oraclePubkey: PublicKey;
+    metadataUri: string;
+    payer: PublicKey;
+    feeVaultAccount: PublicKey;
+    usdcMintAddress: PublicKey;
+};
+
+type RpcOptions = {
+    skipPreflight?: boolean;
+    microLamports?: number;
+    computeBudget?: number;
+};
+
+type PositionAccount = {
+    authority: PublicKey;
+    positions: Position$1[];
+    nonce: number;
+    isSubPosition: boolean;
+    marketId: number;
+};
+type Position$1 = {
+    ts: string;
+    positionId: string;
+    marketId: string;
+    positionStatus: PositionStatus;
+    amount: string;
+    mint: string;
+    direction: PositionDirection;
+    positionNonce: string;
+    createdAt: string;
+};
+declare enum PositionDirection {
+    YES = "yes",
+    NO = "no"
+}
+declare enum PositionStatus {
+    INIT = "init",
+    OPEN = "open",
+    CLOSED = "closed",
+    CLAIMED = "claimed",
+    LIQUIDATED = "liquidated",
+    WAITING = "waiting"
+}
+
+declare class Position {
+    private program;
+    METAPLEX_PROGRAM_ID: PublicKey;
+    constructor(program: Program<ShortxContract>);
+    /**
+     * Get all Position Accounts for a Market
+     * @param marketId - Market ID
+     *
+     */
+    getPositionsAccountsForMarket(marketId: number): Promise<PositionAccount[]>;
+    /**
+     * Get all Positions for a user
+     * @param user - User PublicKey
+     *
+     */
+    /**
+     * Get User positions for a particular market
+     * @param user - User PublicKey
+     * @param marketId - Market ID
+     */
+    /**
+     * Get the PDA for a position account
+     * @param marketId - Market ID
+     * @param marketAddress - Market Address
+     * @param positionNonce - The nonce of the position account
+     *
+     */
+    getPositionsAccountPda(marketId: number, positionNonce?: number): Promise<{
+        bump: number;
+        marketId: BN;
+        authority: PublicKey;
+        version: BN;
+        positions: {
+            positionId: BN;
+            marketId: BN;
+            amount: BN;
+            direction: ({
+                no?: undefined;
+            } & {
+                yes: Record<string, never>;
+            }) | ({
+                yes?: undefined;
+            } & {
+                no: Record<string, never>;
+            });
+            createdAt: BN;
+            ts: BN;
+            mint: PublicKey | null;
+            positionStatus: ({
+                open?: undefined;
+                closed?: undefined;
+                claimed?: undefined;
+            } & {
+                init: Record<string, never>;
+            }) | ({
+                init?: undefined;
+                closed?: undefined;
+                claimed?: undefined;
+            } & {
+                open: Record<string, never>;
+            }) | ({
+                init?: undefined;
+                open?: undefined;
+                claimed?: undefined;
+            } & {
+                closed: Record<string, never>;
+            }) | ({
+                init?: undefined;
+                open?: undefined;
+                closed?: undefined;
+            } & {
+                claimed: Record<string, never>;
+            });
+            positionNonce: number;
+            padding: number[];
+            version: BN;
+        }[];
+        nonce: number;
+        isSubPosition: boolean;
+        padding: number[];
+    }>;
+    /**
+     * Create Sub positions account
+     * @param user - User PublicKey the main user
+     * @param payer - Payer PublicKey
+     * @param options - RPC options
+     *
+     */
+    createSubPositionAccount(marketId: number, payer: PublicKey, marketAddress: PublicKey, options?: RpcOptions): Promise<TransactionInstruction[]>;
+    /**
+     * Get position account Nonce With Slots
+     * @param positionAccounts - Position Accounts
+     *
+     */
+    getPositionAccountNonceWithSlots(positionAccounts: PositionAccount[], payer: PublicKey): PublicKey;
+    getPositionAccountIxs(marketId: number, payer: PublicKey): Promise<{
+        positionAccountPDA: PublicKey;
+        ixs: TransactionInstruction[];
+    }>;
+}
+
+declare class Trade {
+    private program;
+    METAPLEX_PROGRAM_ID: anchor.web3.PublicKey;
+    decimals: number;
+    position: Position;
+    ADMIN_KEY: PublicKey;
+    FEE_VAULT: PublicKey;
+    USDC_MINT: PublicKey;
+    constructor(program: Program<ShortxContract>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey);
+    /**
+     * Get All Markets
+     *
+     */
+    getAllMarkets(): Promise<Market[]>;
+    /**
+     * Get Market By ID
+     * @param marketId - The ID of the market
+     *
+     */
+    getMarketById(marketId: number): Promise<Market>;
+    /**
+     * Get Market By Address
+     * @param address - The address of the market PDA
+     *
+     */
+    getMarketByAddress(address: PublicKey): Promise<Market>;
+    /**
+     * Create Market
+     * @param args.marketId - new markert id - length + 1
+     * @param args.startTime - start time
+     * @param args.endTime - end time
+     * @param args.question - question (max 80 characters)
+     * @param args.oraclePubkey - oracle pubkey
+     * @param args.metadataUri - metadata uri
+     * @param args.mintPublicKey - collection mint public key. This needs to sign the transaction.
+     * @param args.payer - payer
+     * @param options - RPC options
+     *
+     */
+    createMarket({ startTime, endTime, question, oraclePubkey, metadataUri, payer, }: CreateMarketArgs, options?: RpcOptions): Promise<{
+        txs: anchor.web3.VersionedTransaction[];
+        marketId: number;
+    }>;
+    /**
+     * Open Order
+     * @param args.marketId - The ID of the Market
+     * @param args.amount - The amount of the Order
+     * @param args.direction - The direction of the Order
+     * @param args.mint - The mint of the Order
+     * @param args.token - The token to use for the Order
+     * @param args.payer - The payer of the Order
+     * @param options - RPC options
+     *
+     */
+    openPosition({ marketId, amount, direction, mint, token, payer, metadataUri }: OpenOrderArgs, options?: RpcOptions): Promise<{
+        ixs: anchor.web3.TransactionInstruction[];
+        addressLookupTableAccounts: anchor.web3.AddressLookupTableAccount[];
+    } | undefined>;
+    /**
+     * Resolve Market
+     * @param args.marketId - The ID of the Market
+     * @param args.winningDirection - The Winning Direction of the Market
+     *
+     * @param options - RPC options
+     *
+     */
+    resolveMarket({ marketId, payer, }: {
+        marketId: number;
+        payer: PublicKey;
+    }, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
+    /**
+     * Close Market and related accounts to collect remaining liquidity
+     * @param marketId - The ID of the market
+     * @param payer - The payer of the Market
+     * @param options - RPC options
+     *
+     */
+    closeMarket(marketId: number, payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
+    /**
+     * Update Market
+     * @param marketId - The ID of the market
+     * @param marketEnd - The end time of the market
+     * @param options - RPC options
+     *
+     */
+    updateMarket(marketId: number, marketEnd: number, payer: PublicKey, options?: RpcOptions): Promise<anchor.web3.TransactionInstruction[]>;
+    payoutPosition(marketId: number, payer: PublicKey, positionId: number, positionNonce: number, options?: RpcOptions): Promise<anchor.web3.VersionedTransaction>;
+}
+
+declare class Config {
+    private program;
+    ADMIN_KEY: PublicKey;
+    FEE_VAULT: PublicKey;
+    USDC_MINT: PublicKey;
+    trade: Trade;
+    constructor(program: Program<ShortxContract>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey);
+    /**
+     * Init a config account to maintain details
+     *
+     */
+    createConfig(feeAmount: number, payer: PublicKey): Promise<web3.TransactionInstruction[]>;
+    /**
+     * Get a config account to maintain details if it exists
+     *
+     */
+    getConfig(): Promise<{
+        bump: number;
+        authority: web3.PublicKey;
+        feeVault: web3.PublicKey;
+        feeAmount: BN;
+        version: BN;
+        nextMarketId: BN;
+        numMarkets: BN;
+    } | null>;
+    /**
+     * Update a config account to maintain details
+     *
+     */
+    updateConfig(payer: PublicKey, feeAmount?: number, authority?: PublicKey, feeVault?: PublicKey): Promise<web3.TransactionInstruction[]>;
+    /**
+     * Close a config account
+     * @param payer - PublicKey of the payer
+     * @returns TransactionInstruction[] - Array of TransactionInstruction
+     */
+    closeConfig(payer: PublicKey): Promise<web3.TransactionInstruction[]>;
+}
+
+declare class ShortXClient {
+    program: Program<ShortxContract>;
+    trade: Trade;
+    config: Config;
+    position: Position;
+    ADMIN_KEY: PublicKey;
+    FEE_VAULT: PublicKey;
+    USDC_MINT: PublicKey;
+    constructor(connection: Connection, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey);
+}
+
+export { type CreateCustomerArgs, type CreateMarketArgs, type InitializeMarketArgs, type Market, MarketStates, type OpenOrderArgs, type Position$1 as Position, type PositionAccount, PositionDirection, PositionStatus, type RpcOptions, type ShortxContract, WinningDirection, ShortXClient as default };

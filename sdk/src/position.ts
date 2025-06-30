@@ -1,6 +1,6 @@
 import { BN, Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "./types/shortx";
-import { formatPositionAccount } from "./utils/helpers";
+import { ShortxContract } from "./types/shortx.js";
+import { formatPositionAccount } from "./utils/helpers.js";
 import {
   PublicKey,
   SystemProgram,
@@ -11,11 +11,11 @@ import {
   getMarketPDA,
   getPositionAccountPDA,
   getSubPositionAccountPDA,
-} from "./utils/pda";
-import { RpcOptions } from "./types";
-import { PositionAccount, PositionStatus } from "./types/position";
-import { METAPLEX_ID } from "./utils/constants";
-import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+} from "./utils/pda/index.js";
+import { RpcOptions } from "./types/index.js";
+import { PositionAccount, PositionStatus } from "./types/position.js";
+import { METAPLEX_ID } from "./utils/constants.js";
+import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes/index.js";
 
 export default class Position {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);

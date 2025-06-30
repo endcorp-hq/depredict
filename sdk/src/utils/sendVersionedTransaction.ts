@@ -5,11 +5,11 @@ import {
   ComputeBudgetProgram,
   PublicKey,
 } from "@solana/web3.js";
-import { RpcOptions } from "../types/index";
+import { RpcOptions } from "../types/index.js";
 import { AddressLookupTableAccount } from "@solana/web3.js";
 import { Program } from "@coral-xyz/anchor";
-import getPriorityFee from "./getPriorityFee";
-import { ShortxContract } from "../types/shortx";
+import getPriorityFee from "./getPriorityFee.js";
+import { ShortxContract } from "../types/shortx.js";
 
 const createVersionedTransaction = async (
   program: Program<ShortxContract>,

@@ -17,7 +17,7 @@ pub struct MarketState {
     pub no_liquidity: u64,
     pub volume: u64,
     pub update_ts: i64, // TODO: Rename this
-    pub padding_1: [u8; 8],
+    pub padding_1: [u8; 7],
     pub next_position_id: u64,
     pub market_state: MarketStates,
     pub market_start: i64,
@@ -25,7 +25,7 @@ pub struct MarketState {
     pub question: [u8; 80],
     pub winning_direction: WinningDirection,
     pub version: u64,
-    // pub pool_id: u64,
+    pub manual_resolve: bool,
     pub padding: [u8; 72],
 }
 
@@ -44,6 +44,12 @@ pub struct CreateMarketArgs {
     pub market_start: i64,
     pub market_end: i64,
     pub metadata_uri: String,
+    pub manual_resolve: bool,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct ResolveMarketArgs {
+    pub oracle_value: Option<u32>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -87,10 +93,11 @@ impl Default for MarketState {
             market_start: 0,
             market_end: 0,
             volume: 0,
-            padding_1: [0; 8],
+            padding_1: [0; 7],
             winning_direction: WinningDirection::None,
             question: [0; 80],
             version: 0,
+            manual_resolve: false,
             padding: [0; 72],
         }
     }

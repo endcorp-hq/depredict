@@ -75,10 +75,9 @@ export type CreateMarketArgs = {
   startTime: number
   endTime: number
   question: string
+  oraclePubkey: PublicKey
   metadataUri: string
   payer: PublicKey
   feeVaultAccount: PublicKey
   usdcMintAddress: PublicKey
-  oraclePubkey?: PublicKey
-  manualResolve?: boolean
 }

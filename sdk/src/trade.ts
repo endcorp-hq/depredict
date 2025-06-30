@@ -1,5 +1,5 @@
 import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "./types/shortx";
+import { ShortxContract } from "./types/shortx.js";
 import * as anchor from "@coral-xyz/anchor";
 import {
   AddressLookupTableAccount,
@@ -8,10 +8,10 @@ import {
   TransactionInstruction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { CreateMarketArgs, OpenOrderArgs, MarketStates } from "./types/trade";
-import { RpcOptions } from "./types/index";
+import { CreateMarketArgs, OpenOrderArgs } from "./types/trade.js";
+import { RpcOptions } from "./types/index.js";
 import BN from "bn.js";
-import { encodeString, formatMarket } from "./utils/helpers";
+import { encodeString, formatMarket } from "./utils/helpers.js";
 import {
   getCollectionPDA,
   getConfigPDA,
@@ -19,23 +19,17 @@ import {
   getPositionAccountPDA,
   getPositionNftPDA,
   getSubPositionAccountPDA,
-} from "./utils/pda/index";
-import createVersionedTransaction from "./utils/sendVersionedTransaction";
-import { swap } from "./utils/swap";
+} from "./utils/pda/index.js";
+import createVersionedTransaction from "./utils/sendVersionedTransaction.js";
+import { swap } from "./utils/swap.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants";
-import Position from "./position";
+import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants.js";
+import Position from "./position.js";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
-import {
-  PullFeed,
-  getDefaultDevnetQueue,
-  asV0Tx,
-} from "@switchboard-xyz/on-demand";
-import { CrossbarClient } from "@switchboard-xyz/common";
 
 export default class Trade {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
@@ -115,6 +109,7 @@ export default class Trade {
       oraclePubkey,
       metadataUri,
       payer,
+      manualResolve = false,
     }: CreateMarketArgs,
     options?: RpcOptions
   ) {
@@ -153,12 +148,13 @@ export default class Trade {
             marketStart: new BN(startTime),
             marketEnd: new BN(endTime),
             metadataUri: metadataUri,
+            manualResolve: manualResolve,
           })
           .accountsPartial({
             payer: payer,
             feeVault: this.FEE_VAULT,
             config: configPDA,
-            oraclePubkey: oraclePubkey,
+            oraclePubkey: manualResolve ? PublicKey.default : oraclePubkey,
             market: marketPDA,
             marketPositionsAccount: marketPositionsPDA,
             usdcMint: this.USDC_MINT,
@@ -179,9 +175,9 @@ export default class Trade {
 
       let crankOracleTx: VersionedTransaction | undefined = undefined;
       try {
-        if (oraclePubkey) {
-          crankOracleTx = await this.crankOracle(oraclePubkey, payer);
-        }
+        // if (oraclePubkey) {
+        //   crankOracleTx = await this.crankOracle(oraclePubkey, payer);
+        // }
       } catch (error) {
         console.log("error cranking oracle", error);
         // throw error;
@@ -199,66 +195,66 @@ export default class Trade {
     }
   }
 
-  async crankOracle(
-    oraclePubkey: PublicKey,
-    payer: PublicKey
-  ): Promise<VersionedTransaction | undefined> {
-    if (!oraclePubkey) {
-      throw new Error("Oracle pubkey is required");
-    }
+  // async crankOracle(
+  //   oraclePubkey: PublicKey,
+  //   payer: PublicKey
+  // ): Promise<VersionedTransaction | undefined> {
+  //   if (!oraclePubkey) {
+  //     throw new Error("Oracle pubkey is required");
+  //   }
 
-    if (!payer) {
-      throw new Error("Payer is required");
-    }
+  //   if (!payer) {
+  //     throw new Error("Payer is required");
+  //   }
 
-    const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
+  //   const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
 
-    const connection = new Connection("https://api.devnet.solana.com");
-    const pullFeed = new PullFeed(queue.program, oraclePubkey);
+  //   const connection = new Connection("https://api.devnet.solana.com");
+  //   const pullFeed = new PullFeed(queue.program, oraclePubkey);
 
-    console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
+  //   console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
 
-    // Use the default crossbar server
-    const crossbarClient = CrossbarClient.default();
+  //   // Use the default crossbar server
+  //   const crossbarClient = CrossbarClient.default();
 
-    try {
-      const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx(
-        {
-          gateway: "https://switchboard-oracle.everstake.one/devnet",
-          numSignatures: 3,
-          crossbarClient: crossbarClient,
-          chain: "solana",
-          network: "devnet",
-        },
-        false,
-        payer
-      );
+  //   try {
+  //     const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx(
+  //       {
+  //         gateway: "https://switchboard-oracle.everstake.one/devnet",
+  //         numSignatures: 3,
+  //         crossbarClient: crossbarClient,
+  //         chain: "solana",
+  //         network: "devnet",
+  //       },
+  //       false,
+  //       payer
+  //     );
 
-      if (!pullIx || pullIx.length === 0) {
-        throw new Error("Failed to fetch update from local crossbar server.");
-      }
+  //     if (!pullIx || pullIx.length === 0) {
+  //       throw new Error("Failed to fetch update from local crossbar server.");
+  //     }
 
-      const tx = await asV0Tx({
-        connection,
-        ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
-        computeUnitPrice: 200_000,
-        computeUnitLimitMultiple: 1.3,
-        lookupTables: luts,
-      });
+  //     const tx = await asV0Tx({
+  //       connection,
+  //       ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
+  //       computeUnitPrice: 200_000,
+  //       computeUnitLimitMultiple: 1.3,
+  //       lookupTables: luts,
+  //     });
 
-      for (let simulation of responses) {
-        console.log(
-          `Feed Public Key ${simulation.value} job outputs: ${simulation.value}`
-        );
-      }
-      return tx;
-    } catch (error) {
-      console.error(
-        "Failed during fetchUpdateIx or transaction submission:",
-        error
-      );
-    }
-  }
+  //     for (let simulation of responses) {
+  //       console.log(
+  //         `Feed Public Key ${simulation.value} job outputs: ${simulation.value}`
+  //       );
+  //     }
+  //     return tx;
+  //   } catch (error) {
+  //     console.error(
+  //       "Failed during fetchUpdateIx or transaction submission:",
+  //       error
+  //     );
+  //   }
+  // }
 
   /**
    * Open Order
@@ -272,7 +268,7 @@ export default class Trade {
    *
    */
   async openPosition(
-    { marketId, amount, direction, mint, token, payer }: OpenOrderArgs,
+    { marketId, amount, direction, mint, token, payer, metadataUri }: OpenOrderArgs,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
@@ -341,6 +337,7 @@ export default class Trade {
           .createPosition({
             amount: new BN(amountInUSDC),
             direction: direction,
+            metadataUri: metadataUri,
           })
           .accountsPartial({
             signer: payer,
@@ -376,43 +373,30 @@ export default class Trade {
   async resolveMarket(
     {
       marketId,
-      winningDirection,
       payer,
-      oraclePubkey,
+      resolutionValue = null
     }: {
       marketId: number;
-      winningDirection:
-        | {
-            yes: {};
-          }
-        | {
-            no: {};
-          }
-        | {
-            none: {};
-          }
-        | {
-            draw: {};
-          };
-      state: MarketStates;
       payer: PublicKey;
-      oraclePubkey: PublicKey;
+      resolutionValue?: 10 | 11 | null;
     },
     options?: RpcOptions
   ) {
-    const marketIdBN = new BN(marketId);
-    const [marketPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from("market"), marketIdBN.toArrayLike(Buffer, "le", 8)],
-      this.program.programId
-    );
+    const marketPDA = getMarketPDA(this.program.programId, marketId);
+    const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+    const manualResolve = marketAccount.manualResolve;
+    const oraclePubkey = marketAccount.oraclePubkey;
+
+    if (!oraclePubkey) {
+      throw new Error("Market has no oracle pubkey");
+    }
 
     const ixs: TransactionInstruction[] = [];
     try {
       ixs.push(
         await this.program.methods
           .resolveMarket({
-            marketId: marketIdBN,
-            winningDirection: winningDirection,
+            oracleValue: manualResolve ? resolutionValue : null,
           })
           .accountsPartial({
             signer: payer,
@@ -426,7 +410,6 @@ export default class Trade {
       throw error;
     }
     return ixs;
-    // return sendVersionedTransaction(this.program, ixs, options);
   }
 
   /**
