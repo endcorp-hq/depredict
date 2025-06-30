@@ -10,7 +10,7 @@ const LOCAL_MINT = Keypair.fromSecretKey(
 );
 
 // Oracle Key
-const ORACLE_KEY = new PublicKey("6DnHLH6t2TnvgxihKRyH36u2x7fYBjqHfu1zMLRUMntM");
+const ORACLE_KEY = new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL");
 
 const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 // Initialize provider and program
@@ -31,7 +31,7 @@ const USER = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
 );
 
-const MARKET_ID = new anchor.BN(15);
+const MARKET_ID = new anchor.BN(20);
 
 // Export provider, program, and keypairs for use in tests
 export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT, ORACLE_KEY, MARKET_ID };
@@ -102,4 +102,31 @@ export async function ensureAccountBalance(
 export async function getUsdcMint(): Promise<{ mint: PublicKey }> {
   console.log("Using local USDC mint for testing:", LOCAL_MINT.publicKey.toString());
   return { mint: LOCAL_MINT.publicKey };
+}
+
+// Helper to extract Anchor error code from error object/logs
+export function extractErrorCode(error) {
+  // Try Anchor error code
+  if (error && error.code) return error.code;
+  // Try Anchor error name
+  if (error && error.error && error.error.errorCode) return error.error.errorCode;
+  // Try logs
+  if (error && error.logs) {
+    for (const log of error.logs) {
+      const match = log.match(/Error Code: ([A-Za-z0-9_]+)/);
+      if (match) return match[1];
+      // Anchor error format: 'Program log: AnchorError ... Custom error: <code>'
+      const anchorMatch = log.match(/Program log: AnchorError.*?([A-Za-z0-9_]+)/);
+      if (anchorMatch) return anchorMatch[1];
+    }
+  }
+  // Try error string
+  if (error && error.toString) {
+    const match = error.toString().match(/Error Code: ([A-Za-z0-9_]+)/);
+    if (match) return match[1];
+    // Anchor error format: 'AnchorError ... Custom error: <code>'
+    const anchorMatch = error.toString().match(/AnchorError.*?([A-Za-z0-9_]+)/);
+    if (anchorMatch) return anchorMatch[1];
+  }
+  return null;
 }

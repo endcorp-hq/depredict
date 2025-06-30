@@ -107,4 +107,7 @@ ShortxError {
 
     #[msg("Invalid mpl core program")]
     InvalidMplCoreProgram,
+
+    #[msg("Invalid NFT")]
+    InvalidNft,
 }

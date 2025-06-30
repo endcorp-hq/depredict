@@ -16,6 +16,7 @@ declare_id!("5uqv2VWyhNk57QwxmZqRXe7M6z2id4MW9nY83WMmhtiG");
 pub mod shortx_contract {
     use super::*;
 
+    // CONFIG INSTRUCTIONS
     pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64) -> Result<()> {
         ctx.accounts.init_config(fee_amount, &ctx.bumps)?;
         Ok(())
@@ -31,6 +32,8 @@ pub mod shortx_contract {
         Ok(())
     }
 
+    // MARKET INSTRUCTIONS
+
     pub fn create_market(ctx: Context<MarketContext>, args: CreateMarketArgs) -> Result<()> {
         ctx.accounts.create_market(args, &ctx.bumps)?;
         Ok(())
@@ -40,22 +43,18 @@ pub mod shortx_contract {
         ctx.accounts.update_market(args)?;
         Ok(())
     }
+    
+    pub fn resolve_market(ctx: Context<ResolveMarketContext>, args: ResolveMarketArgs) -> Result<()> {
+        ctx.accounts.resolve_market(args)?;
+        Ok(())
+    }
 
     pub fn close_market(ctx: Context<CloseMarketContext>, args: CloseMarketArgs) -> Result<()> {
         ctx.accounts.close_market(args)?;
         Ok(())
     }
 
-    pub fn resolve_market(ctx: Context<ResolveMarketContext>, args: ResolveMarketArgs) -> Result<()> {
-        ctx.accounts.resolve_market(args)?;
-        Ok(())
-    }
-
-    pub fn create_user(ctx: Context<UserContext>, args: CreateUserArgs) -> Result<()> {
-        ctx.accounts.create_user(args, &ctx.bumps)?;
-        Ok(())
-    }
-
+    // POSITION INSTRUCTIONS
 
     pub fn create_sub_position_account(ctx: Context<SubPositionContext>, sub_position_key: Pubkey) -> Result<()> {
         ctx.accounts.create_sub_position_account(sub_position_key, &ctx.bumps)?;

@@ -31,6 +31,7 @@ use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
     MARKET, 
     POSITION, 
+    NFT_COLLECTION,
     USDC_MINT
     }, 
     constraints::{
@@ -85,7 +86,7 @@ pub struct MarketContext<'info> {
     #[account(
         mut,
         seeds = [ 
-            b"collection", 
+            NFT_COLLECTION.as_bytes(), 
             &config.next_market_id.to_le_bytes()
         ],
         bump
@@ -107,9 +108,12 @@ pub struct MarketContext<'info> {
     )]
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-     /// CHECK: this account is checked by core program
-    #[account(address = MPL_CORE_ID)]
-    pub mpl_core_program: UncheckedAccount<'info>,
+     /// CHECK: this account is checked by the address constraint and in MPL core.
+     #[account(
+        address = MPL_CORE_ID,
+        constraint = mpl_core_program.key() == MPL_CORE_ID @ ShortxError::InvalidMplCoreProgram
+    )]
+     pub mpl_core_program: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -122,7 +126,10 @@ pub struct UpdateMarketContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
-    #[account(mut)] // Market must exist already
+    #[account(
+        mut,
+        constraint = market.authority == signer.key() @ ShortxError::Unauthorized
+    )] // Market must exist already, signer must be the market authority
     pub market: Box<Account<'info, MarketState>>,
     pub system_program: Program<'info, System>,
 }
@@ -142,7 +149,7 @@ pub struct ResolveMarketContext<'info> {
     /// CHECK: oracle is same as the market's oracle pubkey
     #[account(
         mut,
-        // constraint = oracle_pubkey.key() == market.oracle_pubkey.unwrap() @ ShortxError::InvalidOracle
+        constraint = oracle_pubkey.key() == market.oracle_pubkey.unwrap() @ ShortxError::InvalidOracle
     )]
     pub oracle_pubkey: AccountInfo<'info>,
 }
@@ -224,6 +231,10 @@ impl<'info> MarketContext<'info> {
             require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
         }
 
+        msg!("Checking USDC mint is valid");
+        require!(self.usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap(), ShortxError::InvalidMint);
+
+
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
 
@@ -302,7 +313,7 @@ impl<'info> MarketContext<'info> {
         let system_program = &self.system_program.to_account_info();
 
         let collection_signer_seeds: &[&[u8]] = &[
-            b"collection",
+            NFT_COLLECTION.as_bytes(),
             &market_id.to_le_bytes(),
             &[bumps.collection],
         ];
@@ -472,7 +483,7 @@ impl<'info> CloseMarketContext<'info> {
 
         // Mark the market account data as closed by zeroizing (optional but good practice)
         // market_account_info.assign(&System::id()); // This reassigns owner
-        // market_account_info.realloc(0, false)?; // This might fail if rent epoch not met
+        // market_account_info.resize(0)?; // This might fail if rent epoch not met
         // A common way is to zero out the data manually if needed, 
         // but closing typically involves just reclaiming lamports.
         // Since Anchor doesn't have a direct `close_account_manually_to_recipient`,

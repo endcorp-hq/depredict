@@ -26,9 +26,20 @@ pub fn get_oracle_value(oracle_account: &AccountInfo) -> anchor_lang::Result<Dec
 }
 
 // Check if the oracle is valid during market creation
- pub fn is_valid_oracle(feed_account: &AccountInfo) -> anchor_lang::Result<bool> {
-     let clock = Clock::get().unwrap();
-     let feed = PullFeedAccountData::parse(feed_account.try_borrow_data().unwrap()).unwrap();
-     msg!("valid price: {:?}", feed.value(&clock));
-     Ok(true)
+pub fn is_valid_oracle(feed_account: &AccountInfo) -> anchor_lang::Result<bool> {
+    let data = match feed_account.try_borrow_data() {
+        Ok(data) => data,
+        Err(e) => {
+            msg!("Failed to borrow oracle account data: {:?}", e);
+            return Ok(false);
+        }
+    };
+
+    match PullFeedAccountData::parse(data) {
+        Ok(_) => Ok(true),
+        Err(e) => {
+            msg!("Failed to parse oracle account as Switchboard feed: {:?}", e);
+            Ok(false)
+        }
+    }
 }
