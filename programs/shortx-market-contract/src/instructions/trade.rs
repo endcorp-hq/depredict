@@ -4,20 +4,22 @@ use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
 
-use mpl_core::accounts::{BaseAssetV1};
 use mpl_core::fetch_plugin;
 use mpl_core::instructions::BurnV1CpiBuilder;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 use std::str::FromStr;
 
-use crate::constants::{MARKET, USDC_MINT};
+use crate::constants::{MARKET, NFT, USDC_MINT};
 use crate::state::{Config, MarketStates, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
     errors::ShortxError,
     state::{ MarketState, WinningDirection },
 };
 use mpl_core::{
+    accounts::{
+        BaseAssetV1
+    },
     ID as MPL_CORE_ID,
     instructions::{
         CreateV2CpiBuilder
@@ -52,13 +54,13 @@ pub struct PositionContext<'info> {
     #[account(
         mut,
         seeds = [ 
-            b"nft", 
+            NFT.as_bytes(), 
             market_positions_account.market_id.to_le_bytes().as_ref(), 
             market.next_position_id.to_le_bytes().as_ref(),
         ],
         bump
     )]
-    pub position_nft_account: UncheckedAccount<'info>,
+    pub position_nft_account: AccountInfo<'info>,
 
 
     #[account(mut,
@@ -92,16 +94,16 @@ pub struct PositionContext<'info> {
 
     pub config: Box<Account<'info, Config>>,
     
-    #[account(address = MPL_CORE_ID)]
-    /// CHECK: this account is checked by the address constraint
-    pub mpl_core_program: UncheckedAccount<'info>,
-
-    /// CHECK: this account is checked by the address constraint
+    /// CHECK: this account is checked by the address constraint and in MPL core.
     #[account(
         mut,
         constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection
     )]
-    pub collection: UncheckedAccount<'info>,
+    pub collection: AccountInfo<'info>,
+
+    /// CHECK: this account is checked by the address constraint and in MPL core.
+    #[account(address = MPL_CORE_ID)]
+    pub mpl_core_program: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -118,8 +120,7 @@ pub struct PayoutNftContext<'info> {
 
     #[account(
         mut,
-        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId
-    )]
+        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId)]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
     #[account(
@@ -145,24 +146,25 @@ pub struct PayoutNftContext<'info> {
     )]
     pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    // TODO: Check nft_mint address against the position.mint address.
     /// CHECK: this account is checked by the address constraint
     #[account(mut)]
-    pub nft_mint: UncheckedAccount<'info>,
+    pub nft_mint: AccountInfo<'info>,
 
     /// CHECK: this account is checked by the address constraint
     #[account(
         mut,
         constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection
     )]
-    pub collection: UncheckedAccount<'info>,
+    pub collection: AccountInfo<'info>,
 
-    /// CHECK: this account is checked by the address constraint
-    pub mpl_core_program: UncheckedAccount<'info>,
-
+    /// CHECK: this account is checked by the address constraint and in MPL core.
+     #[account(
+        address = MPL_CORE_ID,
+        constraint = mpl_core_program.key() == MPL_CORE_ID @ ShortxError::InvalidMplCoreProgram
+    )]
+     pub mpl_core_program: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
-
-    /// CHECK: Check by CPI
-    pub token_metadata_program: AccountInfo<'info>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
@@ -294,10 +296,6 @@ impl<'info> PositionContext<'info> {
                     key: "market_id".to_string(),
                     value: market_positions_account.market_id.to_string(),
                 },
-                // Attribute {
-                //     key: "market_question".to_string(),
-                //     value: String::from_utf8_lossy(&market.question).trim_end_matches('\0').to_string(),
-                // },
                 Attribute {
                     key: "position_id".to_string(),
                     value: current_position.position_id.to_string(),
@@ -322,14 +320,14 @@ impl<'info> PositionContext<'info> {
         let market_id = &market_positions_account.market_id.to_le_bytes();
 
         let nft_signer_seeds: &[&[u8]] = &[
-            b"nft",
+            NFT.as_bytes(),
             market_id,
             &next_position_id.to_le_bytes(),
             &[position_nft_account_bump],
         ];
 
         let market_signer_seeds: &[&[u8]] = &[
-            b"market",
+            MARKET.as_bytes(),
             &self.market.market_id.to_le_bytes(),
             &[bumps.market],
         ];
@@ -388,6 +386,14 @@ impl<'info> PayoutNftContext<'info> {
         );
         require!(market.market_state == MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
 
+        // check the signer of the tx owns the nft
+        let asset = self.nft_mint.to_account_info();
+        let data = asset.try_borrow_data()?;
+        let base_asset: BaseAssetV1 = BaseAssetV1::from_bytes(&data.as_ref())?;
+
+        msg!("Base asset: {:?}", base_asset.owner);
+
+        require!(&base_asset.owner == &self.signer.key(), ShortxError::Unauthorized);
 
         let (_, attribute_list, _) = fetch_plugin::<BaseAssetV1, Attributes>(&self.nft_mint.to_account_info(), mpl_core::types::PluginType::Attributes)?;
 
@@ -405,6 +411,9 @@ impl<'info> PayoutNftContext<'info> {
                 pos.amount == attribute_list.attribute_list[3].value.parse::<u64>().unwrap()
             })
             .ok_or(ShortxError::PositionNotFound)?;
+
+        // position mint_nft field must match nft_mint address
+        require!(market_positions_account.positions[position_index].mint.unwrap() == self.nft_mint.key(), ShortxError::InvalidNft);
 
         let position = market_positions_account.positions[position_index];
         msg!("Found position at index {}", position_index);
@@ -454,7 +463,7 @@ impl<'info> PayoutNftContext<'info> {
 
         if payout > 0 && is_winner {
             // Transfer payout
-            let market_signer: &[&[&[u8]]] = &[&[b"market", &market.market_id.to_le_bytes(), &[market.bump]]];
+            let market_signer: &[&[&[u8]]] = &[&[MARKET.as_bytes(), &market.market_id.to_le_bytes(), &[market.bump]]];
             msg!("Using signer seeds: {:?}", market_signer);
             msg!("Market vault amount before transfer: {}", self.market_usdc_vault.amount);
             msg!("User ATA amount before transfer: {}", self.user_usdc_ata.amount);
@@ -481,7 +490,7 @@ impl<'info> PayoutNftContext<'info> {
             let system_program = self.system_program.to_account_info();
 
             // let nft_signer_seeds: &[&[u8]] = &[
-            //     b"nft",
+            //     NFT.as_bytes(),
             //     &market.market_id.to_le_bytes(),
             //     &market_positions_account.positions[position_index].position_id.to_le_bytes(),
             //     &[self.nft_mint.bump],
@@ -489,7 +498,7 @@ impl<'info> PayoutNftContext<'info> {
 
 
             let market_signer_seeds: &[&[u8]] = &[
-                b"market",
+                MARKET.as_bytes(),
                 &market.market_id.to_le_bytes(),
                 &[market.bump],
             ];

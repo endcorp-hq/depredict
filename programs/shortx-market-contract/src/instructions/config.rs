@@ -62,6 +62,7 @@ pub struct CloseConfigContext<'info> {
         mut,
         seeds = [CONFIG.as_bytes()],
         bump = config.bump,
+        close = signer
     )]
     pub config: Box<Account<'info, Config>>,
     pub system_program: Program<'info, System>,
