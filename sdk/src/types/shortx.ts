@@ -733,12 +733,12 @@ export type ShortxContract = {
           "name": "config"
         },
         {
-          "name": "mplCoreProgram",
-          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
-        },
-        {
           "name": "collection",
           "writable": true
+        },
+        {
+          "name": "mplCoreProgram",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
         },
         {
           "name": "tokenProgram",
@@ -851,61 +851,6 @@ export type ShortxContract = {
         {
           "name": "subPositionKey",
           "type": "pubkey"
-        }
-      ]
-    },
-    {
-      "name": "createUser",
-      "discriminator": [
-        108,
-        227,
-        130,
-        130,
-        252,
-        109,
-        75,
-        218
-      ],
-      "accounts": [
-        {
-          "name": "signer",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "signer"
-              }
-            ]
-          }
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "args",
-          "type": {
-            "defined": {
-              "name": "createUserArgs"
-            }
-          }
         }
       ]
     },
@@ -1153,14 +1098,12 @@ export type ShortxContract = {
           "writable": true
         },
         {
-          "name": "mplCoreProgram"
+          "name": "mplCoreProgram",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
         },
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "tokenMetadataProgram"
         },
         {
           "name": "associatedTokenProgram",
@@ -1317,19 +1260,6 @@ export type ShortxContract = {
         109,
         238,
         86
-      ]
-    },
-    {
-      "name": "user",
-      "discriminator": [
-        159,
-        117,
-        95,
-        227,
-        239,
-        151,
-        58,
-        236
       ]
     }
   ],
@@ -1562,6 +1492,11 @@ export type ShortxContract = {
       "code": 6034,
       "name": "invalidMplCoreProgram",
       "msg": "Invalid mpl core program"
+    },
+    {
+      "code": 6035,
+      "name": "invalidNft",
+      "msg": "Invalid NFT"
     }
   ],
   "types": [
@@ -1640,24 +1575,12 @@ export type ShortxContract = {
             "type": "string"
           },
           {
-            "name": "manualResolve",
-            "type": "bool"
-          }
-        ]
-      }
-    },
-    {
-      "name": "createUserArgs",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "id",
-            "type": "u16"
+            "name": "oracleType",
+            "type": {
+              "defined": {
+                "name": "oracleType"
+              }
+            }
           }
         ]
       }
@@ -1749,6 +1672,14 @@ export type ShortxContract = {
             "type": "pubkey"
           },
           {
+            "name": "oracleType",
+            "type": {
+              "defined": {
+                "name": "oracleType"
+              }
+            }
+          },
+          {
             "name": "oraclePubkey",
             "type": {
               "option": "pubkey"
@@ -1833,10 +1764,6 @@ export type ShortxContract = {
             "type": "u64"
           },
           {
-            "name": "manualResolve",
-            "type": "bool"
-          },
-          {
             "name": "padding",
             "type": {
               "array": [
@@ -1888,6 +1815,20 @@ export type ShortxContract = {
           {
             "name": "metadataUri",
             "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "oracleType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "none"
+          },
+          {
+            "name": "switchboard"
           }
         ]
       }
@@ -2185,35 +2126,6 @@ export type ShortxContract = {
           {
             "name": "marketEnd",
             "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "user",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "id",
-            "type": "u16"
-          },
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "padding",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
           }
         ]
       }

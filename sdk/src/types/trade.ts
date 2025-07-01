@@ -71,6 +71,11 @@ export type OpenOrderArgs = {
   metadataUri: string
 }
 
+export enum OracleType {
+  SWITCHBOARD = 'switchboard',
+  MANUAL = 'manual'
+}
+
 export type CreateMarketArgs = {
   startTime: number
   endTime: number
@@ -80,5 +85,5 @@ export type CreateMarketArgs = {
   feeVaultAccount: PublicKey
   usdcMintAddress: PublicKey
   oraclePubkey?: PublicKey
-  manualResolve?: boolean
+  oracleType: OracleType
 }

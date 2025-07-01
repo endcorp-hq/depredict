@@ -3,12 +3,11 @@ import { ShortxContract } from "./types/shortx.js";
 import * as anchor from "@coral-xyz/anchor";
 import {
   AddressLookupTableAccount,
-  Connection,
   PublicKey,
   TransactionInstruction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { CreateMarketArgs, OpenOrderArgs } from "./types/trade.js";
+import { CreateMarketArgs, OpenOrderArgs, OracleType } from "./types/trade.js";
 import { RpcOptions } from "./types/index.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers.js";
@@ -68,7 +67,7 @@ export default class Trade {
   }
 
   /**
-   * Get Market By ID
+   * Get Market By Market ID
    * @param marketId - The ID of the market
    *
    */
@@ -90,14 +89,14 @@ export default class Trade {
 
   /**
    * Create Market
-   * @param args.marketId - new markert id - length + 1
    * @param args.startTime - start time
    * @param args.endTime - end time
    * @param args.question - question (max 80 characters)
-   * @param args.oraclePubkey - oracle pubkey
+   * @param args.oraclePubkey - oracle pubkey (leave empty if manual resolution)
    * @param args.metadataUri - metadata uri
    * @param args.mintPublicKey - collection mint public key. This needs to sign the transaction.
    * @param args.payer - payer
+   * @param args.oracleType - oracle type (manual or switchboard)
    * @param options - RPC options
    *
    */
@@ -109,7 +108,7 @@ export default class Trade {
       oraclePubkey,
       metadataUri,
       payer,
-      manualResolve = false,
+      oracleType,
     }: CreateMarketArgs,
     options?: RpcOptions
   ) {
@@ -148,13 +147,19 @@ export default class Trade {
             marketStart: new BN(startTime),
             marketEnd: new BN(endTime),
             metadataUri: metadataUri,
-            manualResolve: manualResolve,
+            oracleType:
+              oracleType == OracleType.SWITCHBOARD
+                ? { switchboard: {} }
+                : { none: {} },
           })
           .accountsPartial({
             payer: payer,
             feeVault: this.FEE_VAULT,
             config: configPDA,
-            oraclePubkey: manualResolve ? PublicKey.default : oraclePubkey,
+            oraclePubkey:
+              oracleType == OracleType.SWITCHBOARD
+                ? oraclePubkey
+                : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
             market: marketPDA,
             marketPositionsAccount: marketPositionsPDA,
             usdcMint: this.USDC_MINT,
@@ -173,88 +178,13 @@ export default class Trade {
         options
       );
 
-      let crankOracleTx: VersionedTransaction | undefined = undefined;
-      try {
-        // if (oraclePubkey) {
-        //   crankOracleTx = await this.crankOracle(oraclePubkey, payer);
-        // }
-      } catch (error) {
-        console.log("error cranking oracle", error);
-        // throw error;
-      }
-
-      let txs: VersionedTransaction[] = [createMarketTx];
-
-      if (crankOracleTx) {
-        txs.unshift(crankOracleTx);
-      }
-      return { txs, marketId };
+      let tx: VersionedTransaction = createMarketTx;
+      return { tx, marketId };
     } catch (error) {
       console.log("error", error);
       throw error;
     }
   }
-
-  // async crankOracle(
-  //   oraclePubkey: PublicKey,
-  //   payer: PublicKey
-  // ): Promise<VersionedTransaction | undefined> {
-  //   if (!oraclePubkey) {
-  //     throw new Error("Oracle pubkey is required");
-  //   }
-
-  //   if (!payer) {
-  //     throw new Error("Payer is required");
-  //   }
-
-  //   const queue = await getDefaultDevnetQueue("https://api.devnet.solana.com");
-
-  //   const connection = new Connection("https://api.devnet.solana.com");
-  //   const pullFeed = new PullFeed(queue.program, oraclePubkey);
-
-  //   console.log("Pull Feed:", pullFeed.pubkey.toBase58(), "\n");
-
-  //   // Use the default crossbar server
-  //   const crossbarClient = CrossbarClient.default();
-
-  //   try {
-  //     const [pullIx, responses, _, luts] = await pullFeed.fetchUpdateIx(
-  //       {
-  //         gateway: "https://switchboard-oracle.everstake.one/devnet",
-  //         numSignatures: 3,
-  //         crossbarClient: crossbarClient,
-  //         chain: "solana",
-  //         network: "devnet",
-  //       },
-  //       false,
-  //       payer
-  //     );
-
-  //     if (!pullIx || pullIx.length === 0) {
-  //       throw new Error("Failed to fetch update from local crossbar server.");
-  //     }
-
-  //     const tx = await asV0Tx({
-  //       connection,
-  //       ixs: pullIx!, // after the pullIx you can add whatever transactions you'd like
-  //       computeUnitPrice: 200_000,
-  //       computeUnitLimitMultiple: 1.3,
-  //       lookupTables: luts,
-  //     });
-
-  //     for (let simulation of responses) {
-  //       console.log(
-  //         `Feed Public Key ${simulation.value} job outputs: ${simulation.value}`
-  //       );
-  //     }
-  //     return tx;
-  //   } catch (error) {
-  //     console.error(
-  //       "Failed during fetchUpdateIx or transaction submission:",
-  //       error
-  //     );
-  //   }
-  // }
 
   /**
    * Open Order
@@ -264,11 +194,20 @@ export default class Trade {
    * @param args.mint - The mint of the Order
    * @param args.token - The token to use for the Order
    * @param args.payer - The payer of the Order
+   * @param args.metadataUri - The metadata URI of the Order NFT
    * @param options - RPC options
    *
    */
   async openPosition(
-    { marketId, amount, direction, mint, token, payer, metadataUri }: OpenOrderArgs,
+    {
+      marketId,
+      amount,
+      direction,
+      mint,
+      token,
+      payer,
+      metadataUri,
+    }: OpenOrderArgs,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
@@ -365,26 +304,23 @@ export default class Trade {
   /**
    * Resolve Market
    * @param args.marketId - The ID of the Market
-   * @param args.winningDirection - The Winning Direction of the Market
-   *
-   * @param options - RPC options
-   *
+   * @param args.payer - The payer of the Market resolution (this has to be the config authority)
+   * @param args.resolutionValue - The resolution value of the Market (10 for yes, 11 for no). Leave it empty if oracle market.
    */
-  async resolveMarket(
-    {
-      marketId,
-      payer,
-      resolutionValue = null
-    }: {
-      marketId: number;
-      payer: PublicKey;
-      resolutionValue?: 10 | 11 | null;
-    },
-    options?: RpcOptions
-  ) {
+  async resolveMarket({
+    marketId,
+    payer,
+    resolutionValue = null,
+  }: {
+    marketId: number;
+    payer: PublicKey;
+    resolutionValue?: 10 | 11 | null;
+  }) {
     const marketPDA = getMarketPDA(this.program.programId, marketId);
-    const marketAccount = await this.program.account.marketState.fetch(marketPDA);
-    const manualResolve = marketAccount.manualResolve;
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPDA
+    );
+    const oracleType = marketAccount.oracleType;
     const oraclePubkey = marketAccount.oraclePubkey;
 
     if (!oraclePubkey) {
@@ -396,7 +332,7 @@ export default class Trade {
       ixs.push(
         await this.program.methods
           .resolveMarket({
-            oracleValue: manualResolve ? resolutionValue : null,
+            oracleValue: "switchboard" in oracleType ? null : resolutionValue,
           })
           .accountsPartial({
             signer: payer,
@@ -416,10 +352,8 @@ export default class Trade {
    * Close Market and related accounts to collect remaining liquidity
    * @param marketId - The ID of the market
    * @param payer - The payer of the Market
-   * @param options - RPC options
-   *
    */
-  async closeMarket(marketId: number, payer: PublicKey, options?: RpcOptions) {
+  async closeMarket(marketId: number, payer: PublicKey) {
     const ixs: TransactionInstruction[] = [];
 
     const marketIdBN = new BN(marketId);
@@ -432,6 +366,8 @@ export default class Trade {
       this.program.programId,
       marketId
     );
+
+    /** DO NOT UMCOMMENT OR CALL METHOD IF NOT IMPLEMENTED THOROUGHLY */
 
     // close any sub position accounts (need to write code)
     // const subPositionAccounts = await this.position.getPositionsAccountsForMarket(marketId);
@@ -485,82 +421,6 @@ export default class Trade {
     }
     return ixs;
   }
-
-  // /**
-  //  * Payout Order
-  //  * @param args.marketId - The ID of the Market
-  //  * @param args.orderId - The ID of the Order to Payout
-  //  * @param args.userNonce - The nonce of the user
-  //  *
-  //  * @param options - RPC options
-  //  *
-  //  */
-  // async payoutOrder(
-  //   orders: {
-  //     marketId: number;
-  //     orderId: number;
-  //     userNonce: number;
-  //   }[],
-  //   payer: PublicKey,
-  //   options?: RpcOptions
-  // ) {
-  //   const ixs: TransactionInstruction[] = [];
-
-  //   const configPDA = getConfigPDA(this.program.programId);
-
-  //   const marketIdBN = new BN(orders[0].marketId);
-
-  //   const marketPDA = getMarketPDA(this.program.programId, orders[0].marketId);
-
-  //   if (orders.length > 10) {
-  //     throw new Error("Max 10 orders per transaction");
-  //   }
-
-  //   for (const order of orders) {
-  //     let positionAccountPDA = getPositionAccountPDA(
-  //       this.program.programId,
-  //       order.marketId
-  //     );
-
-  //     if (order.userNonce !== 0) {
-  //       const subPositionAccountPDA = getSubPositionAccountPDA(
-  //         this.program.programId,
-  //         order.marketId,
-  //         marketPDA,
-  //         order.userNonce
-  //       );
-
-  //       positionAccountPDA = getPositionAccountPDA(
-  //         this.program.programId,
-  //         order.marketId,
-  //         subPositionAccountPDA
-  //       );
-  //     }
-
-  //     try {
-  //       ixs.push(
-  //         await this.program.methods
-  //           .settlePosition(new BN(order.orderId))
-  //           .accountsPartial({
-  //             signer: payer,
-  //             feeVault: this.FEE_VAULT,
-  //             marketPositionsAccount: positionAccountPDA,
-  //             market: marketPDA,
-  //             usdcMint: this.USDC_MINT,
-  //             config: configPDA,
-  //             tokenProgram: TOKEN_PROGRAM_ID,
-  //             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-  //             systemProgram: anchor.web3.SystemProgram.programId,
-  //           })
-  //           .instruction()
-  //       );
-  //     } catch (error) {
-  //       console.log("error", error);
-  //       throw error;
-  //     }
-  //   }
-  //   return ixs;
-  // }
 
   /**
    * Update Market
@@ -672,7 +532,6 @@ export default class Trade {
             market: marketPda,
             collection: collectionPda,
             tokenProgram: TOKEN_PROGRAM_ID,
-            tokenMetadataProgram: METAPLEX_ID,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
@@ -693,31 +552,4 @@ export default class Trade {
 
     return tx;
   }
-
-  // /**
-  //  * Create Customer
-  //  * @param args.id - The ID of the customer
-  //  * @param args.name - The name of the customer
-  //  * @param args.authority - The authority of the customer
-  //  *
-  //  * @param options - RPC options
-  //  *
-  //  */
-  // async createCustomer(
-  //   { id, name, authority, feeRecipient }: CreateCustomerArgs,
-  //   options?: RpcOptions
-  // ) {
-  //   const ixs: TransactionInstruction[] = [];
-
-  //   ixs.push(
-  //     await this.program.methods
-  //       .createUser({ id, authority })
-  //       .accounts({
-  //         signer: this.program.provider.publicKey,
-  //       })
-  //       .instruction()
-  //   );
-
-  //   return sendVersionedTransaction(this.program, ixs, options);
-  // }
 }

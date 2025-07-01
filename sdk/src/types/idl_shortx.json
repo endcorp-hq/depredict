@@ -727,12 +727,12 @@
           "name": "config"
         },
         {
-          "name": "mpl_core_program",
-          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
-        },
-        {
           "name": "collection",
           "writable": true
+        },
+        {
+          "name": "mpl_core_program",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
         },
         {
           "name": "token_program",
@@ -845,61 +845,6 @@
         {
           "name": "sub_position_key",
           "type": "pubkey"
-        }
-      ]
-    },
-    {
-      "name": "create_user",
-      "discriminator": [
-        108,
-        227,
-        130,
-        130,
-        252,
-        109,
-        75,
-        218
-      ],
-      "accounts": [
-        {
-          "name": "signer",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "user",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "signer"
-              }
-            ]
-          }
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "args",
-          "type": {
-            "defined": {
-              "name": "CreateUserArgs"
-            }
-          }
         }
       ]
     },
@@ -1147,14 +1092,12 @@
           "writable": true
         },
         {
-          "name": "mpl_core_program"
+          "name": "mpl_core_program",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
         },
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "token_metadata_program"
         },
         {
           "name": "associated_token_program",
@@ -1311,19 +1254,6 @@
         109,
         238,
         86
-      ]
-    },
-    {
-      "name": "User",
-      "discriminator": [
-        159,
-        117,
-        95,
-        227,
-        239,
-        151,
-        58,
-        236
       ]
     }
   ],
@@ -1556,6 +1486,11 @@
       "code": 6034,
       "name": "InvalidMplCoreProgram",
       "msg": "Invalid mpl core program"
+    },
+    {
+      "code": 6035,
+      "name": "InvalidNft",
+      "msg": "Invalid NFT"
     }
   ],
   "types": [
@@ -1634,24 +1569,12 @@
             "type": "string"
           },
           {
-            "name": "manual_resolve",
-            "type": "bool"
-          }
-        ]
-      }
-    },
-    {
-      "name": "CreateUserArgs",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "id",
-            "type": "u16"
+            "name": "oracle_type",
+            "type": {
+              "defined": {
+                "name": "OracleType"
+              }
+            }
           }
         ]
       }
@@ -1743,6 +1666,14 @@
             "type": "pubkey"
           },
           {
+            "name": "oracle_type",
+            "type": {
+              "defined": {
+                "name": "OracleType"
+              }
+            }
+          },
+          {
             "name": "oracle_pubkey",
             "type": {
               "option": "pubkey"
@@ -1827,10 +1758,6 @@
             "type": "u64"
           },
           {
-            "name": "manual_resolve",
-            "type": "bool"
-          },
-          {
             "name": "padding",
             "type": {
               "array": [
@@ -1882,6 +1809,20 @@
           {
             "name": "metadata_uri",
             "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "Switchboard"
           }
         ]
       }
@@ -2179,35 +2120,6 @@
           {
             "name": "market_end",
             "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "User",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "id",
-            "type": "u16"
-          },
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "padding",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
           }
         ]
       }

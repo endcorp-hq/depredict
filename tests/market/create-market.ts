@@ -1,24 +1,15 @@
+//needs to be tested on devnet because localnet obviously fails (ORACLE + NFT CREATION)
+
 import * as anchor from "@coral-xyz/anchor";  
-import { Connection, PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
+import { PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createMint,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, METAPLEX_ID, LOCAL_MINT, ORACLE_KEY, extractErrorCode } from "../helpers";
-import { getMint } from "@solana/spl-token";
+import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode } from "../helpers";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
-import { fetchCollection } from "@metaplex-foundation/mpl-core";
-import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
-import {
-  PullFeed,
-  getDefaultDevnetQueue,
-  asV0Tx,
-} from "@switchboard-xyz/on-demand";
-import { CrossbarClient } from "@switchboard-xyz/common";
 
-const umi = createUmi(provider.connection);
 
 // At the top of your file:
 let numMarkets: anchor.BN;
@@ -56,6 +47,8 @@ async function tryCreateMarketTx({
   const question = Array.from(Buffer.from(questionStr));
   const usdcMintToUse = usdcMintParam || LOCAL_MINT.publicKey;
 
+  const isManualResolve = oraclePubkey.equals(PublicKey.default);
+
   try {
     const tx = await program.methods
       .createMarket({
@@ -63,6 +56,7 @@ async function tryCreateMarketTx({
         marketStart,
         marketEnd,
         metadataUri,
+        oracleType: isManualResolve ? { none: {} } : { switchboard: {} },
       })
       .accountsPartial({
         payer: ADMIN.publicKey,
@@ -70,7 +64,7 @@ async function tryCreateMarketTx({
         market: marketPda,
         collection: collectionPda,
         marketPositionsAccount: marketPositionsPda,
-        oraclePubkey,
+        oraclePubkey: isManualResolve ? 'HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL' : oraclePubkey,
         usdcMint: usdcMintToUse,
         tokenProgram: TOKEN_PROGRAM_ID,
         config: configPda,
@@ -82,6 +76,7 @@ async function tryCreateMarketTx({
       .rpc();
     return { tx, error: null, marketPda, collectionPda, marketId };
   } catch (error) {
+    console.log("error", error);
     if (expectError) {
       assert.include(error.toString(), expectError);
     }
@@ -115,7 +110,7 @@ describe("shortx-contract", () => {
   });
 
   describe("Market", () => {
-    it("Creates market", async () => {
+    it("Creates market with oracle", async () => {
       const questionStr = "Will BTC reach $100k in 2024?";
       const metadataUri = "https://arweave.net/your-metadata-uri";
       const { tx, error, marketPda } = await tryCreateMarketTx({
@@ -129,11 +124,29 @@ describe("shortx-contract", () => {
       assert.ok(tx, "Transaction signature should be returned");
 
       const marketAccount = await program.account.marketState.fetch(marketPda);
-
-
       assert.ok(marketAccount.marketId.eq(numMarkets));
       assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
+      assert.ok(marketAccount.oraclePubkey.equals(ORACLE_KEY), "Should have oracle pubkey");
+      assert.ok('switchboard' in marketAccount.oracleType, "Should be switchboard oracle type");
+    });
 
+    it("Creates market with manual resolution", async () => {
+      const questionStr = "Will ETH reach $5k in 2024?";
+      const metadataUri = "https://arweave.net/manual-metadata-uri";
+      const { tx, error, marketPda } = await tryCreateMarketTx({
+        questionStr,
+        metadataUri,
+        oraclePubkey: PublicKey.default, // Use default for manual resolution
+        feeVault: FEE_VAULT.publicKey,
+        usdcMintParam: usdcMint,
+      });
+      assert.isNotOk(error, "Should not error on valid manual market creation");
+      assert.ok(tx, "Transaction signature should be returned");
+
+      const marketAccount = await program.account.marketState.fetch(marketPda);
+      assert.ok(marketAccount.marketId.eq(numMarkets.add(new anchor.BN(1))));
+      assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
+      assert.ok('none' in marketAccount.oracleType, "Should be none oracle type");
     });
 
     it("Fails to create market with invalid oracle", async () => {
