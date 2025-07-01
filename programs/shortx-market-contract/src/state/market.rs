@@ -10,6 +10,7 @@ pub struct MarketState {
     pub bump: u8,
     pub market_id: u64,
     pub authority: Pubkey,
+    pub oracle_type: OracleType,
     pub oracle_pubkey: Option<Pubkey>,
     pub nft_collection: Option<Pubkey>,
     pub market_usdc_vault: Option<Pubkey>,
@@ -25,7 +26,6 @@ pub struct MarketState {
     pub question: [u8; 80],
     pub winning_direction: WinningDirection,
     pub version: u64,
-    pub manual_resolve: bool,
     pub padding: [u8; 72],
 }
 
@@ -38,13 +38,20 @@ pub enum WinningDirection {
     Draw,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(InitSpace)]
+pub enum OracleType {
+    None,
+    Switchboard
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct CreateMarketArgs {
     pub question: [u8; 80],
     pub market_start: i64,
     pub market_end: i64,
     pub metadata_uri: String,
-    pub manual_resolve: bool,
+    pub oracle_type: OracleType,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
@@ -81,6 +88,7 @@ impl Default for MarketState {
         Self {
             bump: 0,
             authority: Pubkey::default(),
+            oracle_type: OracleType::None,
             oracle_pubkey: None,
             nft_collection: None,
             market_usdc_vault: None,
@@ -97,7 +105,6 @@ impl Default for MarketState {
             winning_direction: WinningDirection::None,
             question: [0; 80],
             version: 0,
-            manual_resolve: false,
             padding: [0; 72],
         }
     }
