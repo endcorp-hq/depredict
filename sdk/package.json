@@ -1,17 +1,23 @@
 {
   "name": "shortx-sdk",
-  "version": "0.1.106",
+  "version": "0.1.110",
   "description": "SDK for interacting with the ShortX Protocol Solana contract",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/types/index.d.ts",
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.cjs",
-      "import": "./dist/index.js",
+      "types": "./dist/types/index.d.ts",
+      "require": {
+        "types": "./dist/types/types/index.d.ts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/index.js"
+      },
       "default": "./dist/index.js"
     },
     "./idl": {
@@ -48,7 +54,7 @@
     "typescript": "^5.0.0"
   },
   "files": [
-    "dist"
+    "dist/**/*"
   ],
   "license": "MIT",
   "engines": {

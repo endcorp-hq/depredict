@@ -139,6 +139,8 @@ export default class Trade {
       marketId
     );
 
+    console.log('this is oracle type', oracleType)
+
     try {
       ixs.push(
         await this.program.methods
