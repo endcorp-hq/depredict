@@ -1,0 +1,52 @@
+# Depredict SDK API Reference
+
+This page provides an overview of the main classes and methods available in the Depredict SDK.
+
+## DepredictClient
+
+The main entry point for interacting with the Depredict protocol.
+
+```typescript
+import DepredictClient from 'shortx-sdk';
+
+const client = new DepredictClient(connection, adminKey, feeVault, usdcMint);
+```
+
+### Properties
+- `trade`: Market and trading operations
+- `config`: Protocol configuration
+- `position`: Position management
+
+---
+
+## Trade Methods
+
+- `getAllMarkets()`: Get all markets
+- `getMarketById(marketId)`: Get market by ID
+- `createMarket(args)`: Create a new market
+- `openPosition(args)`: Open a new position/order
+- `resolveMarket({ marketId, payer, resolutionValue? })`: Resolve a market
+- `closeMarket(marketId, payer)`: Close a market
+- `updateMarket(marketId, marketEnd, payer)`: Update a market's end time
+- `payoutPosition(marketId, payer, positionId, positionNonce)`: Settle a position and claim payout
+
+---
+
+## Config Methods
+
+- `createConfig(feeAmount, payer)`: Initialize protocol config
+- `getConfig()`: Fetch protocol config
+- `updateConfig(payer, feeAmount?, authority?, feeVault?)`: Update config
+- `closeConfig(payer)`: Close config (if no active markets)
+
+---
+
+## Position Methods
+
+- `getPositionsAccountsForMarket(marketId)`: Get all position accounts for a market
+- `getPositionsAccountPda(marketId, positionNonce?)`: Get PDA for a position account
+- `getPositionAccountIxs(marketId, payer)`: Get instructions for position account creation/lookup
+
+---
+
+For detailed argument types, see the SDK TypeScript types or the protocol IDL. 

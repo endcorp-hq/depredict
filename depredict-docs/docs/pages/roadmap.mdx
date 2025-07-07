@@ -1,0 +1,54 @@
+# Roadmap
+
+Depredict is committed to building the most open, scalable, and innovative prediction market protocol on Solana. Here's a transparent look at our current architecture, challenges, and where we're headed next.
+
+---
+
+## NFT-Powered Markets with MPL Core
+
+We use [MPL Core](https://www.metaplex.com/core) to represent all markets and positions as immutable NFTs. This design ensures every market and position is:
+- **On-chain and verifiable**
+- **Transferable and composable**
+- **Immutable and censorship-resistant**
+
+**Challenge:** Each NFT costs about 0.002 SOL (roughly $0.30 at the time of writing). This is a significant cost for high-frequency or micro markets.
+
+---
+
+## Oracle Resolution with Switchboard
+
+We leverage [Switchboard](https://switchboard.xyz/) for decentralized, trustless market resolution. This enables:
+- Automated, on-chain outcome resolution
+- Support for a wide range of data feeds
+
+**Challenge:** Each oracle resolution costs about $0.15. For example, running an hourly market on the weather in one location would cost ~$100/month (24 x 30 x $0.15). This limits the viability of high-frequency, low-stakes markets.
+
+---
+
+## Exploring New Storage & Cost Solutions
+
+We are actively researching new solutions to reduce costs and increase scalability. One promising direction is [Tapedrive](https://tapedrive.io/), a Solana-native decentralized storage network. Tapedrive could enable:
+- Cheaper, scalable on-chain storage for market and position data
+- New models for market creation and settlement
+
+We're excited to experiment with these technologies and invite the community to share ideas or collaborate.
+
+---
+
+## Governance & Community
+
+Depredict is currently **centralized** to help shape the protocol and iterate quickly. However:
+- The project is fully open source—anyone can fork, build, or contribute
+- We are committed to gradually decentralizing governance as the community grows and traction builds
+- Feedback, proposals, and pull requests are always welcome
+
+---
+
+## Get Involved
+
+- Try the protocol and SDK
+- Suggest improvements or new features
+- Join the discussion on governance and protocol direction
+- Contribute code or integrations
+
+Depredict's future is open. Help us build the next generation of decentralized prediction markets on Solana! 
