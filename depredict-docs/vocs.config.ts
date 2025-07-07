@@ -1,7 +1,12 @@
 import { defineConfig } from 'vocs'
 
 export default defineConfig({
-  title: 'Docs',
+  title: 'dePredict Docs',
+  topNav: [
+    { text: 'Getting Started', link: '/getting-started', match: '/getting-started' },
+    { text: 'GitHub', link: 'https://github.com/endcorp-hq/shortx-contract-v1' },
+    { text: 'END Corp.', link: 'https://endcorp.co' }
+  ],
   sidebar: [
     {
       text: 'Overview',
@@ -24,4 +29,5 @@ export default defineConfig({
       link: '/roadmap',
     },
   ],
+  
 })
