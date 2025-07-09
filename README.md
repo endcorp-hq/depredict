@@ -1,4 +1,5 @@
-# ShortX Market Contract
+# dePredict
+![dePredict Logo](./img/depredict_logo.png "DePredict Logo")
 
 A Solana-based prediction market contract that allows users to bet on outcomes of events.
 
