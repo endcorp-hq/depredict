@@ -1,24 +1,23 @@
 {
   "name": "shortx-sdk",
-  "version": "0.1.110",
+  "version": "0.1.117",
   "description": "SDK for interacting with the ShortX Protocol Solana contract",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/types/index.d.ts",
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
       "require": {
-        "types": "./dist/types/types/index.d.ts",
+        "types": "./dist/types/cjs/index.d.ts",
         "default": "./dist/index.cjs"
       },
       "import": {
         "types": "./dist/types/index.d.ts",
         "default": "./dist/index.js"
       },
-      "default": "./dist/index.js"
+      "default": "./dist/index.cjs"
     },
     "./idl": {
       "require": "./dist/types/idl_shortx.json",
@@ -26,8 +25,9 @@
     }
   },
   "scripts": {
-    "build": "npm run build:tsc && npm run build:tsup",
-    "build:tsc": "tsc",
+    "build": "npm run build:esm && npm run build:cjs && npm run build:tsup",
+    "build:esm": "tsc",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:tsup": "tsup",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build",

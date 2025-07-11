@@ -30,14 +30,20 @@ ShortxError {
     #[msg("Market is inactive")]
     MarketInactive,
 
+    #[msg("Invalid betting start")]
+    InvalidBettingStart,
+
     #[msg("Position not found")]
     PositionNotFound,
 
-    #[msg("Question period not started")]
-    QuestionPeriodNotStarted,
+    #[msg("Betting period not started")]
+    BettingPeriodNotStarted,
 
-    #[msg("Question period ended")]
-    QuestionPeriodEnded,
+    #[msg("Betting period exceeded")]
+    BettingPeriodExceeded,
+
+    #[msg("Betting period ended")]
+    BettingPeriodEnded,
 
     #[msg("Market still active")]
     MarketStillActive,

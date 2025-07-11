@@ -7,7 +7,13 @@ import {
   TransactionInstruction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { CreateMarketArgs, OpenOrderArgs, OracleType } from "./types/trade.js";
+import {
+  CreateMarketArgs,
+  MarketStates,
+  MarketType,
+  OpenOrderArgs,
+  OracleType,
+} from "./types/trade.js";
 import { RpcOptions } from "./types/index.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers.js";
@@ -102,6 +108,7 @@ export default class Trade {
    */
   async createMarket(
     {
+      bettingStartTime,
       startTime,
       endTime,
       question,
@@ -109,11 +116,24 @@ export default class Trade {
       metadataUri,
       payer,
       oracleType,
+      marketType,
     }: CreateMarketArgs,
     options?: RpcOptions
   ) {
     if (question.length > 80) {
       throw new Error("Question must be less than 80 characters");
+    }
+
+    if (marketType == MarketType.FUTURE && !bettingStartTime) {
+      throw new Error("Betting start time is required for future markets");
+    }
+
+    if (
+      marketType == MarketType.FUTURE &&
+      bettingStartTime &&
+      bettingStartTime > startTime
+    ) {
+      throw new Error("Betting start time cannot be greater than start time");
     }
 
     const ixs: TransactionInstruction[] = [];
@@ -139,7 +159,12 @@ export default class Trade {
       marketId
     );
 
-    console.log('this is oracle type', oracleType)
+    const bettingStart =
+      marketType == MarketType.LIVE
+        ? new BN(startTime)
+        : bettingStartTime
+        ? new BN(bettingStartTime)
+        : null;
 
     try {
       ixs.push(
@@ -153,6 +178,9 @@ export default class Trade {
               oracleType == OracleType.SWITCHBOARD
                 ? { switchboard: {} }
                 : { none: {} },
+            marketType:
+              marketType == MarketType.LIVE ? { live: {} } : { future: {} },
+            bettingStart,
           })
           .accountsPartial({
             payer: payer,
@@ -325,7 +353,8 @@ export default class Trade {
     const oracleType = marketAccount.oracleType;
     const oraclePubkey = marketAccount.oraclePubkey;
 
-    if (!oraclePubkey) {
+
+    if (!oraclePubkey && "switchboard" in oracleType) {
       throw new Error("Market has no oracle pubkey");
     }
 
@@ -339,15 +368,19 @@ export default class Trade {
           .accountsPartial({
             signer: payer,
             market: marketPDA,
-            oraclePubkey: oraclePubkey,
+            oraclePubkey: !("switchboard" in oracleType)
+              ? new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL")
+              : oraclePubkey || anchor.web3.SystemProgram.programId,
           })
           .instruction()
       );
+
+      const tx = await createVersionedTransaction(this.program, ixs, payer);
+      return tx;
     } catch (error) {
       console.log("error", error);
       throw error;
     }
-    return ixs;
   }
 
   /**
@@ -427,32 +460,50 @@ export default class Trade {
   /**
    * Update Market
    * @param marketId - The ID of the market
+   * @param payer - The payer of the Market
    * @param marketEnd - The end time of the market
-   * @param options - RPC options
+   * @param marketState - The state of the market to update to (cannot be resolved)
    *
    */
   async updateMarket(
     marketId: number,
-    marketEnd: number,
     payer: PublicKey,
-    options?: RpcOptions
+    marketEnd?: number,
+    marketState?: MarketStates
   ) {
     const ixs: TransactionInstruction[] = [];
 
+    if (marketState == MarketStates.RESOLVED) {
+      throw new Error("Market state cannot be resolved");
+    }
+
+    try{
     ixs.push(
       await this.program.methods
         .updateMarket({
-          marketId: new BN(marketId),
-          marketEnd: new BN(marketEnd),
+          marketEnd: marketEnd ? new BN(marketEnd) : null,
+          marketState:
+            marketState == MarketStates.ACTIVE
+              ? { active: {} }
+              : marketState == MarketStates.ENDED
+              ? { ended: {} }
+              : marketState == MarketStates.RESOLVING
+              ? { resolving: {} }
+              : null,
         })
         .accounts({
           signer: payer,
           market: getMarketPDA(this.program.programId, marketId),
         })
-        .instruction()
-    );
+          .instruction()
+      );
 
-    return ixs;
+      const updateMarketTx = await createVersionedTransaction(this.program, ixs, payer);
+      return updateMarketTx;
+    } catch (error) {
+      console.log("error", error);
+      throw error;
+    }
   }
 
   async payoutPosition(

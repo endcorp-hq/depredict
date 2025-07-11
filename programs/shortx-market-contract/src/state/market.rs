@@ -10,6 +10,7 @@ pub struct MarketState {
     pub bump: u8,
     pub market_id: u64,
     pub authority: Pubkey,
+    pub market_type: MarketType,
     pub oracle_type: OracleType,
     pub oracle_pubkey: Option<Pubkey>,
     pub nft_collection: Option<Pubkey>,
@@ -17,16 +18,17 @@ pub struct MarketState {
     pub yes_liquidity: u64,
     pub no_liquidity: u64,
     pub volume: u64,
-    pub update_ts: i64, // TODO: Rename this
+    pub update_ts: i64,
     pub padding_1: [u8; 7],
     pub next_position_id: u64,
     pub market_state: MarketStates,
-    pub market_start: i64,
-    pub market_end: i64,
+    pub betting_start: i64, //voting begins (same as market_start if live market)
+    pub market_start: i64, //voting ends, market question period starts
+    pub market_end: i64,  //market question period ends
     pub question: [u8; 80],
     pub winning_direction: WinningDirection,
     pub version: u64,
-    pub padding: [u8; 72],
+    pub padding: [u8; 20],
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -48,6 +50,8 @@ pub enum OracleType {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct CreateMarketArgs {
     pub question: [u8; 80],
+    pub market_type: MarketType,
+    pub betting_start: Option<i64>, //if live market, no need to pass this
     pub market_start: i64,
     pub market_end: i64,
     pub metadata_uri: String,
@@ -61,8 +65,8 @@ pub struct ResolveMarketArgs {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct UpdateMarketArgs {
-    pub market_id: u64,
-    pub market_end: i64,
+    pub market_end: Option<i64>,
+    pub market_state: Option<MarketStates>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -72,14 +76,20 @@ pub struct CloseMarketArgs {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, PartialEq, Eq, Debug)]
 pub enum MarketStates {
-    //market is active and can be voted on by users
+    //betting period is active (future markets) or market is active (live markets)
     Active,
-    //market is ended and no more votes can be made (this state is for daily markets that resolve the next day)
+    //betting is ended and no more votes can be made (this state is for future markets)
     Ended,
-    //market is resolving and the winning direction is being determined
+    //market is resolving and the winning direction is being determined (or question period for future markets)
     Resolving,
-    //market is resolved and the winning direction is determined
+    //market has resolved and the winning direction is determined (payouts)
     Resolved,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, PartialEq, Eq, Debug)]
+pub enum MarketType {
+    Live,
+    Future, //these markets end betting before the market start time
 }
 
 
@@ -92,6 +102,7 @@ impl Default for MarketState {
             oracle_pubkey: None,
             nft_collection: None,
             market_usdc_vault: None,
+            market_type: MarketType::Future,
             market_id: 0,
             yes_liquidity: 0,
             no_liquidity: 0,
@@ -100,12 +111,13 @@ impl Default for MarketState {
             market_state: MarketStates::Active,
             market_start: 0,
             market_end: 0,
+            betting_start: 0,
             volume: 0,
             padding_1: [0; 7],
             winning_direction: WinningDirection::None,
             question: [0; 80],
             version: 0,
-            padding: [0; 72],
+            padding: [0; 20],
         }
     }
 }

@@ -62,7 +62,7 @@ impl<'info> SubPositionContext<'info> {
             nonce,
             market_id: market_positions.market_id,
             is_sub_position: true,
-            padding: [0; 25],
+            padding: [0; 10],
         });
 
         Ok(())

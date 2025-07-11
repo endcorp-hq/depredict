@@ -11,7 +11,7 @@ use switchboard_on_demand::prelude::rust_decimal::Decimal;
 use std::str::FromStr;
 
 use crate::constants::{MARKET, NFT, USDC_MINT};
-use crate::state::{Config, MarketStates, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
+use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
     errors::ShortxError,
     state::{ MarketState, WinningDirection },
@@ -174,12 +174,16 @@ impl<'info> PositionContext<'info> {
     pub fn open_position(&mut self, args: OpenPositionArgs, bumps: &PositionContextBumps) -> Result<()> {
         let next_position_id = self.market.next_position_id; // Store before increment
         let market = &mut self.market;
+        let market_type = market.market_type;
         let market_positions_account = &mut self.market_positions_account;
         let ts = Clock::get()?.unix_timestamp;
     
 
-        require!(ts > market.market_start, ShortxError::QuestionPeriodNotStarted);
-        require!(market.market_end > ts, ShortxError::QuestionPeriodEnded);
+        if market_type == MarketType::Future {
+            require!(ts < market.market_start && ts > market.betting_start, ShortxError::BettingPeriodExceeded);
+        } 
+
+        require!(market.market_end > ts, ShortxError::BettingPeriodEnded);
         require!(
             market.winning_direction == WinningDirection::None,
             ShortxError::MarketAlreadyResolved

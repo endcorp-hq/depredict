@@ -76,7 +76,13 @@ export enum OracleType {
   MANUAL = 'manual'
 }
 
+export enum MarketType {
+  LIVE = 'live',
+  FUTURE = 'future'
+}
+
 export type CreateMarketArgs = {
+  bettingStartTime?: number
   startTime: number
   endTime: number
   question: string
@@ -86,4 +92,5 @@ export type CreateMarketArgs = {
   usdcMintAddress: PublicKey
   oraclePubkey?: PublicKey
   oracleType: OracleType
+  marketType: MarketType
 }

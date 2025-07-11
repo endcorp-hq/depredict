@@ -12,7 +12,7 @@ pub struct PositionAccount {
     pub positions: [Position; 10],
     pub nonce: u32,
     pub is_sub_position: bool,
-    pub padding: [u8; 25],
+    pub padding: [u8; 10],
 }
 
 #[account]
