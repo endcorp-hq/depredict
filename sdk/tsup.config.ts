@@ -2,14 +2,19 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: ['src/index.ts'],
-  format: ['cjs'], // Only CommonJS, no ESM
-  outDir: 'dist',
+  format: ['cjs'],
+  outDir: 'dist/cjs', //build for commonjs only, esm is handled by tsc
   splitting: false,
   sourcemap: true,
-  clean: false, // Don't clean - we want to keep tsc files
-  dts: false, // Let tsc handle type declarations
+  clean: true,
+  dts: true,
   loader: {
     '.json': 'json'
   },
-  onSuccess: 'cp -r src/types dist/'
+  // Preserve all exports
+  treeshake: false,
+  // Ensure external dependencies are handled correctly
+  external: ['@coral-xyz/anchor', '@solana/web3.js', '@solana/spl-token', '@metaplex-foundation/mpl-core'],
+  // Force all exports to be included
+  noExternal: ['bn.js']
 });

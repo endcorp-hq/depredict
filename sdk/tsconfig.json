@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "declaration": true,
     "declarationDir": "dist/types",
-    "outDir": "./dist",
+    "outDir": "./dist/esm", //build for esm only, cjs is handled by tsup
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
