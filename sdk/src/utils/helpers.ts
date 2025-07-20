@@ -1,7 +1,8 @@
 import {
   Market,
   WinningDirection,
-  MarketStates
+  MarketStates,
+  MarketType
 } from '../types/trade.js'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
@@ -44,6 +45,8 @@ export const formatMarket = (
     marketEnd: account.marketEnd.toString(),
     question: Buffer.from(account.question).toString().replace(/\0+$/, ''),
     winningDirection: getWinningDirection(account.winningDirection),
+    marketType: getMarketType(account.marketType),
+    bettingStartTime: account.bettingStart.toString(),
   }
 }
 
@@ -86,6 +89,12 @@ export const getMarketState = (
   return currentStatus as unknown as MarketStates;
 }
 
+export const getMarketType = (
+  type: IdlAccounts<ShortxContract>['marketState']['marketType']
+): MarketType => {
+  const currentType = Object.keys(type)[0];
+  return currentType as unknown as MarketType;
+}
 
 
 export const getWinningDirection = (

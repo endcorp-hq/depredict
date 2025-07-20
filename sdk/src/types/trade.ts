@@ -16,8 +16,10 @@ export type Market = {
   marketState: MarketStates
   marketStart: string
   marketEnd: string
+  bettingStartTime: string
   question: string
   winningDirection: WinningDirection
+  marketType: MarketType
 }
 
 
