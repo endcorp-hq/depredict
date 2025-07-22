@@ -14,7 +14,7 @@ import { fetchCollection } from '@metaplex-foundation/mpl-core'
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 import fs from "fs";
 
-describe("shortx-contract", () => { 
+describe("depredict", () => { 
 
   let usdcMint: PublicKey;
   let userTokenAccount: PublicKey;

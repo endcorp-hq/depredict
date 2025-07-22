@@ -1,5 +1,5 @@
 import { Program, BN, web3 } from "@coral-xyz/anchor";
-import { ShortxContract } from "./types/shortx.js";
+import { Depredict } from "./types/depredict.js";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { getConfigPDA } from "./utils/pda/index.js";
 import Trade from "./trade.js";
@@ -9,7 +9,7 @@ export default class Config {
   FEE_VAULT: PublicKey;
   USDC_MINT: PublicKey;
   trade: Trade;
-  constructor(private program: Program<ShortxContract>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
+  constructor(private program: Program<Depredict>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
     this.ADMIN_KEY = adminKey;
     this.FEE_VAULT = feeVault;
     this.USDC_MINT = usdcMint;

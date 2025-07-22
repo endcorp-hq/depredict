@@ -181,7 +181,7 @@ impl MarketState {
 
     //     require!(
     //         self.yes_price <= 1_000_000 && self.no_price <= 1_000_000,
-    //         ShortxError::InvalidPrice
+    //         DepredictError::InvalidPrice
     //     );
 
     //     emit!(PriceEvent {

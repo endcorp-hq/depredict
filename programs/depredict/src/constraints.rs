@@ -1,4 +1,4 @@
-use crate::errors::ShortxError;
+use crate::errors::DepredictError;
 
 use anchor_lang::prelude::*;
 use switchboard_on_demand::{
@@ -9,16 +9,16 @@ use switchboard_on_demand::{
 
 pub fn get_oracle_value(oracle_account: &AccountInfo) -> anchor_lang::Result<Decimal> {
     let feed_account = oracle_account.try_borrow_data()
-        .map_err(|_| ShortxError::InvalidOracle)?;
+        .map_err(|_| DepredictError::InvalidOracle)?;
 
     let feed = PullFeedAccountData::parse(feed_account).map_err(|e| {
         msg!("Error parsing oracle data: {:?}", e);
-        ShortxError::InvalidOracle
+        DepredictError::InvalidOracle
     })?;
 
-    let value = feed.value(&Clock::get().map_err(|_| ShortxError::InvalidOracle)?).map_err(|e| {
+    let value = feed.value(&Clock::get().map_err(|_| DepredictError::InvalidOracle)?).map_err(|e| {
         msg!("Error getting value: {:?}", e);
-        ShortxError::InvalidOracle
+        DepredictError::InvalidOracle
     })?;
 
     msg!("Oracle value: {:?}", value);

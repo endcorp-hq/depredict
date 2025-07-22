@@ -11,7 +11,7 @@ import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { fetchAsset } from '@metaplex-foundation/mpl-core';
 
-describe("shortx-contract", () => {
+describe("depredict", () => {
 
   const user = USER;
   const usdcMint = LOCAL_MINT.publicKey;

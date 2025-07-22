@@ -9,10 +9,10 @@ import { RpcOptions } from "../types/index.js";
 import { AddressLookupTableAccount } from "@solana/web3.js";
 import { Program } from "@coral-xyz/anchor";
 import getPriorityFee from "./getPriorityFee.js";
-import { ShortxContract } from "../types/shortx.js";
+import { Depredict } from "../types/depredict.js";
 
 const createVersionedTransaction = async (
-  program: Program<ShortxContract>,
+  program: Program<Depredict>,
   ixs: TransactionInstruction[],
   payer: PublicKey,
   options?: RpcOptions,

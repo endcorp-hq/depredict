@@ -1,5 +1,5 @@
 import { BN, Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "./types/shortx.js";
+import { Depredict } from "./types/depredict.js";
 import { formatPositionAccount } from "./utils/helpers.js";
 import {
   PublicKey,
@@ -19,7 +19,7 @@ import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes/index.js";
 
 export default class Position {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
-  constructor(private program: Program<ShortxContract>) {}
+  constructor(private program: Program<Depredict>) {}
 
   /**
    * Get all Position Accounts for a Market

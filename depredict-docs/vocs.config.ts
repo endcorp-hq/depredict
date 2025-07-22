@@ -4,7 +4,7 @@ export default defineConfig({
   title: 'dePredict Docs',
   topNav: [
     { text: 'Getting Started', link: '/getting-started', match: '/getting-started' },
-    { text: 'GitHub', link: 'https://github.com/endcorp-hq/shortx-contract-v1' },
+    { text: 'GitHub', link: 'https://github.com/endcorp-hq/depredict' },
     { text: 'END Corp.', link: 'https://endcorp.co' }
   ],
   sidebar: [

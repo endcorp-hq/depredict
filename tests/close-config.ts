@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../target/types/shortx_contract";
+import { Depredict } from "../target/types/depredict";
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
 import { ADMIN, FEE_VAULT } from "./helpers";
@@ -9,7 +9,7 @@ describe("close-config", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
+  const program = anchor.workspace.Depredict as Program<Depredict>;
   const admin = ADMIN;
   const feeVault = FEE_VAULT;
 

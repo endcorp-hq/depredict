@@ -13,7 +13,7 @@ use instructions::*;
 declare_id!("5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda");
 
 #[program]
-pub mod shortx_contract {
+pub mod depredict {
     use super::*;
 
     // CONFIG INSTRUCTIONS

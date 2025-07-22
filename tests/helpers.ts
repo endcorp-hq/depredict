@@ -2,7 +2,7 @@ import { PublicKey, Keypair, Connection, LAMPORTS_PER_SOL } from "@solana/web3.j
 import * as fs from "fs";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../target/types/shortx_contract";
+import { Depredict } from "../target/types/depredict";
 
 // Load the local mint keypair that we'll use for testing
 const LOCAL_MINT = Keypair.fromSecretKey(
@@ -17,7 +17,7 @@ const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
 
-const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
+const program = anchor.workspace.Depredict as Program<Depredict>;
 
 // Load keypairs
 const ADMIN = Keypair.fromSecretKey(

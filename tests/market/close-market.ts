@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
+import { Depredict } from "../../target/types/depredict";
 import { PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -10,12 +10,12 @@ import {
 } from "@solana/spl-token";
 import { ADMIN, FEE_VAULT, getUsdcMint, MARKET_ID } from "../helpers";
 
-describe("shortx-contract", () => {
+describe("depredict", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-    const admin = ADMIN;
+  const program = anchor.workspace.Depredict as Program<Depredict>;
+  const admin = ADMIN;
   const feeVault = FEE_VAULT;
 
 

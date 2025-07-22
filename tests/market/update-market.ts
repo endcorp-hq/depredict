@@ -3,7 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
 import { getNetworkConfig, ADMIN, program, MARKET_ID } from "../helpers";
 
-describe("shortx-contract", () => {
+describe("depredict", () => {
 
 
   before(async () => {
