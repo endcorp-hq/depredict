@@ -3,7 +3,7 @@ import { PublicKey, Keypair } from "@solana/web3.js";
 import { assert } from "chai";
 import { ADMIN, FEE_VAULT, program, ensureAccountBalance } from "./helpers";
 
-describe("shortx-contract", () => {
+describe("depredict", () => {
   const [configPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
     program.programId

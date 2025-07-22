@@ -89,7 +89,7 @@ async function tryCreateMarketTx({
   }
 }
 
-describe("shortx-contract", () => {
+describe("depredict", () => {
   let usdcMint: PublicKey;
   let collectionMintKeypair: Keypair;
 
