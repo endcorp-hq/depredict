@@ -7,7 +7,7 @@ import {
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { IdlAccounts } from '@coral-xyz/anchor'
-import { ShortxContract } from '../types/shortx.js'
+import { Depredict } from '../types/depredict.js'
 import { PositionAccount, Position, PositionDirection, PositionStatus } from '../types/position.js'
 
 export const encodeString = (value: string, alloc = 32): number[] => {
@@ -24,7 +24,7 @@ export const decodeString = (bytes: number[]): string => {
 }
 
 export const formatMarket = (
-  account: IdlAccounts<ShortxContract>['marketState'],
+  account: IdlAccounts<Depredict>['marketState'],
   address: PublicKey
 ): Market => {
   return {
@@ -51,7 +51,7 @@ export const formatMarket = (
 }
 
 export const formatPositionAccount = (
-  account: IdlAccounts<ShortxContract>['positionAccount'],
+  account: IdlAccounts<Depredict>['positionAccount'],
   marketId?: number
 ): PositionAccount => {
   console.log('formatPositionAccount', account)
@@ -67,7 +67,7 @@ export const formatPositionAccount = (
 }
 
 export const formatPosition = (
-  position: IdlAccounts<ShortxContract>['positionAccount']['positions'][number]
+  position: IdlAccounts<Depredict>['positionAccount']['positions'][number]
 ): Position => {
   return {
     ts: position.ts.toString(),
@@ -83,14 +83,14 @@ export const formatPosition = (
 }
 
 export const getMarketState = (
-  status: IdlAccounts<ShortxContract>['marketState']['marketState']
+  status: IdlAccounts<Depredict>['marketState']['marketState']
 ): MarketStates => {
   const currentStatus = Object.keys(status)[0];
   return currentStatus as unknown as MarketStates;
 }
 
 export const getMarketType = (
-  type: IdlAccounts<ShortxContract>['marketState']['marketType']
+  type: IdlAccounts<Depredict>['marketState']['marketType']
 ): MarketType => {
   const currentType = Object.keys(type)[0];
   return currentType as unknown as MarketType;
@@ -98,7 +98,7 @@ export const getMarketType = (
 
 
 export const getWinningDirection = (
-  direction: IdlAccounts<ShortxContract>['marketState']['winningDirection']
+  direction: IdlAccounts<Depredict>['marketState']['winningDirection']
 ): WinningDirection => {
   const key = Object.keys(direction)[0];
   switch (key) {

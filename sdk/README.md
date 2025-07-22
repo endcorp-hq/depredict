@@ -1,11 +1,11 @@
-# ShortX SDK
+# Depredict SDK
 
-A TypeScript SDK for interacting with the ShortX Protocol Solana contract.
+A TypeScript SDK for interacting with the Depredict Protocol Solana contract.
 
 ## Installation
 
 ```bash
-npm install shortx-sdk
+npm install depredict-sdk
 ```
 
 ## Usage
@@ -13,12 +13,12 @@ npm install shortx-sdk
 ```typescript
 import { Connection } from '@solana/web3.js';
 import { Wallet } from '@coral-xyz/anchor';
-import ShortXClient from 'shortx-sdk';
+import DepredictClient from 'depredict-sdk';
 
 // Initialize the client
 const connection = new Connection('https://api.devnet.solana.com');
 const wallet = new Wallet(/* your wallet */);
-const client = new ShortXClient(connection, wallet);
+const client = new DepredictClient(connection, wallet);
 
 // Use the client to interact with the protocol
 // Example: Get all markets

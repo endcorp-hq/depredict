@@ -342,7 +342,7 @@ impl<'info> PositionContext<'info> {
         msg!("position_nft_account_bump: {:?}", position_nft_account_bump);
 
 
-        let nft_name = format!("SHORTX MARKET:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
+        let nft_name = format!("DEPREDICT MARKET:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
         let uri = args.metadata_uri;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
         

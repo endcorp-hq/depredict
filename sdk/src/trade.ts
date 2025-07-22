@@ -1,5 +1,5 @@
 import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "./types/shortx.js";
+import { Depredict } from "./types/depredict.js";
 import * as anchor from "@coral-xyz/anchor";
 import {
   AddressLookupTableAccount,
@@ -44,7 +44,7 @@ export default class Trade {
   FEE_VAULT: PublicKey;
   USDC_MINT: PublicKey;
   constructor(
-    private program: Program<ShortxContract>,
+    private program: Program<Depredict>,
     adminKey: PublicKey,
     feeVault: PublicKey,
     usdcMint: PublicKey

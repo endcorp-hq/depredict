@@ -304,7 +304,7 @@ impl<'info> MarketContext<'info> {
 
         msg!("Creating collection NFT");
 
-        let market_nft_name = format!("SHORTX-MKT-{}", market_id);
+        let market_nft_name = format!("DEPREDICT-MKT-{}", market_id);
         let mut create_collection_cpi = CreateCollectionV2CpiBuilder::new(mpl_core_program);
         let mut plugins: Vec<PluginAuthorityPair> = vec![];
 

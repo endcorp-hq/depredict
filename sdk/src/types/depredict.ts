@@ -2,12 +2,12 @@
  * Program IDL in camelCase format in order to be used in JS/TS.
  *
  * Note that this is only a type helper and is not the actual IDL. The original
- * IDL can be found at `target/idl/shortx_contract.json`.
+ * IDL can be found at `target/idl/depredict.json`.
  */
-export type ShortxContract = {
+export type Depredict = {
   "address": "5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda",
   "metadata": {
-    "name": "shortxContract",
+    "name": "depredict",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"

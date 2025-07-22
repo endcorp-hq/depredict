@@ -6,4 +6,4 @@ export type RpcOptions = {
 
 export * from './trade.js'
 export * from './position.js'
-export * from './shortx.js'
+export * from './depredict.js'
