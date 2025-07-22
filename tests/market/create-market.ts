@@ -22,6 +22,7 @@ async function tryCreateMarketTx({
   feeVault = FEE_VAULT.publicKey,
   usdcMintParam = null,
   expectError = null,
+  liveMarket = false,
 }) {
   // Get current marketId and PDAs
   const marketId = numMarkets;
@@ -42,7 +43,9 @@ async function tryCreateMarketTx({
   const currentSlot = await provider.connection.getSlot();
   const validatorTime = await provider.connection.getBlockTime(currentSlot);
   if (!validatorTime) assert.fail("Could not fetch validator block time.");
-  const marketStart = new anchor.BN(validatorTime - 60);
+ 
+  const marketStart = liveMarket ? new anchor.BN(validatorTime - 60) : new anchor.BN(validatorTime + 86400);
+  const bettingStart = new anchor.BN(validatorTime - 60);
   const marketEnd = new anchor.BN(validatorTime + 86400);
   const question = Array.from(Buffer.from(questionStr));
   const usdcMintToUse = usdcMintParam || LOCAL_MINT.publicKey;
@@ -57,6 +60,8 @@ async function tryCreateMarketTx({
         marketEnd,
         metadataUri,
         oracleType: isManualResolve ? { none: {} } : { switchboard: {} },
+        marketType: liveMarket ? { live: {} } : { future: {} },
+        bettingStart: bettingStart,
       })
       .accountsPartial({
         payer: ADMIN.publicKey,

@@ -1,5 +1,5 @@
 {
-  "address": "5uqv2VWyhNk57QwxmZqRXe7M6z2id4MW9nY83WMmhtiG",
+  "address": "5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda",
   "metadata": {
     "name": "shortx_contract",
     "version": "0.1.0",
@@ -1359,136 +1359,146 @@
     },
     {
       "code": 6009,
+      "name": "InvalidBettingStart",
+      "msg": "Invalid betting start"
+    },
+    {
+      "code": 6010,
       "name": "PositionNotFound",
       "msg": "Position not found"
     },
     {
-      "code": 6010,
-      "name": "QuestionPeriodNotStarted",
-      "msg": "Question period not started"
-    },
-    {
       "code": 6011,
-      "name": "QuestionPeriodEnded",
-      "msg": "Question period ended"
+      "name": "BettingPeriodNotStarted",
+      "msg": "Betting period not started"
     },
     {
       "code": 6012,
+      "name": "BettingPeriodExceeded",
+      "msg": "Betting period exceeded"
+    },
+    {
+      "code": 6013,
+      "name": "BettingPeriodEnded",
+      "msg": "Betting period ended"
+    },
+    {
+      "code": 6014,
       "name": "MarketStillActive",
       "msg": "Market still active"
     },
     {
-      "code": 6013,
+      "code": 6015,
       "name": "InsufficientLiquidity",
       "msg": "Insufficient liquidity"
     },
     {
-      "code": 6014,
+      "code": 6016,
       "name": "MarketAlreadyResolved",
       "msg": "Market already resolved"
     },
     {
-      "code": 6015,
+      "code": 6017,
       "name": "ConcurrentTransaction",
       "msg": "Concurrent transaction"
     },
     {
-      "code": 6016,
+      "code": 6018,
       "name": "MarketNotAllowedToPayout",
       "msg": "Market Not allowed to payout"
     },
     {
-      "code": 6017,
+      "code": 6019,
       "name": "UserTradeIsSubUser",
       "msg": "User trade is sub user"
     },
     {
-      "code": 6018,
+      "code": 6020,
       "name": "PrizeNotFound",
       "msg": "Prize not found"
     },
     {
-      "code": 6019,
+      "code": 6021,
       "name": "NoPrizesAvailable",
       "msg": "No Prize Available"
     },
     {
-      "code": 6020,
+      "code": 6022,
       "name": "AlreadyLinked",
       "msg": "Already linked"
     },
     {
-      "code": 6021,
+      "code": 6023,
       "name": "NotLinked",
       "msg": "Not linked"
     },
     {
-      "code": 6022,
+      "code": 6024,
       "name": "InvalidCustomer",
       "msg": "Invalid customer"
     },
     {
-      "code": 6023,
+      "code": 6025,
       "name": "InvalidMint",
       "msg": "Invalid mint"
     },
     {
-      "code": 6024,
+      "code": 6026,
       "name": "InvalidFeeVault",
       "msg": "Invalid fee vault"
     },
     {
-      "code": 6025,
+      "code": 6027,
       "name": "InvalidShares",
       "msg": "Invalid shares"
     },
     {
-      "code": 6026,
+      "code": 6028,
       "name": "UnauthorizedToOrderBook",
       "msg": "Unauthorized to order book"
     },
     {
-      "code": 6027,
+      "code": 6029,
       "name": "OrderIsFullFilled",
       "msg": "Order is full filled"
     },
     {
-      "code": 6028,
+      "code": 6030,
       "name": "Overflow",
       "msg": "Overflow"
     },
     {
-      "code": 6029,
+      "code": 6031,
       "name": "MarketAlreadyAggregated",
       "msg": "Market already aggregated"
     },
     {
-      "code": 6030,
+      "code": 6032,
       "name": "InvalidMarketId",
       "msg": "Invalid market id"
     },
     {
-      "code": 6031,
+      "code": 6033,
       "name": "InvalidCollection",
       "msg": "Invalid collection"
     },
     {
-      "code": 6032,
+      "code": 6034,
       "name": "InvalidCollectionMint",
       "msg": "Invalid collection mint"
     },
     {
-      "code": 6033,
+      "code": 6035,
       "name": "InvalidAuthority",
       "msg": "Invalid collection authority"
     },
     {
-      "code": 6034,
+      "code": 6036,
       "name": "InvalidMplCoreProgram",
       "msg": "Invalid mpl core program"
     },
     {
-      "code": 6035,
+      "code": 6037,
       "name": "InvalidNft",
       "msg": "Invalid NFT"
     }
@@ -1554,6 +1564,20 @@
                 "u8",
                 80
               ]
+            }
+          },
+          {
+            "name": "market_type",
+            "type": {
+              "defined": {
+                "name": "MarketType"
+              }
+            }
+          },
+          {
+            "name": "betting_start",
+            "type": {
+              "option": "i64"
             }
           },
           {
@@ -1666,6 +1690,14 @@
             "type": "pubkey"
           },
           {
+            "name": "market_type",
+            "type": {
+              "defined": {
+                "name": "MarketType"
+              }
+            }
+          },
+          {
             "name": "oracle_type",
             "type": {
               "defined": {
@@ -1729,6 +1761,10 @@
             }
           },
           {
+            "name": "betting_start",
+            "type": "i64"
+          },
+          {
             "name": "market_start",
             "type": "i64"
           },
@@ -1762,7 +1798,7 @@
             "type": {
               "array": [
                 "u8",
-                72
+                20
               ]
             }
           }
@@ -1785,6 +1821,20 @@
           },
           {
             "name": "Resolved"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Live"
+          },
+          {
+            "name": "Future"
           }
         ]
       }
@@ -1975,7 +2025,7 @@
             "type": {
               "array": [
                 "u8",
-                25
+                10
               ]
             }
           }
@@ -2114,12 +2164,20 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "market_id",
-            "type": "u64"
+            "name": "market_end",
+            "type": {
+              "option": "i64"
+            }
           },
           {
-            "name": "market_end",
-            "type": "i64"
+            "name": "market_state",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "MarketStates"
+                }
+              }
+            }
           }
         ]
       }

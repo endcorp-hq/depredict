@@ -6,6 +6,11 @@ import Trade from './trade.js'
 import Config from './config.js'
 import Position from './position.js'
 
+// Re-export all types
+export * from './types/trade.js'
+export * from './types/position.js'
+export * from './types/index.js'
+
 export default class ShortXClient {
   program: Program<ShortxContract>
   trade: Trade
@@ -25,11 +30,5 @@ export default class ShortXClient {
     this.USDC_MINT = usdcMint
   }
 }
-
-//export types
-export * from './types/trade.js'
-export * from './types/position.js'
-export * from './types/shortx.js'
-export * from './types/index.js'
 
 

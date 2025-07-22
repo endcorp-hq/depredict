@@ -29,17 +29,14 @@ use mpl_core::{
 
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
-    MARKET, 
-    POSITION, 
-    NFT_COLLECTION,
-    USDC_MINT
+    MARKET, NFT_COLLECTION, POSITION, USDC_MINT
     }, 
     constraints::{
         get_oracle_value, 
         is_valid_oracle
     }, 
     state::{
-        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, OracleType, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
+        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, MarketType, OracleType, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
     }
 };
 use crate::errors::ShortxError;
@@ -148,8 +145,7 @@ pub struct ResolveMarketContext<'info> {
 
     /// CHECK: oracle is same as the market's oracle pubkey
     #[account(
-        mut,
-        constraint = oracle_pubkey.key() == market.oracle_pubkey.unwrap() @ ShortxError::InvalidOracle
+        mut
     )]
     pub oracle_pubkey: AccountInfo<'info>,
 }
@@ -222,18 +218,21 @@ impl<'info> MarketContext<'info> {
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
         let mpl_core_program = &self.mpl_core_program.to_account_info();
+        let market_type = args.market_type;
 
         let ts = Clock::get()?.unix_timestamp;
+
+        let oracle_pubkey: Option<Pubkey>;
 
         match args.oracle_type {
             OracleType::None => {
                 msg!("No oracle type provided");
-                market.oracle_pubkey = None;
+                oracle_pubkey = None;
             }
             OracleType::Switchboard => {
                 msg!("Checking if oracle is valid");
                 require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
-                market.oracle_pubkey = Some(self.oracle_pubkey.key());
+                oracle_pubkey = Some(self.oracle_pubkey.key());
             }
         }
 
@@ -244,16 +243,26 @@ impl<'info> MarketContext<'info> {
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
 
+        let betting_start = match market_type {
+            MarketType::Live => args.market_start,
+            MarketType::Future => {
+                require!(args.betting_start.is_some(), ShortxError::InvalidBettingStart);
+                args.betting_start.unwrap()
+            },
+        };
+
         market.set_inner(MarketState {
             bump: bumps.market,
             authority: payer.key(),
             market_id: market_id,
+            betting_start,
             market_start: args.market_start,
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
             market_usdc_vault: Some(self.market_usdc_vault.key()),
             oracle_type: args.oracle_type,
+            oracle_pubkey: oracle_pubkey,
             ..Default::default()
         });
 
@@ -281,7 +290,7 @@ impl<'info> MarketContext<'info> {
             nonce: 0,
             market_id: market_id,
             is_sub_position: false,
-            padding: [0; 25],
+            padding: [0; 10],
         });
 
         // Add debug logging for positions
@@ -346,11 +355,18 @@ impl<'info> UpdateMarketContext<'info> {
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
 
-        // only the market creator can update the market end time
+        // only the market creator can update the market
          require!(market.authority == *signer.key, ShortxError::Unauthorized);
 
-        // update the market end time
-        market.market_end = args.market_end;
+        // Update only the fields that were passed in args
+        if args.market_end.is_some() {
+            market.market_end = args.market_end.unwrap();
+        }
+        if args.market_state.is_some() {
+            //cannot update to resolved as resolution is done by the oracle
+            require!(args.market_state.unwrap() != MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
+            market.market_state = args.market_state.unwrap();
+        }
         market.update_ts = ts;
         Ok(())
     }
@@ -365,7 +381,11 @@ impl<'info> ResolveMarketContext<'info> {
         let ts = Clock::get()?.unix_timestamp;
 
         require!(market.authority == *signer.key, ShortxError::Unauthorized);
-        require!(market.market_state == MarketStates::Active || market.market_state == MarketStates::Ended, ShortxError::MarketAlreadyResolved);
+        require!(market.market_state != MarketStates::Resolved, ShortxError::MarketAlreadyResolved);
+
+        if oracle_type == OracleType::Switchboard {
+            require!(self.oracle_pubkey.key() == market.oracle_pubkey.unwrap(), ShortxError::InvalidOracle);
+        }
 
         // Get oracle price data
         let direction = match oracle_type {

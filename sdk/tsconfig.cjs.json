@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "module": "commonjs",
+    "moduleResolution": "node",
     "declaration": true,
-    "declarationDir": "dist/types",
-    "outDir": "./dist/esm", //build for esm only, cjs is handled by tsup
+    "declarationDir": "dist/types/cjs",
+    "outDir": "./dist/cjs",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
@@ -15,9 +15,9 @@
   },
   "include": [
     "src/**/*"
-, "tsconfig.cjs.json"  ],
+  ],
   "exclude": [
     "node_modules",
     "dist"
   ]
-} 
+}

@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/shortx_contract.json`.
  */
 export type ShortxContract = {
-  "address": "5uqv2VWyhNk57QwxmZqRXe7M6z2id4MW9nY83WMmhtiG",
+  "address": "5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda",
   "metadata": {
     "name": "shortxContract",
     "version": "0.1.0",
@@ -1365,136 +1365,146 @@ export type ShortxContract = {
     },
     {
       "code": 6009,
+      "name": "invalidBettingStart",
+      "msg": "Invalid betting start"
+    },
+    {
+      "code": 6010,
       "name": "positionNotFound",
       "msg": "Position not found"
     },
     {
-      "code": 6010,
-      "name": "questionPeriodNotStarted",
-      "msg": "Question period not started"
-    },
-    {
       "code": 6011,
-      "name": "questionPeriodEnded",
-      "msg": "Question period ended"
+      "name": "bettingPeriodNotStarted",
+      "msg": "Betting period not started"
     },
     {
       "code": 6012,
+      "name": "bettingPeriodExceeded",
+      "msg": "Betting period exceeded"
+    },
+    {
+      "code": 6013,
+      "name": "bettingPeriodEnded",
+      "msg": "Betting period ended"
+    },
+    {
+      "code": 6014,
       "name": "marketStillActive",
       "msg": "Market still active"
     },
     {
-      "code": 6013,
+      "code": 6015,
       "name": "insufficientLiquidity",
       "msg": "Insufficient liquidity"
     },
     {
-      "code": 6014,
+      "code": 6016,
       "name": "marketAlreadyResolved",
       "msg": "Market already resolved"
     },
     {
-      "code": 6015,
+      "code": 6017,
       "name": "concurrentTransaction",
       "msg": "Concurrent transaction"
     },
     {
-      "code": 6016,
+      "code": 6018,
       "name": "marketNotAllowedToPayout",
       "msg": "Market Not allowed to payout"
     },
     {
-      "code": 6017,
+      "code": 6019,
       "name": "userTradeIsSubUser",
       "msg": "User trade is sub user"
     },
     {
-      "code": 6018,
+      "code": 6020,
       "name": "prizeNotFound",
       "msg": "Prize not found"
     },
     {
-      "code": 6019,
+      "code": 6021,
       "name": "noPrizesAvailable",
       "msg": "No Prize Available"
     },
     {
-      "code": 6020,
+      "code": 6022,
       "name": "alreadyLinked",
       "msg": "Already linked"
     },
     {
-      "code": 6021,
+      "code": 6023,
       "name": "notLinked",
       "msg": "Not linked"
     },
     {
-      "code": 6022,
+      "code": 6024,
       "name": "invalidCustomer",
       "msg": "Invalid customer"
     },
     {
-      "code": 6023,
+      "code": 6025,
       "name": "invalidMint",
       "msg": "Invalid mint"
     },
     {
-      "code": 6024,
+      "code": 6026,
       "name": "invalidFeeVault",
       "msg": "Invalid fee vault"
     },
     {
-      "code": 6025,
+      "code": 6027,
       "name": "invalidShares",
       "msg": "Invalid shares"
     },
     {
-      "code": 6026,
+      "code": 6028,
       "name": "unauthorizedToOrderBook",
       "msg": "Unauthorized to order book"
     },
     {
-      "code": 6027,
+      "code": 6029,
       "name": "orderIsFullFilled",
       "msg": "Order is full filled"
     },
     {
-      "code": 6028,
+      "code": 6030,
       "name": "overflow",
       "msg": "overflow"
     },
     {
-      "code": 6029,
+      "code": 6031,
       "name": "marketAlreadyAggregated",
       "msg": "Market already aggregated"
     },
     {
-      "code": 6030,
+      "code": 6032,
       "name": "invalidMarketId",
       "msg": "Invalid market id"
     },
     {
-      "code": 6031,
+      "code": 6033,
       "name": "invalidCollection",
       "msg": "Invalid collection"
     },
     {
-      "code": 6032,
+      "code": 6034,
       "name": "invalidCollectionMint",
       "msg": "Invalid collection mint"
     },
     {
-      "code": 6033,
+      "code": 6035,
       "name": "invalidAuthority",
       "msg": "Invalid collection authority"
     },
     {
-      "code": 6034,
+      "code": 6036,
       "name": "invalidMplCoreProgram",
       "msg": "Invalid mpl core program"
     },
     {
-      "code": 6035,
+      "code": 6037,
       "name": "invalidNft",
       "msg": "Invalid NFT"
     }
@@ -1560,6 +1570,20 @@ export type ShortxContract = {
                 "u8",
                 80
               ]
+            }
+          },
+          {
+            "name": "marketType",
+            "type": {
+              "defined": {
+                "name": "marketType"
+              }
+            }
+          },
+          {
+            "name": "bettingStart",
+            "type": {
+              "option": "i64"
             }
           },
           {
@@ -1672,6 +1696,14 @@ export type ShortxContract = {
             "type": "pubkey"
           },
           {
+            "name": "marketType",
+            "type": {
+              "defined": {
+                "name": "marketType"
+              }
+            }
+          },
+          {
             "name": "oracleType",
             "type": {
               "defined": {
@@ -1735,6 +1767,10 @@ export type ShortxContract = {
             }
           },
           {
+            "name": "bettingStart",
+            "type": "i64"
+          },
+          {
             "name": "marketStart",
             "type": "i64"
           },
@@ -1768,7 +1804,7 @@ export type ShortxContract = {
             "type": {
               "array": [
                 "u8",
-                72
+                20
               ]
             }
           }
@@ -1791,6 +1827,20 @@ export type ShortxContract = {
           },
           {
             "name": "resolved"
+          }
+        ]
+      }
+    },
+    {
+      "name": "marketType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "live"
+          },
+          {
+            "name": "future"
           }
         ]
       }
@@ -1981,7 +2031,7 @@ export type ShortxContract = {
             "type": {
               "array": [
                 "u8",
-                25
+                10
               ]
             }
           }
@@ -2120,12 +2170,20 @@ export type ShortxContract = {
         "kind": "struct",
         "fields": [
           {
-            "name": "marketId",
-            "type": "u64"
+            "name": "marketEnd",
+            "type": {
+              "option": "i64"
+            }
           },
           {
-            "name": "marketEnd",
-            "type": "i64"
+            "name": "marketState",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "marketStates"
+                }
+              }
+            }
           }
         ]
       }
