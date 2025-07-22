@@ -1,5 +1,5 @@
 use crate::constants::CONFIG;
-use crate::errors::ShortxError;
+use crate::errors::DepredictError;
 use crate::state::Config;
 use anchor_lang::prelude::*;
 
@@ -54,7 +54,7 @@ pub struct UpdateConfigContext<'info> {
 pub struct CloseConfigContext<'info> {
     #[account(
         mut,
-        constraint = signer.key() == config.authority @ ShortxError::Unauthorized
+        constraint = signer.key() == config.authority @ DepredictError::Unauthorized
     )]
     pub signer: Signer<'info>,
 
@@ -92,7 +92,7 @@ impl<'info> UpdateConfigContext<'info> {
         let config = &mut self.config;
         require!(
             config.authority == *self.signer.key,
-            ShortxError::Unauthorized
+            DepredictError::Unauthorized
         );
 
         if let Some(fee_amount) = fee_amount {
@@ -115,13 +115,13 @@ impl<'info> CloseConfigContext<'info> {
         let config = &mut self.config;
         require!(
             config.num_markets == 0,
-            ShortxError::ConfigInUse
+            DepredictError::ConfigInUse
         );
         // Transfer lamports to the signer
         let lamports = self.config.to_account_info().lamports();
         **self.config.to_account_info().try_borrow_mut_lamports()? = 0;
         **self.signer.try_borrow_mut_lamports()? = self.signer.lamports().checked_add(lamports)
-            .ok_or(ShortxError::ArithmeticOverflow)?;
+            .ok_or(DepredictError::ArithmeticOverflow)?;
 
         // Close the account
         self.config.to_account_info().assign(&System::id());

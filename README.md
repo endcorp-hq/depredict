@@ -4,7 +4,7 @@
 Depredict is a decentralized prediction market protocol on Solana. Anyone can spin up their own prediction market using our open-source smart contract and TypeScript SDK.
 
 - [Documentation](./depredict-docs) — Full guides, API reference, and examples
-- [SDK on npm](https://www.npmjs.com/package/shortx-sdk)
+- [SDK on npm](https://www.npmjs.com/package/depredict-sdk)
 - [END Corp.](https://endcorp.co) — Project lead
 
 ---
@@ -13,13 +13,13 @@ Depredict is a decentralized prediction market protocol on Solana. Anyone can sp
 
 1. **Install the SDK:**
    ```bash
-   npm install shortx-sdk
+   npm install depredict-sdk
    ```
 
 2. **Create a Market (TypeScript Example):**
    ```typescript
    import { Connection, PublicKey } from '@solana/web3.js';
-   import DepredictClient from 'shortx-sdk';
+   import DepredictClient from 'depredict-sdk';
 
    const connection = new Connection('https://api.devnet.solana.com');
    const adminKey = new PublicKey('...'); // Your admin public key
@@ -50,8 +50,8 @@ We welcome contributions to the Depredict protocol and SDK!
 
 1. **Clone the repo:**
    ```bash
-   git clone https://github.com/endcorp-hq/shortx-contract-v1.git
-   cd shortx-contract-v1
+   git clone https://github.com/endcorp-hq/depredict.git
+   cd depredict
    ```
 
 2. **Install dependencies:**
@@ -81,7 +81,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
 
 ## 💬 Community & Support
 
-- [GitHub Issues](https://github.com/endcorp-hq/shortx-contract-v1/issues) — Bug reports & feature requests
+- [GitHub Issues](https://github.com/endcorp-hq/depredict/issues) — Bug reports & feature requests
 - [END Corp.](https://endcorp.co) — Project lead
 
 ---

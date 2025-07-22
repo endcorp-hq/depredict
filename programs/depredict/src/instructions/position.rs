@@ -1,6 +1,6 @@
 use crate::{
     constants::POSITION,
-    errors::ShortxError,
+    errors::DepredictError,
     state::{ MarketState, Position, PositionAccount},
 };
 use anchor_lang::prelude::*;
@@ -16,7 +16,7 @@ pub struct SubPositionContext<'info> {
 
     #[account(
         mut,
-        constraint = market.market_id == market_positions_account.market_id @ ShortxError::InvalidMarketId
+        constraint = market.market_id == market_positions_account.market_id @ DepredictError::InvalidMarketId
     )] // Market
     pub market: Box<Account<'info, MarketState>>,
 
@@ -24,8 +24,8 @@ pub struct SubPositionContext<'info> {
         mut,
         seeds = [POSITION.as_bytes(), market.market_id.to_le_bytes().as_ref()],
         bump,
-        constraint = market_positions_account.is_sub_position == false @ ShortxError::UserTradeIsSubUser,
-        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId
+        constraint = market_positions_account.is_sub_position == false @ DepredictError::UserTradeIsSubUser,
+        constraint = market_positions_account.market_id == market.market_id @ DepredictError::InvalidMarketId
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
 

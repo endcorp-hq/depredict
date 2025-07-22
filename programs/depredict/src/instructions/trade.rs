@@ -13,7 +13,7 @@ use std::str::FromStr;
 use crate::constants::{MARKET, NFT, USDC_MINT};
 use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
-    errors::ShortxError,
+    errors::DepredictError,
     state::{ MarketState, WinningDirection },
 };
 use mpl_core::{
@@ -40,13 +40,13 @@ pub struct PositionContext<'info> {
     /// CHECK: multisig fee vault account
     #[account(
         mut, 
-        constraint = fee_vault.key() == config.fee_vault @ ShortxError::InvalidFeeVault
+        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
     )]
     pub fee_vault: AccountInfo<'info>,
 
     #[account(
         mut,
-        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId
+        constraint = market_positions_account.market_id == market.market_id @ DepredictError::InvalidMarketId
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
@@ -71,7 +71,7 @@ pub struct PositionContext<'info> {
 
     #[account(
         mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
+        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
     )]
     pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
 
@@ -97,7 +97,7 @@ pub struct PositionContext<'info> {
     /// CHECK: this account is checked by the address constraint and in MPL core.
     #[account(
         mut,
-        constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection
+        constraint = collection.key() == market.nft_collection.unwrap() @ DepredictError::InvalidCollection
     )]
     pub collection: AccountInfo<'info>,
 
@@ -120,12 +120,12 @@ pub struct PayoutNftContext<'info> {
 
     #[account(
         mut,
-        constraint = market_positions_account.market_id == market.market_id @ ShortxError::InvalidMarketId)]
+        constraint = market_positions_account.market_id == market.market_id @ DepredictError::InvalidMarketId)]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
 
     #[account(
         mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
+        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
     )]
     pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
 
@@ -154,14 +154,14 @@ pub struct PayoutNftContext<'info> {
     /// CHECK: this account is checked by the address constraint
     #[account(
         mut,
-        constraint = collection.key() == market.nft_collection.unwrap() @ ShortxError::InvalidCollection
+        constraint = collection.key() == market.nft_collection.unwrap() @ DepredictError::InvalidCollection
     )]
     pub collection: AccountInfo<'info>,
 
     /// CHECK: this account is checked by the address constraint and in MPL core.
      #[account(
         address = MPL_CORE_ID,
-        constraint = mpl_core_program.key() == MPL_CORE_ID @ ShortxError::InvalidMplCoreProgram
+        constraint = mpl_core_program.key() == MPL_CORE_ID @ DepredictError::InvalidMplCoreProgram
     )]
      pub mpl_core_program: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
@@ -180,17 +180,17 @@ impl<'info> PositionContext<'info> {
     
 
         if market_type == MarketType::Future {
-            require!(ts < market.market_start && ts > market.betting_start, ShortxError::BettingPeriodExceeded);
+            require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
         } 
 
-        require!(market.market_end > ts, ShortxError::BettingPeriodEnded);
+        require!(market.market_end > ts, DepredictError::BettingPeriodEnded);
         require!(
             market.winning_direction == WinningDirection::None,
-            ShortxError::MarketAlreadyResolved
+            DepredictError::MarketAlreadyResolved
         );
     
         // this ensures multiple orders are not created at the same time
-        require!(ts > market.update_ts, ShortxError::ConcurrentTransaction);
+        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
     
         let net_amount = args.amount;
     
@@ -221,7 +221,7 @@ impl<'info> PositionContext<'info> {
                 |position|
                     position.position_status == PositionStatus::Init
             )
-            .ok_or(ShortxError::NoAvailablePositionSlot)?;
+            .ok_or(DepredictError::NoAvailablePositionSlot)?;
     
             
         msg!("Position Index {:?}", position_index);
@@ -278,10 +278,10 @@ impl<'info> PositionContext<'info> {
         );
     
         if let Err(_) = transfer_result {
-            return Err(ShortxError::InsufficientFunds.into());
+            return Err(DepredictError::InsufficientFunds.into());
         }
     
-        require!(ts > market.update_ts, ShortxError::ConcurrentTransaction);
+        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
     
         market.update_ts = ts;
     
@@ -386,9 +386,9 @@ impl<'info> PayoutNftContext<'info> {
         // Check market is resolved
         require!(
             market.winning_direction != WinningDirection::None,
-            ShortxError::MarketStillActive
+            DepredictError::MarketStillActive
         );
-        require!(market.market_state == MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
+        require!(market.market_state == MarketStates::Resolved, DepredictError::MarketNotAllowedToPayout);
 
         // check the signer of the tx owns the nft
         let asset = self.nft_mint.to_account_info();
@@ -397,14 +397,14 @@ impl<'info> PayoutNftContext<'info> {
 
         msg!("Base asset: {:?}", base_asset.owner);
 
-        require!(&base_asset.owner == &self.signer.key(), ShortxError::Unauthorized);
+        require!(&base_asset.owner == &self.signer.key(), DepredictError::Unauthorized);
 
         let (_, attribute_list, _) = fetch_plugin::<BaseAssetV1, Attributes>(&self.nft_mint.to_account_info(), mpl_core::types::PluginType::Attributes)?;
 
         msg!("Attribute list of nft: {:?}", attribute_list);
 
         // Verify market ID matches
-        require!(attribute_list.attribute_list[0].value.parse::<u64>().unwrap() == market.market_id, ShortxError::InvalidMarketId);
+        require!(attribute_list.attribute_list[0].value.parse::<u64>().unwrap() == market.market_id, DepredictError::InvalidMarketId);
 
         // Find position with this position ID
         let position_index = market_positions_account.positions
@@ -414,10 +414,10 @@ impl<'info> PayoutNftContext<'info> {
                 pos.position_status == PositionStatus::Open &&
                 pos.amount == attribute_list.attribute_list[3].value.parse::<u64>().unwrap()
             })
-            .ok_or(ShortxError::PositionNotFound)?;
+            .ok_or(DepredictError::PositionNotFound)?;
 
         // position mint_nft field must match nft_mint address
-        require!(market_positions_account.positions[position_index].mint.unwrap() == self.nft_mint.key(), ShortxError::InvalidNft);
+        require!(market_positions_account.positions[position_index].mint.unwrap() == self.nft_mint.key(), DepredictError::InvalidNft);
 
         let position = market_positions_account.positions[position_index];
         msg!("Found position at index {}", position_index);
@@ -449,20 +449,20 @@ impl<'info> PayoutNftContext<'info> {
             // Compute percentage share of the winning pool
             let winning_percentage = position_amount
                 .checked_div(winning_liquidity)
-                .ok_or(ShortxError::ArithmeticOverflow)?;
+                .ok_or(DepredictError::ArithmeticOverflow)?;
 
             // Compute share from otherside pool
             let share_of_otherside = otherside_liquidity
                 .checked_mul(winning_percentage)
-                .ok_or(ShortxError::ArithmeticOverflow)?;
+                .ok_or(DepredictError::ArithmeticOverflow)?;
 
             // Total payout = stake + winnings
             let total_payout = share_of_otherside
                 .checked_add(position_amount)
-                .ok_or(ShortxError::ArithmeticOverflow)?;
+                .ok_or(DepredictError::ArithmeticOverflow)?;
 
             // Convert back to u64 (this floors the value)
-            payout = total_payout.try_into().map_err(|_| ShortxError::ArithmeticOverflow)?;
+            payout = total_payout.try_into().map_err(|_| DepredictError::ArithmeticOverflow)?;
         }
 
         if payout > 0 && is_winner {
@@ -525,7 +525,7 @@ impl<'info> PayoutNftContext<'info> {
         market_positions_account.positions[position_index].ts = ts;
         market_positions_account.emit_position_event(market_positions_account.positions[position_index])?;
 
-        require!(ts > market.update_ts, ShortxError::ConcurrentTransaction);
+        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
         market.update_ts = ts;
         market.emit_market_event()?;
 

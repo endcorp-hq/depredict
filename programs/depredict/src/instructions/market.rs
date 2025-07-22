@@ -39,7 +39,7 @@ use crate::{constants::{
         CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, MarketType, OracleType, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
     }
 };
-use crate::errors::ShortxError;
+use crate::errors::DepredictError;
 
 #[derive(Accounts)]
 #[instruction(args: CreateMarketArgs)]
@@ -50,7 +50,7 @@ pub struct MarketContext<'info> {
     /// CHECK: fee vault account
     #[account(
         mut, 
-        constraint = fee_vault.key() == config.fee_vault @ ShortxError::InvalidFeeVault
+        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
     )]
     pub fee_vault: AccountInfo<'info>,
 
@@ -92,7 +92,7 @@ pub struct MarketContext<'info> {
 
     #[account(
         mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
+        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
     )]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
 
@@ -108,7 +108,7 @@ pub struct MarketContext<'info> {
      /// CHECK: this account is checked by the address constraint and in MPL core.
      #[account(
         address = MPL_CORE_ID,
-        constraint = mpl_core_program.key() == MPL_CORE_ID @ ShortxError::InvalidMplCoreProgram
+        constraint = mpl_core_program.key() == MPL_CORE_ID @ DepredictError::InvalidMplCoreProgram
     )]
      pub mpl_core_program: AccountInfo<'info>,
 
@@ -125,7 +125,7 @@ pub struct UpdateMarketContext<'info> {
 
     #[account(
         mut,
-        constraint = market.authority == signer.key() @ ShortxError::Unauthorized
+        constraint = market.authority == signer.key() @ DepredictError::Unauthorized
     )] // Market must exist already, signer must be the market authority
     pub market: Box<Account<'info, MarketState>>,
     pub system_program: Program<'info, System>,
@@ -139,7 +139,7 @@ pub struct ResolveMarketContext<'info> {
 
     #[account(
         mut,
-        constraint = market.authority == signer.key() @ ShortxError::Unauthorized
+        constraint = market.authority == signer.key() @ DepredictError::Unauthorized
     )]
     pub market: Box<Account<'info, MarketState>>,
 
@@ -160,7 +160,7 @@ pub struct CloseMarketContext<'info> {
     /// CHECK: fee vault account where rent/tokens are sent
     #[account(
         mut, 
-        constraint = fee_vault.key() == config.fee_vault @ ShortxError::InvalidFeeVault
+        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
     )]
     pub fee_vault: AccountInfo<'info>,
 
@@ -180,14 +180,14 @@ pub struct CloseMarketContext<'info> {
         mut,
         seeds = [MARKET.as_bytes(), &args.market_id.to_le_bytes()],
         bump,
-        constraint = market.market_state == MarketStates::Resolved @ ShortxError::MarketStillActive
+        constraint = market.market_state == MarketStates::Resolved @ DepredictError::MarketStillActive
     )]
     pub market: Box<Account<'info, MarketState>>,
 
     // Mint needed for ATA derivation and transfer checks
     #[account(
         mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ ShortxError::InvalidMint
+        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
     )]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
 
@@ -231,13 +231,13 @@ impl<'info> MarketContext<'info> {
             }
             OracleType::Switchboard => {
                 msg!("Checking if oracle is valid");
-                require!(is_valid_oracle(&self.oracle_pubkey)?, ShortxError::InvalidOracle);
+                require!(is_valid_oracle(&self.oracle_pubkey)?, DepredictError::InvalidOracle);
                 oracle_pubkey = Some(self.oracle_pubkey.key());
             }
         }
 
         msg!("Checking USDC mint is valid");
-        require!(self.usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap(), ShortxError::InvalidMint);
+        require!(self.usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap(), DepredictError::InvalidMint);
 
 
         let market_id = config.next_market_id();
@@ -246,7 +246,7 @@ impl<'info> MarketContext<'info> {
         let betting_start = match market_type {
             MarketType::Live => args.market_start,
             MarketType::Future => {
-                require!(args.betting_start.is_some(), ShortxError::InvalidBettingStart);
+                require!(args.betting_start.is_some(), DepredictError::InvalidBettingStart);
                 args.betting_start.unwrap()
             },
         };
@@ -274,7 +274,7 @@ impl<'info> MarketContext<'info> {
             fee_vault: config.fee_vault,
             fee_amount: config.fee_amount,
             version: config.version,
-            num_markets: config.num_markets.checked_add(1).ok_or(ShortxError::ArithmeticOverflow)?,
+            num_markets: config.num_markets.checked_add(1).ok_or(DepredictError::ArithmeticOverflow)?,
         });
     
         let mut positions = [Position::default(); 10];
@@ -356,7 +356,7 @@ impl<'info> UpdateMarketContext<'info> {
         let ts = Clock::get()?.unix_timestamp;
 
         // only the market creator can update the market
-         require!(market.authority == *signer.key, ShortxError::Unauthorized);
+         require!(market.authority == *signer.key, DepredictError::Unauthorized);
 
         // Update only the fields that were passed in args
         if args.market_end.is_some() {
@@ -364,7 +364,7 @@ impl<'info> UpdateMarketContext<'info> {
         }
         if args.market_state.is_some() {
             //cannot update to resolved as resolution is done by the oracle
-            require!(args.market_state.unwrap() != MarketStates::Resolved, ShortxError::MarketNotAllowedToPayout);
+            require!(args.market_state.unwrap() != MarketStates::Resolved, DepredictError::MarketNotAllowedToPayout);
             market.market_state = args.market_state.unwrap();
         }
         market.update_ts = ts;
@@ -380,11 +380,11 @@ impl<'info> ResolveMarketContext<'info> {
 
         let ts = Clock::get()?.unix_timestamp;
 
-        require!(market.authority == *signer.key, ShortxError::Unauthorized);
-        require!(market.market_state != MarketStates::Resolved, ShortxError::MarketAlreadyResolved);
+        require!(market.authority == *signer.key, DepredictError::Unauthorized);
+        require!(market.market_state != MarketStates::Resolved, DepredictError::MarketAlreadyResolved);
 
         if oracle_type == OracleType::Switchboard {
-            require!(self.oracle_pubkey.key() == market.oracle_pubkey.unwrap(), ShortxError::InvalidOracle);
+            require!(self.oracle_pubkey.key() == market.oracle_pubkey.unwrap(), DepredictError::InvalidOracle);
         }
 
         // Get oracle price data
@@ -404,10 +404,10 @@ impl<'info> ResolveMarketContext<'info> {
             WinningDirection::Yes
         } else {
             msg!("Oracle not resolved");
-            return Err(ShortxError::OracleNotResolved.into());
+            return Err(DepredictError::OracleNotResolved.into());
         };
 
-        require!(winning_direction != WinningDirection::None, ShortxError::OracleNotResolved);
+        require!(winning_direction != WinningDirection::None, DepredictError::OracleNotResolved);
         msg!("Winning direction: {:?}", winning_direction);
         // Update market state
 
@@ -429,13 +429,13 @@ impl<'info> CloseMarketContext<'info> {
         let signer = &self.signer;
         let config = &mut self.config;
 
-        require!(market.authority == *signer.key, ShortxError::Unauthorized);
+        require!(market.authority == *signer.key, DepredictError::Unauthorized);
 
         let market_state = market.market_state;
-        require!(market_state == MarketStates::Resolved, ShortxError::MarketStillActive);
+        require!(market_state == MarketStates::Resolved, DepredictError::MarketStillActive);
 
         let market_id = self.market.market_id;
-        require!(market_id == args.market_id, ShortxError::InvalidMarketId);
+        require!(market_id == args.market_id, DepredictError::InvalidMarketId);
 
         let market_bump = self.market.bump;
         let market_signer: &[&[&[u8]]] = &[&[
@@ -446,7 +446,7 @@ impl<'info> CloseMarketContext<'info> {
 
 
         msg!("Before decrement - num_markets: {}", config.num_markets);
-        config.num_markets = config.num_markets.checked_sub(1).ok_or(ShortxError::ArithmeticOverflow)?;
+        config.num_markets = config.num_markets.checked_sub(1).ok_or(DepredictError::ArithmeticOverflow)?;
         msg!("After decrement - num_markets: {}", config.num_markets);
 
         // 1. Transfer remaining token liquidity (if any) from market vault to fee vault ATA
