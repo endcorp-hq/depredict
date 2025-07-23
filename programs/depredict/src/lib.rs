@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("DPxxBPxcgMwYuDDC8dbYZdqnGehErmwKQYC4ifVz5tpM");
+declare_id!("2sWp7jTLs6VnD3BWWoeXyh9tbcic1c2QiswznWLV9a2V");
 
 #[program]
 pub mod depredict {
@@ -22,8 +22,18 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn update_config(ctx: Context<UpdateConfigContext>, fee_amount: Option<u64>, authority: Option<Pubkey>, fee_vault: Option<Pubkey>) -> Result<()> {
-        ctx.accounts.update_config(fee_amount, authority, fee_vault)?;
+    pub fn update_fee_amount(ctx: Context<UpdateConfigContext>, fee_amount: u64) -> Result<()> {
+        ctx.accounts.update_fee_amount(fee_amount)?;
+        Ok(())
+    }
+
+    pub fn update_authority(ctx: Context<UpdateConfigContext>, authority: Pubkey) -> Result<()> {
+        ctx.accounts.update_authority(authority)?;
+        Ok(())
+    }
+
+    pub fn update_fee_vault(ctx: Context<UpdateConfigContext>, fee_vault: Pubkey) -> Result<()> {
+        ctx.accounts.update_fee_vault(fee_vault)?;
         Ok(())
     }
 

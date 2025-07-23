@@ -9,6 +9,15 @@ DepredictError {
     #[msg("Config account in use, cannot close it")]
     ConfigInUse,
 
+    #[msg("Same fee amount")]
+    SameFeeAmount,
+
+    #[msg("Invalid fee amount")]
+    InvalidFeeAmount,
+
+    #[msg("Same fee vault")]
+    SameFeeVault,
+
     #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
 

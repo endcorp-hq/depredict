@@ -20,6 +20,7 @@ describe("depredict", () => {
 
   describe("Config", () => {
     let newAuthority: Keypair;
+    let newFeeVault: Keypair;
 
     it("Initializes config", async () => {
       const feeAmount = new anchor.BN(100);
@@ -53,12 +54,12 @@ describe("depredict", () => {
       assert.ok(configAccount.feeAmount.eq(feeAmount));
     });
 
-    it("Updates config", async () => {
+    it("Updates fee amount", async () => {
       const newFeeAmount = new anchor.BN(200);
 
       try {
         const tx = await program.methods
-          .updateConfig(newFeeAmount, null, null)
+          .updateFeeAmount(newFeeAmount)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
@@ -70,9 +71,9 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Update config tx:", tx);
+        console.log("Update fee amount tx:", tx);
       } catch (error) {
-        console.error("Update config error:", error);
+        console.error("Update fee amount error:", error);
         if (error.logs) {
           console.error("Program logs:", error.logs);
         }
@@ -83,13 +84,13 @@ describe("depredict", () => {
       assert.ok(configAccount.feeAmount.eq(newFeeAmount));
     });
 
-    it("Fails to update config with wrong authority", async () => {
-      const newFeeAmount = new anchor.BN(200);
+    it("Fails to update fee amount with wrong authority", async () => {
+      const newFeeAmount = new anchor.BN(300);
       const wrongAdmin = Keypair.generate();
 
       try {
         await program.methods
-          .updateConfig(newFeeAmount, null, null)
+          .updateFeeAmount(newFeeAmount)
           .accountsPartial({
             signer: wrongAdmin.publicKey,
             feeVault: FEE_VAULT.publicKey,
@@ -110,16 +111,15 @@ describe("depredict", () => {
       }
     });
 
-    it("Fails to update config with wrong fee vault", async () => {
-      const newFeeAmount = new anchor.BN(300);
-      const wrongFeeVault = Keypair.generate();
+    it("Fails to update fee amount with same value", async () => {
+      const currentFeeAmount = new anchor.BN(200); // Same as current
 
       try {
         await program.methods
-          .updateConfig(newFeeAmount, null, wrongFeeVault.publicKey)
+          .updateFeeAmount(currentFeeAmount)
           .accountsPartial({
             signer: ADMIN.publicKey,
-            feeVault: wrongFeeVault.publicKey,
+            feeVault: FEE_VAULT.publicKey,
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
@@ -129,21 +129,20 @@ describe("depredict", () => {
             commitment: "confirmed",
           });
         
-        assert.fail("Transaction should have failed due to invalid fee vault");
+        assert.fail("Transaction should have failed due to same fee amount");
       } catch (error) {
         console.log("Error message:", error.message);
         assert.include(error.message, "AnchorError");
-        assert.include(error.message, "ConstraintRaw");
-        assert.include(error.message, "fee_vault");
+        assert.include(error.message, "SameFeeAmount");
       }
     });
 
-    it("Successfully updates config with correct fee vault", async () => {
-      const newFeeAmount = new anchor.BN(400);
+    it("Fails to update fee amount with invalid amount (too high)", async () => {
+      const invalidFeeAmount = new anchor.BN(1_000_000_001); // Over 1 billion limit
 
       try {
-        const tx = await program.methods
-          .updateConfig(newFeeAmount, null, FEE_VAULT.publicKey)
+        await program.methods
+          .updateFeeAmount(invalidFeeAmount)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
@@ -155,25 +154,21 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Update config with correct fee vault tx:", tx);
+        
+        assert.fail("Transaction should have failed due to invalid fee amount");
       } catch (error) {
-        console.error("Update config error:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
-        }
-        throw error;
+        console.log("Error message:", error.message);
+        assert.include(error.message, "AnchorError");
+        assert.include(error.message, "InvalidFeeAmount");
       }
-
-      const configAccount = await program.account.config.fetch(configPda);
-      assert.ok(configAccount.feeAmount.eq(newFeeAmount));
     });
 
-    it("Updates config authority", async () => {
+    it("Updates authority", async () => {
       newAuthority = Keypair.generate();
 
       try {
         const tx = await program.methods
-          .updateConfig(null, newAuthority.publicKey, null)
+          .updateAuthority(newAuthority.publicKey)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
@@ -185,9 +180,9 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Update config authority tx:", tx);
+        console.log("Update authority tx:", tx);
       } catch (error) {
-        console.error("Update config authority error:", error);
+        console.error("Update authority error:", error);
         if (error.logs) {
           console.error("Program logs:", error.logs);
         }
@@ -198,15 +193,42 @@ describe("depredict", () => {
       assert.ok(configAccount.authority.equals(newAuthority.publicKey));
     });
 
-    it("Cleanup: Resets config to initial state", async () => {
-      const initialFeeAmount = new anchor.BN(100);
+    it("Fails to update authority with wrong authority", async () => {
+      const anotherAuthority = Keypair.generate();
+      const wrongAdmin = Keypair.generate();
+
+      try {
+        await program.methods
+          .updateAuthority(anotherAuthority.publicKey)
+          .accountsPartial({
+            signer: wrongAdmin.publicKey,
+            feeVault: FEE_VAULT.publicKey,
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([wrongAdmin])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        
+        assert.fail("Transaction should have failed due to unauthorized access");
+      } catch (error) {
+        console.log("Error message:", error.message);
+        assert.include(error.message, "AnchorError");
+        assert.include(error.message, "ConstraintRaw");
+      }
+    });
+
+    it("Updates fee vault", async () => {
+      newFeeVault = Keypair.generate();
 
       try {
         const tx = await program.methods
-          .updateConfig(initialFeeAmount, ADMIN.publicKey, FEE_VAULT.publicKey)
+          .updateFeeVault(newFeeVault.publicKey)
           .accountsPartial({
             signer: newAuthority.publicKey,
-            feeVault: FEE_VAULT.publicKey,
+            feeVault: FEE_VAULT.publicKey, // Use current fee vault, not the new one
             config: configPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
@@ -215,11 +237,160 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Reset config tx:", tx);
+        console.log("Update fee vault tx:", tx);
+      } catch (error) {
+        console.error("Update fee vault error:", error);
+        if (error.logs) {
+          console.error("Program logs:", error.logs);
+        }
+        throw error;
+      }
+
+      const configAccount = await program.account.config.fetch(configPda);
+      assert.ok(configAccount.feeVault.equals(newFeeVault.publicKey));
+    });
+
+    it("Fails to update fee vault with same value", async () => {
+      const currentFeeVault = newFeeVault.publicKey; // Same as current (set in previous test)
+
+      try {
+        await program.methods
+          .updateFeeVault(currentFeeVault)
+          .accountsPartial({
+            signer: newAuthority.publicKey,
+            feeVault: newFeeVault.publicKey, // Use current fee vault account
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([newAuthority])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        
+        assert.fail("Transaction should have failed due to same fee vault");
+      } catch (error) {
+        console.log("Error message:", error.message);
+        assert.include(error.message, "AnchorError");
+        assert.include(error.message, "SameFeeVault");
+      }
+    });
+
+    it("Fails to update fee vault with wrong authority", async () => {
+      const anotherFeeVault = Keypair.generate();
+      const wrongAdmin = Keypair.generate();
+
+      try {
+        await program.methods
+          .updateFeeVault(anotherFeeVault.publicKey)
+          .accountsPartial({
+            signer: wrongAdmin.publicKey,
+            feeVault: newFeeVault.publicKey, // Use current fee vault account
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([wrongAdmin])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        
+        assert.fail("Transaction should have failed due to unauthorized access");
+      } catch (error) {
+        console.log("Error message:", error.message);
+        assert.include(error.message, "AnchorError");
+        assert.include(error.message, "ConstraintRaw");
+      }
+    });
+
+    it("Fails to update fee vault with wrong fee vault account", async () => {
+      const newFeeVaultKey = Keypair.generate();
+      const wrongFeeVault = Keypair.generate();
+
+      try {
+        await program.methods
+          .updateFeeVault(newFeeVaultKey.publicKey)
+          .accountsPartial({
+            signer: newAuthority.publicKey,
+            feeVault: wrongFeeVault.publicKey, // Wrong fee vault account
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([newAuthority])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        
+        assert.fail("Transaction should have failed due to invalid fee vault account");
+      } catch (error) {
+        console.log("Error message:", error.message);
+        assert.include(error.message, "AnchorError");
+        assert.include(error.message, "ConstraintRaw");
+        assert.include(error.message, "fee_vault");
+      }
+    });
+
+    it("Cleanup: Resets config to initial state", async () => {
+      const initialFeeAmount = new anchor.BN(100);
+
+      try {
+        // Reset authority back to ADMIN
+        const authorityTx = await program.methods
+          .updateAuthority(ADMIN.publicKey)
+          .accountsPartial({
+            signer: newAuthority.publicKey,
+            feeVault: newFeeVault.publicKey, // Use current fee vault
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([newAuthority])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        console.log("Reset authority tx:", authorityTx);
+
+        // Reset fee vault back to FEE_VAULT
+        const feeVaultTx = await program.methods
+          .updateFeeVault(FEE_VAULT.publicKey)
+          .accountsPartial({
+            signer: ADMIN.publicKey,
+            feeVault: newFeeVault.publicKey, // Use current fee vault
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        console.log("Reset fee vault tx:", feeVaultTx);
+
+        // Reset fee amount back to initial
+        const feeAmountTx = await program.methods
+          .updateFeeAmount(initialFeeAmount)
+          .accountsPartial({
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey, // Now using FEE_VAULT again
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        console.log("Reset fee amount tx:", feeAmountTx);
       } catch (error) {
         console.error("Reset config error:", error);
         if (error.logs) {
           console.error("Program logs:", error.logs);
+        }
+        // Handle network errors gracefully
+        if (error.message.includes("Blockhash not found")) {
+          console.log("Network error during cleanup - skipping final assertions");
+          return;
         }
         throw error;
       }

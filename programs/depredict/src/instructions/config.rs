@@ -83,11 +83,9 @@ impl<'info> InitConfigContext<'info> {
 }
 
 impl<'info> UpdateConfigContext<'info> {
-    pub fn update_config(
+    pub fn update_fee_amount(
         &mut self,
-        fee_amount: Option<u64>, 
-        authority: Option<Pubkey>,
-        fee_vault: Option<Pubkey>,
+        fee_amount: u64,
     ) -> Result<()> {
         let config = &mut self.config;
         require!(
@@ -95,18 +93,62 @@ impl<'info> UpdateConfigContext<'info> {
             DepredictError::Unauthorized
         );
 
-        if let Some(fee_amount) = fee_amount {
-            config.fee_amount = fee_amount;
-        }
-        if let Some(authority) = authority {
-            config.authority = authority;
-        }
-        if let Some(fee_vault) = fee_vault {
-            config.fee_vault = fee_vault;
-        }
+        const MAX_FEE_AMOUNT: u64 = 1_000_000_000; // 1 billion
+        require!(
+            fee_amount <= MAX_FEE_AMOUNT,
+            DepredictError::InvalidFeeAmount
+        );
+
+        require!(
+            config.fee_amount != fee_amount,
+            DepredictError::SameFeeAmount
+        );
+
+        config.fee_amount = fee_amount;
         config.version = config.version.checked_add(1).unwrap();
+        msg!("Fee amount updated to {}", fee_amount);
         Ok(())
     }
+
+    pub fn update_authority(
+        &mut self,
+        authority: Pubkey,
+    ) -> Result<()> {
+        let config = &mut self.config;
+        
+        require!(
+            config.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+
+        config.authority = authority;
+        config.version = config.version.checked_add(1).unwrap();
+        msg!("Authority updated to {}", authority);
+        Ok(())
+    }
+
+    pub fn update_fee_vault(
+        &mut self,
+        fee_vault: Pubkey,
+    ) -> Result<()> {
+        let config = &mut self.config;
+        require!(
+            config.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+
+        require!(
+            fee_vault != config.fee_vault,
+            DepredictError::SameFeeVault
+        );
+
+        config.fee_vault = fee_vault;
+        config.version = config.version.checked_add(1).unwrap();
+
+        msg!("Fee vault updated to {}", fee_vault);
+        Ok(())
+    }
+
 }
 
 impl<'info> CloseConfigContext<'info> {
