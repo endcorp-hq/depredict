@@ -694,6 +694,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "mpl-core",
+ "solana-security-txt",
  "switchboard-on-demand",
 ]
 

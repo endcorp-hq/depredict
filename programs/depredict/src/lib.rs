@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda");
+declare_id!("DPxxBPxcgMwYuDDC8dbYZdqnGehErmwKQYC4ifVz5tpM");
 
 #[program]
 pub mod depredict {
@@ -72,3 +72,18 @@ pub mod depredict {
     }
 }
 
+#[cfg(not(feature = "no-entrypoint"))]
+use solana_security_txt::security_txt;
+
+#[cfg(not(feature = "no-entrypoint"))]
+security_txt! {
+    name: "dePredict",
+    project_url: "https://github.com/endcorp-hq/depredict",
+    contacts: "email:security@endcorp.co",
+    policy: "https://github.com/endcorp-hq/depredict",
+
+    // Optional Fields
+    preferred_languages: "en",
+    source_code: "https://github.com/endcorp-hq/depredict",
+    source_revision: "5vJwnLeyjV8uNJSp1zn7VLW8GwiQbcsQbGaVSwRmkE4r"
+}
