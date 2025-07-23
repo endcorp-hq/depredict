@@ -3,16 +3,17 @@ channel = "1.86.0"
 package_manager = "yarn"
 anchor_version = "0.31.1"
 solana_version = "2.2.20"
+solana_cli_version = "2.2.20"
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.localnet]
-depredict = "5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda"
+depredict = "DPxxBPxcgMwYuDDC8dbYZdqnGehErmwKQYC4ifVz5tpM"
 
 [programs.devnet]
-depredict = "5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda"
+depredict = "DPxxBPxcgMwYuDDC8dbYZdqnGehErmwKQYC4ifVz5tpM"
 
 [registry]
 url = "https://api.apr.dev"
