@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("2sWp7jTLs6VnD3BWWoeXyh9tbcic1c2QiswznWLV9a2V");
+declare_id!("xx2sutwqmrcJmw6WUoFDnGbPzKJxcuq3ey49vpppn3w");
 
 #[program]
 pub mod depredict {
