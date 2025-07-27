@@ -8,7 +8,7 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
 } from "@solana/spl-token";
-import { ADMIN, FEE_VAULT, getUsdcMint, MARKET_ID } from "../helpers";
+import { ADMIN, FEE_VAULT, getUsdcMint, getCurrentMarketId } from "../helpers";
 
 describe("depredict", () => {
   const provider = anchor.AnchorProvider.env();
@@ -57,7 +57,7 @@ describe("depredict", () => {
 
   describe("Market", () => {
     it("Closes market", async () => {
-      const marketId = MARKET_ID; //replace with marketId you created
+      const marketId = await getCurrentMarketId(); // Get the current market ID
 
       const [marketPda] = PublicKey.findProgramAddressSync(
         [
