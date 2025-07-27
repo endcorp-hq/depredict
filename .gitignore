@@ -13,3 +13,6 @@ admin.json
 
 sdk/dist/
 sdk/dist/**/*
+
+*.so
+validator-ledger/

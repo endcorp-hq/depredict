@@ -8,29 +8,38 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-depredict = "2sWp7jTLs6VnD3BWWoeXyh9tbcic1c2QiswznWLV9a2V"
+depredict = "xx2sutwqmrcJmw6WUoFDnGbPzKJxcuq3ey49vpppn3w"
 
 [programs.localnet]
-depredict = "DPxxBPxcgMwYuDDC8dbYZdqnGehErmwKQYC4ifVz5tpM"
+depredict = "xxPh89tXRKwKox7CijrQHHSAmz3TKP7DgF5x8uEazfu"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
+test-all = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tests.ts"
+test-check-config = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/check-config.ts"
 test-close-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/close-market.ts"
 test-config = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/config.ts"
 test-create-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/create-market.ts"
 test-create-order = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/create-order.ts"
 test-create-sub-trade = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-subuser-trade.ts"
+test-create-usdc-mint = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/create-usdc-mint.ts"
 test-create-user = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user.ts"
+test-market-id-flow = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/test-market-id-flow.ts"
 test-mint-pos = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/mint-existing-position.ts"
 test-order-flow = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/order-flow.ts"
 test-payout-nft = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/payout-nft.ts"
 test-payout-order = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/payout-order.ts"
 test-resolve-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/resolve-market.ts"
+test-runner = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tests.ts"
+test-runner-continue = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tests.ts -- --continue-on-failure"
+test-runner-continue-verbose = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tests.ts -- --continue-on-failure --verbose"
+test-runner-verbose = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tests.ts -- --verbose"
+test-setup-markets = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/setup-markets.ts"
 test-update-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/update-market.ts"
 test-user-trade = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user-trade.ts"
