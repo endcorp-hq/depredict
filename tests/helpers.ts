@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Depredict } from "../target/types/depredict";
+import * as path from "path";
 
 // Load the local mint keypair that we'll use for testing
 const LOCAL_MINT = Keypair.fromSecretKey(
@@ -14,6 +15,8 @@ const ORACLE_KEY = new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL")
 
 const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 // Initialize provider and program
+// The provider will be set based on the Anchor.toml configuration
+// or command line arguments when the tests are run
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
 
@@ -31,19 +34,101 @@ const USER = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
 );
 
-const MARKET_ID = new anchor.BN(20);
-
 // Export provider, program, and keypairs for use in tests
-export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT, ORACLE_KEY, MARKET_ID };
+export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT, ORACLE_KEY };
+
+/**
+ * Gets the current market ID for testing
+ * This can be updated by the test runner after market creation
+ * @returns {Promise<anchor.BN>} The current market ID
+ */
+export async function getCurrentMarketId(): Promise<anchor.BN> {
+  try {
+    // Try to read from a market ID file first
+    const marketIdPath = path.join(__dirname, 'market-id.json');
+    if (fs.existsSync(marketIdPath)) {
+      const marketIdData = JSON.parse(fs.readFileSync(marketIdPath, "utf-8"));
+      
+      // Support both old and new format
+      if (marketIdData.marketId) {
+        // Old format - backward compatibility
+        return new anchor.BN(marketIdData.marketId);
+      } else if (marketIdData.currentActive) {
+        // New format
+        return new anchor.BN(marketIdData.currentActive);
+      }
+    }
+  } catch (error) {
+    console.log('Could not read market ID file, using default');
+  }
+  
+  // Default to market ID 1 if no file exists
+  return new anchor.BN(1);
+}
+
+/**
+ * Gets a specific market ID by state
+ * @param state The market state to get ('active', 'closed', 'resolved', 'manual')
+ * @returns {Promise<anchor.BN>} The market ID for the specified state
+ */
+export async function getMarketIdByState(state: string): Promise<anchor.BN> {
+  try {
+    const marketIdPath = path.join(__dirname, 'market-id.json');
+    if (fs.existsSync(marketIdPath)) {
+      const marketIdData = JSON.parse(fs.readFileSync(marketIdPath, 'utf-8'));
+      
+      // Handle new format (markets object)
+      if (marketIdData.markets && marketIdData.markets[state]) {
+        return new anchor.BN(marketIdData.markets[state].id);
+      }
+      
+      // Handle old format (single marketId)
+      if (marketIdData.marketId) {
+        console.log(`Using legacy market ID format: ${marketIdData.marketId}`);
+        return new anchor.BN(marketIdData.marketId);
+      }
+    }
+  } catch (error) {
+    console.log(`Could not read market ID for state ${state}, using default`);
+  }
+  
+  // Default to market ID 1 if no file exists or state not found
+  console.log(`No market found for state '${state}', using default market ID 1`);
+  return new anchor.BN(1);
+}
+
+/**
+ * Updates the market ID file with new market information
+ * @param markets Object containing market states and IDs
+ * @param currentActive The currently active market ID
+ */
+export async function updateMarketIds(markets: any, currentActive?: string): Promise<void> {
+  const marketIdPath = path.join(__dirname, 'market-id.json');
+  const timestamp = new Date().toISOString();
+  
+  const marketData = {
+    markets,
+    currentActive: currentActive || markets.active?.id || "1",
+    timestamp
+  };
+  
+  fs.writeFileSync(marketIdPath, JSON.stringify(marketData, null, 2));
+  console.log('Updated market IDs:', marketData);
+}
+
+// For backward compatibility, export a default MARKET_ID
+export const MARKET_ID = new anchor.BN(1);
 
 /**
  * Gets the network configuration based on Anchor.toml
  * @returns {Promise<{isDevnet: boolean}>} Network configuration
  */
 export async function getNetworkConfig(): Promise<{ isDevnet: boolean }> {
-  const isDevnet = provider.connection.rpcEndpoint.includes("devnet");
+  // Check the actual connection endpoint being used
+  const endpoint = provider.connection.rpcEndpoint;
+  const isDevnet = endpoint.includes("devnet") || endpoint.includes("api.devnet.solana.com");
   console.log(`Using ${isDevnet ? "devnet" : "localnet"} configuration`);
-  console.log(`Connection URL: ${provider.connection.rpcEndpoint}`);
+  console.log(`Connection URL: ${endpoint}`);
   return { isDevnet };
 }
 
