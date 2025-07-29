@@ -1,10 +1,15 @@
 import * as anchor from "@coral-xyz/anchor";
+import { BN } from "bn.js";
 import { PublicKey, Keypair, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as fs from "fs";
 import * as path from "path";
+import * as dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 // Configuration for mainnet deployment
-const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
+const MAINNET_RPC_URL = "https://api.devnet.solana.com";
 const PROGRAM_ID = "DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG"; // Update this with your actual mainnet program ID
 
 // Initialize connection and provider
@@ -12,56 +17,20 @@ const connection = new Connection(MAINNET_RPC_URL, "confirmed");
 
 // Load the admin keypair from environment or file
 function loadAdminKeypair(): Keypair {
-  // Try to load from environment variable first
-  const adminKeyString = process.env.ADMIN_PRIVATE_KEY;
-  if (adminKeyString) {
-    try {
-      const adminKeyArray = JSON.parse(adminKeyString);
-      return Keypair.fromSecretKey(new Uint8Array(adminKeyArray));
-    } catch (error) {
-      console.error("Failed to parse ADMIN_PRIVATE_KEY from environment:", error);
-    }
-  }
 
-  // Try to load from file
-  const adminKeyPath = process.env.ADMIN_KEY_PATH || "./admin-keypair.json";
-  try {
-    if (fs.existsSync(adminKeyPath)) {
-      const adminKeyData = JSON.parse(fs.readFileSync(adminKeyPath, "utf-8"));
-      return Keypair.fromSecretKey(new Uint8Array(adminKeyData));
-    }
-  } catch (error) {
-    console.error("Failed to load admin keypair from file:", error);
-  }
+  const ADMIN = Keypair.fromSecretKey(
+    Buffer.from(JSON.parse(fs.readFileSync(process.env.ADMIN_KEY_PATH, "utf-8")))
+  );
+  return ADMIN;
 
-  throw new Error("Admin keypair not found. Please set ADMIN_PRIVATE_KEY environment variable or provide ADMIN_KEY_PATH.");
 }
 
 // Load the fee vault keypair
 function loadFeeVaultKeypair(): Keypair {
-  // Try to load from environment variable first
-  const feeVaultKeyString = process.env.FEE_VAULT_PRIVATE_KEY;
-  if (feeVaultKeyString) {
-    try {
-      const feeVaultKeyArray = JSON.parse(feeVaultKeyString);
-      return Keypair.fromSecretKey(new Uint8Array(feeVaultKeyArray));
-    } catch (error) {
-      console.error("Failed to parse FEE_VAULT_PRIVATE_KEY from environment:", error);
-    }
-  }
-
-  // Try to load from file
-  const feeVaultKeyPath = process.env.FEE_VAULT_KEY_PATH || "./fee-vault-keypair.json";
-  try {
-    if (fs.existsSync(feeVaultKeyPath)) {
-      const feeVaultKeyData = JSON.parse(fs.readFileSync(feeVaultKeyPath, "utf-8"));
-      return Keypair.fromSecretKey(new Uint8Array(feeVaultKeyData));
-    }
-  } catch (error) {
-    console.error("Failed to load fee vault keypair from file:", error);
-  }
-
-  throw new Error("Fee vault keypair not found. Please set FEE_VAULT_PRIVATE_KEY environment variable or provide FEE_VAULT_KEY_PATH.");
+  const FEE_VAULT = Keypair.fromSecretKey(
+    Buffer.from(JSON.parse(fs.readFileSync(process.env.FEE_VAULT_KEY_PATH, "utf-8")))
+  );
+  return FEE_VAULT;
 }
 
 // Ensure account has sufficient balance
@@ -144,7 +113,7 @@ async function main() {
 
     // Initialize config
     console.log("\n🔧 Initializing config...");
-    const feeAmount = new anchor.BN(100); // Initial fee amount in lamports (0.0000001 SOL)
+    const feeAmount = new BN(0); // Initial fee amount in lamports (0 SOL)
 
     console.log("Fee amount:", feeAmount.toString(), "lamports");
 
@@ -190,10 +159,6 @@ async function main() {
       transactionSignature: tx,
       initializedAt: new Date().toISOString(),
     };
-
-    const configFilePath = path.join(__dirname, "../config-info.json");
-    fs.writeFileSync(configFilePath, JSON.stringify(configInfo, null, 2));
-    console.log(`\n💾 Config info saved to: ${configFilePath}`);
 
     console.log("\n🎉 Mainnet config initialization completed successfully!");
 

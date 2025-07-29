@@ -8,7 +8,8 @@
     "build": "anchor build",
     "deploy": "anchor deploy",
     "deploy-devnet": "anchor deploy --provider.cluster devnet",
-    "init-mainnet": "ts-node deploy/scripts/init.ts"
+    "init-mainnet": "ts-node deploy/scripts/init.ts",
+    "read-config": "ts-node deploy/scripts/read-config.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
@@ -17,7 +18,9 @@
     "@metaplex-foundation/umi-bundle-defaults": "^1.2.0",
     "@solana/spl-token": "^0.4.13",
     "@switchboard-xyz/common": "^3.4.1",
-    "@switchboard-xyz/on-demand": "^2.10.4"
+    "@switchboard-xyz/on-demand": "^2.10.4",
+    "bn": "^1.0.5",
+    "dotenv": "^17.2.1"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",

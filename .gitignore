@@ -16,3 +16,4 @@ sdk/dist/**/*
 
 *.so
 validator-ledger/
+.env

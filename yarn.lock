@@ -1034,6 +1034,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"bn@npm:^1.0.5":
+  version: 1.0.5
+  resolution: "bn@npm:1.0.5"
+  checksum: 10c0/5b2ee80b4165adf68e5c64129afbc1385fa06f9bcbb52a9ca60597c6a2b9d0d0c55bda7e2c369ed300e3fb4ee46ef7f91d088bf41ae10c9d6713dd3f67e23e1c
+  languageName: node
+  linkType: hard
+
 "borsh@npm:^0.7.0":
   version: 0.7.0
   resolution: "borsh@npm:0.7.0"
@@ -1406,6 +1413,13 @@ __metadata:
   version: 4.0.2
   resolution: "diff@npm:4.0.2"
   checksum: 10c0/81b91f9d39c4eaca068eb0c1eb0e4afbdc5bb2941d197f513dd596b820b956fef43485876226d65d497bebc15666aa2aa82c679e84f65d5f2bfbf14ee46e32c1
+  languageName: node
+  linkType: hard
+
+"dotenv@npm:^17.2.1":
+  version: 17.2.1
+  resolution: "dotenv@npm:17.2.1"
+  checksum: 10c0/918dd2f9d8b8f86b0afabad9534793d51de3718c437f9e7b6525628cf68c1d4ae768cc37a5afff38c066f58a8ecf549f4ac6cd5617485bd328e826112cc2650a
   languageName: node
   linkType: hard
 
@@ -2617,7 +2631,9 @@ __metadata:
     "@types/bn.js": "npm:^5.1.0"
     "@types/chai": "npm:^4.3.0"
     "@types/mocha": "npm:^9.0.0"
+    bn: "npm:^1.0.5"
     chai: "npm:^4.3.4"
+    dotenv: "npm:^17.2.1"
     mocha: "npm:^9.0.3"
     prettier: "npm:^2.6.2"
     ts-mocha: "npm:^10.0.0"
