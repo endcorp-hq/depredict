@@ -1,19 +1,19 @@
 import * as anchor from "@coral-xyz/anchor";
 import { BN } from "bn.js";
 import { PublicKey, Keypair, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import * as fs from "fs";
 import * as path from "path";
 import * as dotenv from "dotenv";
+import * as fs from "fs";
 
 // Load environment variables from .env file
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 // Configuration for mainnet deployment
-const MAINNET_RPC_URL = "https://api.devnet.solana.com";
-const PROGRAM_ID = "DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG"; // Update this with your actual mainnet program ID
+const RPC_URL = process.env.RPC_URL;
+const PROGRAM_ID = process.env.PROGRAM_ID;
 
 // Initialize connection and provider
-const connection = new Connection(MAINNET_RPC_URL, "confirmed");
+const connection = new Connection(RPC_URL, "confirmed");
 
 // Load the admin keypair from environment or file
 function loadAdminKeypair(): Keypair {
@@ -57,7 +57,7 @@ async function ensureAccountBalance(
 async function main() {
   console.log("🚀 Starting mainnet config initialization...");
   console.log("Program ID:", PROGRAM_ID);
-  console.log("RPC URL:", MAINNET_RPC_URL);
+  console.log("RPC URL:", RPC_URL);
 
   try {
     // Load keypairs
