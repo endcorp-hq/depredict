@@ -1,37 +1,29 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
+import { Depredict } from "../../target/types/depredict";
 import { PublicKey, Keypair } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getOrCreateAssociatedTokenAccount,
   mintTo,
-  TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { assert } from "chai";
-import * as fs from "fs";
+import { ADMIN, FEE_VAULT, getUsdcMint, getCurrentMarketId } from "../helpers";
 
-describe("shortx-contract", () => {
+describe("depredict", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-  const feeVault = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./fee-vault.json", "utf-8")))
-  );
+  const program = anchor.workspace.Depredict as Program<Depredict>;
+  const admin = ADMIN;
+  const feeVault = FEE_VAULT;
 
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
 
   let localMintPubkey: PublicKey;
 
   before(async () => {
-    localMintPubkey = localMint.publicKey;
+    const { mint: localMintKey, } = await getUsdcMint();
+    localMintPubkey = localMintKey;
     console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
 
     try {
@@ -65,7 +57,7 @@ describe("shortx-contract", () => {
 
   describe("Market", () => {
     it("Closes market", async () => {
-      const marketId = new anchor.BN(4); //replace with marketId you created
+      const marketId = await getCurrentMarketId(); // Get the current market ID
 
       const [marketPda] = PublicKey.findProgramAddressSync(
         [

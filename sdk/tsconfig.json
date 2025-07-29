@@ -4,7 +4,8 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "declaration": true,
-    "outDir": "./dist",
+    "declarationDir": "dist/types",
+    "outDir": "./dist/esm", //build for esm only, cjs is handled by tsup
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
@@ -14,7 +15,7 @@
   },
   "include": [
     "src/**/*"
-  ],
+, "tsconfig.cjs.json"  ],
   "exclude": [
     "node_modules",
     "dist"

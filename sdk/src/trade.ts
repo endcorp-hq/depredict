@@ -1,153 +1,122 @@
 import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "./types/shortx";
+import { Depredict } from "./types/depredict.js";
 import * as anchor from "@coral-xyz/anchor";
 import {
   AddressLookupTableAccount,
   PublicKey,
   TransactionInstruction,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import {
   CreateMarketArgs,
-  OpenOrderArgs,
-  UserTrade,
-  CreateCustomerArgs,
-  OrderStatus,
   MarketStates,
-} from "./types/trade";
-import { RpcOptions } from "./types/index";
+  MarketType,
+  OpenOrderArgs,
+  OracleType,
+} from "./types/trade.js";
+import { RpcOptions } from "./types/index.js";
 import BN from "bn.js";
+import { encodeString, formatMarket } from "./utils/helpers.js";
 import {
-  encodeString,
-  formatMarket,
-  formatUserTrade,
-} from "./utils/helpers";
-import {
-    getConfigPDA,
+  getCollectionPDA,
+  getConfigPDA,
   getMarketPDA,
-  getSubUserTradePDA,
-  getUserTradePDA,
-} from "./utils/pda/index";
-import sendVersionedTransaction from "./utils/sendVersionedTransaction";
-import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
-import { swap } from "./utils/swap";
+  getPositionAccountPDA,
+  getPositionNftPDA,
+  getSubPositionAccountPDA,
+} from "./utils/pda/index.js";
+import createVersionedTransaction from "./utils/sendVersionedTransaction.js";
+import { swap } from "./utils/swap.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { ADMIN_KEY, FEE_VAULT, USDC_MINT, USDC_DECIMALS } from "./utils/constants";
+import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants.js";
+import Position from "./position.js";
+import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
 export default class Trade {
+  METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
   decimals: number = USDC_DECIMALS;
-
-  constructor(private program: Program<ShortxContract>) {}
+  position: Position;
+  ADMIN_KEY: PublicKey;
+  FEE_VAULT: PublicKey;
+  USDC_MINT: PublicKey;
+  constructor(
+    private program: Program<Depredict>,
+    adminKey: PublicKey,
+    feeVault: PublicKey,
+    usdcMint: PublicKey
+  ) {
+    this.ADMIN_KEY = adminKey;
+    this.FEE_VAULT = feeVault;
+    this.USDC_MINT = usdcMint;
+    this.position = new Position(this.program);
+  }
 
   /**
    * Get All Markets
    *
    */
   async getAllMarkets() {
-    const marketV2 = await this.program.account.marketState.all();
-
-    return marketV2.map(({ account, publicKey }) =>
-      formatMarket(account, publicKey)
-    );
+    try {
+      const marketV2 = await this.program.account.marketState.all();
+      console.log("SDK:marketV2", marketV2);
+      return marketV2.map(({ account, publicKey }) =>
+        formatMarket(account, publicKey)
+      );
+    } catch (error) {
+      console.log("SDK: getAllMarkets error", error);
+      throw error;
+    }
   }
 
   /**
-   * Get My User Trades from a user authority
-   * @param user - User PublicKey
-   *
-   */
-  async getMyUserTrades(user: PublicKey) {
-    const response = await this.program.account.userTrade.all([
-      {
-        memcmp: {
-          offset: 8 + 1,
-          bytes: user.toBase58(),
-        },
-      },
-    ]);
-
-    return response.map(({ account, publicKey }) =>
-      formatUserTrade(account, publicKey)
-    );
-  }
-
-  /**
-   * Get User Orders
-   * @param user - User PublicKey
-   *
-   */
-  async getUserOrders(user: PublicKey) {
-    const myUserTrades = await this.getMyUserTrades(user);
-
-    return myUserTrades.flatMap((userTrade) => userTrade.orders);
-  }
-
-  /**
-   * Get Market By ID
+   * Get Market By Market ID
    * @param marketId - The ID of the market
    *
    */
   async getMarketById(marketId: number) {
     const marketPDA = getMarketPDA(this.program.programId, marketId);
-
     const response = await this.program.account.marketState.fetch(marketPDA);
-
     return formatMarket(response, marketPDA);
   }
 
   /**
    * Get Market By Address
-   * @param address - The address of the market
+   * @param address - The address of the market PDA
    *
    */
   async getMarketByAddress(address: PublicKey) {
     const account = await this.program.account.marketState.fetch(address);
-
     return formatMarket(account, address);
   }
 
   /**
-   * Get User Trade
-   * @param user - User PublicKey
-   * @param userNonce - The nonce of the user
-   *
-   */
-  async getUserTrade(user: PublicKey, userNonce = 0) {
-    let userTradePDA = getUserTradePDA(this.program.programId, user);
-
-    if (userNonce !== 0) {
-      const subUserTradePDA = getSubUserTradePDA(
-        this.program.programId,
-        user,
-        userNonce
-      );
-
-      userTradePDA = getUserTradePDA(this.program.programId, subUserTradePDA);
-    }
-
-    return this.program.account.userTrade.fetch(userTradePDA);
-  }
-
-  /**
    * Create Market
-   * @param args.marketId - new markert id - length + 1
    * @param args.startTime - start time
    * @param args.endTime - end time
    * @param args.question - question (max 80 characters)
-   * @param args.liquidityAtStart - liquidity at start
-   * @param args.payoutFee - payout fee (to add affiliate system)
-   *
+   * @param args.oraclePubkey - oracle pubkey (leave empty if manual resolution)
+   * @param args.metadataUri - metadata uri
+   * @param args.mintPublicKey - collection mint public key. This needs to sign the transaction.
+   * @param args.payer - payer
+   * @param args.oracleType - oracle type (manual or switchboard)
    * @param options - RPC options
    *
    */
   async createMarket(
     {
-      marketId,
+      bettingStartTime,
       startTime,
       endTime,
       question,
+      oraclePubkey,
+      metadataUri,
+      payer,
+      oracleType,
+      marketType,
     }: CreateMarketArgs,
     options?: RpcOptions
   ) {
@@ -155,109 +124,97 @@ export default class Trade {
       throw new Error("Question must be less than 80 characters");
     }
 
+    if (marketType == MarketType.FUTURE && !bettingStartTime) {
+      throw new Error("Betting start time is required for future markets");
+    }
+
+    if (
+      marketType == MarketType.FUTURE &&
+      bettingStartTime &&
+      bettingStartTime > startTime
+    ) {
+      throw new Error("Betting start time cannot be greater than start time");
+    }
+
     const ixs: TransactionInstruction[] = [];
 
-    const marketIdBN = new BN(marketId);
+    const configPDA = getConfigPDA(this.program.programId);
 
-    const [marketPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketIdBN.toArrayLike(Buffer, "le", 8)],
-        this.program.programId
-      );
+    const configAccount = await this.program.account.config.fetch(configPDA);
 
+    const marketIdBN = configAccount.nextMarketId;
 
-    ixs.push(
-      await this.program.methods
-        .createMarket({
-          marketId: new BN(marketId),
-          question: encodeString(question, 80),
-          marketStart: new BN(startTime),
-          marketEnd: new BN(endTime),
-        })
-        .accountsPartial({
-          signer: new PublicKey(ADMIN_KEY),
-          feeVault: new PublicKey(FEE_VAULT),
-          market: marketPDA,
-          usdcMint: new PublicKey(USDC_MINT),
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .instruction()
+    const marketId = marketIdBN.toNumber();
+
+    const marketPDA = getMarketPDA(this.program.programId, marketId);
+
+    const marketPositionsPDA = getPositionAccountPDA(
+      this.program.programId,
+      marketId
     );
 
-    return sendVersionedTransaction(this.program, ixs, options);
+    // Create a new keypair for the collection mint
+    const collectionMintPDA = getCollectionPDA(
+      this.program.programId,
+      marketId
+    );
+
+    const bettingStart =
+      marketType == MarketType.LIVE
+        ? new BN(startTime)
+        : bettingStartTime
+        ? new BN(bettingStartTime)
+        : null;
+
+    try {
+      ixs.push(
+        await this.program.methods
+          .createMarket({
+            question: encodeString(question, 80),
+            marketStart: new BN(startTime),
+            marketEnd: new BN(endTime),
+            metadataUri: metadataUri,
+            oracleType:
+              oracleType == OracleType.SWITCHBOARD
+                ? { switchboard: {} }
+                : { none: {} },
+            marketType:
+              marketType == MarketType.LIVE ? { live: {} } : { future: {} },
+            bettingStart,
+          })
+          .accountsPartial({
+            payer: payer,
+            feeVault: this.FEE_VAULT,
+            config: configPDA,
+            oraclePubkey:
+              oracleType == OracleType.SWITCHBOARD
+                ? oraclePubkey
+                : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
+            market: marketPDA,
+            marketPositionsAccount: marketPositionsPDA,
+            usdcMint: this.USDC_MINT,
+            collection: collectionMintPDA,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            mplCoreProgram: MPL_CORE_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .instruction()
+      );
+      const createMarketTx = await createVersionedTransaction(
+        this.program,
+        ixs,
+        payer,
+        options
+      );
+
+      let tx: VersionedTransaction = createMarketTx;
+      return { tx, marketId };
+    } catch (error) {
+      console.log("error", error);
+      throw error;
+    }
   }
-
-//   /**
-//    * Create Pool
-//    * @param poolId - The ID of the pool
-//    * @param question - The question of the pool
-//    * @param markets - The markets of the pool
-//    *
-//    * @param options - RPC options
-//    */
-//   async createPool(
-//     {
-//       poolId,
-//       question,
-//       markets,
-//       mint,
-//       customer,
-//       startTime,
-//       endTime,
-//       feeBps,
-//       payoutFee,
-//     }: CreatePoolArgs,
-//     options?: RpcOptions
-//   ) {
-//     if (question.length > 80) {
-//       throw new Error("Pool question must be less than 80 characters");
-//     }
-
-//     const ixs: TransactionInstruction[] = [];
-
-//     const poolPDA = getPoolPDA(this.program.programId, poolId);
-
-//     ixs.push(
-//       await this.program.methods
-//         .createPool({
-//           poolId: new BN(poolId),
-//           question: encodeString(question, 80),
-//         })
-//         .accounts({
-//           signer: this.program.provider.publicKey,
-//         })
-//         .instruction()
-//     );
-
-//     for (const market of markets) {
-//       if (market.question.length > 80) {
-//         throw new Error("Market question must be less than 80 characters");
-//       }
-
-//       ixs.push(
-//         await this.program.methods
-//           .createMarket({
-//             marketId: new BN(market.marketId),
-//             question: encodeString(market.question, 80),
-//             marketStart: new BN(startTime),
-//             marketEnd: new BN(endTime),
-//             feeBps,
-//             payoutFee,
-//           })
-//           .accounts({
-//             signer: this.program.provider.publicKey,
-//             mint,
-//             tokenProgram: getTokenProgram(mint),
-//             pool: poolPDA,
-//             customer,
-//           })
-//           .instruction()
-//       );
-//     }
-
-//     return sendVersionedTransaction(this.program, ixs, options);
-//   }
 
   /**
    * Open Order
@@ -266,35 +223,59 @@ export default class Trade {
    * @param args.direction - The direction of the Order
    * @param args.mint - The mint of the Order
    * @param args.token - The token to use for the Order
-   *
+   * @param args.payer - The payer of the Order
+   * @param args.metadataUri - The metadata URI of the Order NFT
    * @param options - RPC options
    *
    */
-  async openOrder(
-    { marketId, amount, direction, mint, token }: OpenOrderArgs,
+  async openPosition(
+    {
+      marketId,
+      amount,
+      direction,
+      mint,
+      token,
+      payer,
+      metadataUri,
+    }: OpenOrderArgs,
     options?: RpcOptions
   ) {
-    const payer = this.program.provider.publicKey;
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
-      );
-    }
-
     const ixs: TransactionInstruction[] = [];
     const addressLookupTableAccounts: AddressLookupTableAccount[] = [];
 
-    const { userTradePDA, ixs: userTradeIxs } = await this.getUserTradeIxs();
+    const { positionAccountPDA, ixs: positionAccountIxs } =
+      await this.position.getPositionAccountIxs(marketId, payer);
+
+    console.log(
+      "SDK: positions account in trade open",
+      positionAccountPDA.toString()
+    );
+
     const marketPDA = getMarketPDA(this.program.programId, marketId);
+
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPDA
+    );
+
+    const nextPositionId = marketAccount.nextPositionId;
+
     const configPDA = getConfigPDA(this.program.programId);
 
-    if (userTradeIxs.length > 0) {
-      ixs.push(...userTradeIxs);
+    const collectionPDA = getCollectionPDA(this.program.programId, marketId);
+
+    const positionNftPDA = getPositionNftPDA(
+      this.program.programId,
+      marketId,
+      nextPositionId
+    );
+
+    if (positionAccountIxs.length > 0) {
+      ixs.push(...positionAccountIxs);
     }
 
-    let amountInTRD = amount * 10 ** USDC_DECIMALS;
+    let amountInUSDC = amount * 10 ** USDC_DECIMALS;
 
-    if (token !== USDC_MINT) {
+    if (token !== this.USDC_MINT.toBase58()) {
       const {
         setupInstructions,
         swapIxs,
@@ -305,9 +286,10 @@ export default class Trade {
         wallet: payer.toBase58(),
         inToken: token,
         amount,
+        usdcMint: this.USDC_MINT.toBase58(),
       });
 
-      amountInTRD = usdcAmount;
+      amountInUSDC = usdcAmount;
 
       if (swapIxs.length === 0) {
         return;
@@ -318,580 +300,309 @@ export default class Trade {
       addressLookupTableAccounts.push(...swapAddressLookupTableAccounts);
     }
 
-    ixs.push(
-      await this.program.methods
-        .createOrder({
-          amount: new BN(amountInTRD),
-          direction: direction,
-        })
-        .accountsPartial({
+    try {
+      ixs.push(
+        await this.program.methods
+          .createPosition({
+            amount: new BN(amountInUSDC),
+            direction: direction,
+            metadataUri: metadataUri,
+          })
+          .accountsPartial({
             signer: payer,
-            feeVault: new PublicKey(FEE_VAULT),
-            userTrade: userTradePDA,
+            feeVault: this.FEE_VAULT,
+            marketPositionsAccount: positionAccountPDA,
             market: marketPDA,
-            mint: mint,
+            usdcMint: mint,
             config: configPDA,
+            collection: collectionPDA,
+            mplCoreProgram: MPL_CORE_PROGRAM_ID,
+            positionNftAccount: positionNftPDA,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
-        .instruction()
-    );
-
-    return sendVersionedTransaction(
-      this.program,
-      ixs,
-      options,
-      addressLookupTableAccounts
-    );
+          .instruction()
+      );
+    } catch (error) {
+      console.log("error", error);
+      throw error;
+    }
+    return { ixs, addressLookupTableAccounts };
   }
 
   /**
    * Resolve Market
    * @param args.marketId - The ID of the Market
-   * @param args.winningDirection - The Winning Direction of the Market
-   *
-   * @param options - RPC options
-   *
+   * @param args.payer - The payer of the Market resolution (this has to be the config authority)
+   * @param args.resolutionValue - The resolution value of the Market (10 for yes, 11 for no). Leave it empty if oracle market.
    */
-  async resolveMarket(
-    {
-      marketId,
-      winningDirection,
-      state,
-    }: {
-      marketId: number;
-      winningDirection:
-        | {
-            yes: {};
-          }
-        | {
-            no: {};
-          }
-        | {
-            none: {};
-          }
-        | {
-            draw: {};
-          };
-      state: MarketStates;
-    },
-    options?: RpcOptions
-  ) {
-    const marketIdBN = new BN(marketId);
-    const [marketPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketIdBN.toArrayLike(Buffer, "le", 8)],
-        this.program.programId
-      );
-
-    const ixs: TransactionInstruction[] = [];
-
-    ixs.push(
-      await this.program.methods
-        .updateMarket({
-          marketId: marketIdBN,
-          marketEnd: null,
-          winningDirection,
-          state: state,
-        })
-        .accountsPartial({
-            signer: new PublicKey(ADMIN_KEY),
-            market: marketPDA,
-            systemProgram: anchor.web3.SystemProgram.programId,
-          })
-        .instruction()
+  async resolveMarket({
+    marketId,
+    payer,
+    resolutionValue = null,
+  }: {
+    marketId: number;
+    payer: PublicKey;
+    resolutionValue?: 10 | 11 | null;
+  }) {
+    const marketPDA = getMarketPDA(this.program.programId, marketId);
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPDA
     );
+    const oracleType = marketAccount.oracleType;
+    const oraclePubkey = marketAccount.oraclePubkey;
 
-    return sendVersionedTransaction(this.program, ixs, options);
-  }
 
-  /**
-   * Collect Remaining Liquidity
-   * @param marketId - The ID of the market
-   *
-   * @param options - RPC options
-   *
-   */
-  async closeMarket(marketId: number, options?: RpcOptions) {
-    try{
-    console.log('entered close market')
-    const ixs: TransactionInstruction[] = [];
-
-    const marketIdBN = new BN(marketId);
-
-    const [marketPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketIdBN.toArrayLike(Buffer, "le", 8)],
-        this.program.programId
-      );
-
-    console.log('marketPDA', marketPDA.toBase58())
-
-    ixs.push(
-      await this.program.methods
-        .closeMarket({
-          marketId: marketIdBN,
-        })
-        .accountsPartial({
-            signer: new PublicKey(ADMIN_KEY),
-            feeVault: new PublicKey(FEE_VAULT),
-            market: marketPDA,
-            usdcMint: new PublicKey(USDC_MINT),
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .instruction()
-    );
-
-    return ixs;
-  } catch (error) {
-    console.log('error', error)
-    throw error
-  }
-  }
-
-  /**
-   * Payout Order
-   * @param args.marketId - The ID of the Market
-   * @param args.orderId - The ID of the Order to Payout
-   * @param args.userNonce - The nonce of the user
-   *
-   * @param options - RPC options
-   *
-   */
-  async payoutOrder(
-    orders: {
-      marketId: number;
-      orderId: number;
-      userNonce: number;
-      mint: PublicKey;
-    }[],
-    options?: RpcOptions
-  ) {
-    const payer = this.program.provider.publicKey;
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
-      );
+    if (!oraclePubkey && "switchboard" in oracleType) {
+      throw new Error("Market has no oracle pubkey");
     }
 
     const ixs: TransactionInstruction[] = [];
-
-    const [configPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from("config")],
-      this.program.programId
-    );
-
-    const marketIdBN = new BN(orders[0].marketId);
-
-    const [marketPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketIdBN.toArrayLike(Buffer, "le", 8)],
-        this.program.programId
-      );
-
-    if (orders.length > 10) {
-      throw new Error("Max 10 orders per transaction");
-    }
-
-    for (const order of orders) {
-      let userTradePDA = getUserTradePDA(
-        this.program.programId,
-        payer
-      );
-
-      if (order.userNonce !== 0) {
-        const subUserTradePDA = getSubUserTradePDA(
-          this.program.programId,
-          payer,
-          order.userNonce
-        );
-
-        userTradePDA = getUserTradePDA(this.program.programId, subUserTradePDA);
-      }
-
+    try {
       ixs.push(
         await this.program.methods
-          .settleOrder(new BN(order.orderId))
+          .resolveMarket({
+            oracleValue: "switchboard" in oracleType ? null : resolutionValue,
+          })
           .accountsPartial({
             signer: payer,
-            feeVault: new PublicKey(FEE_VAULT),
-            userTrade: userTradePDA,
             market: marketPDA,
-            mint: USDC_MINT,
-            config: configPDA,
-            tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
+            oraclePubkey: !("switchboard" in oracleType)
+              ? new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL")
+              : oraclePubkey || anchor.web3.SystemProgram.programId,
           })
           .instruction()
       );
-    }
 
-    return sendVersionedTransaction(this.program, ixs, options);
+      const tx = await createVersionedTransaction(this.program, ixs, payer);
+      return tx;
+    } catch (error) {
+      console.log("error", error);
+      throw error;
+    }
   }
 
   /**
-   * Allow Market to Payout
+   * Close Market and related accounts to collect remaining liquidity
    * @param marketId - The ID of the market
-   *
-   * @param options - RPC options
-   *
+   * @param payer - The payer of the Market
    */
-  async allowMarketToPayout(marketId: number, options?: RpcOptions) {
+  async closeMarket(marketId: number, payer: PublicKey) {
     const ixs: TransactionInstruction[] = [];
 
     const marketIdBN = new BN(marketId);
 
-    ixs.push(
-      await this.program.methods
-        .updateMarket({
-          marketId: marketIdBN,
-          marketEnd: null,
-          winningDirection: null,
-          state: { resolved: {} },
-        })
-        .accounts({
-          signer: this.program.provider.publicKey,
-          market: getMarketPDA(this.program.programId, marketId),
-        })
-        .instruction()
-    );
+    const marketPDA = getMarketPDA(this.program.programId, marketId);
 
-    return sendVersionedTransaction(this.program, ixs, options);
-  }
+    const configPDA = getConfigPDA(this.program.programId);
 
-  /**
-   * Create Sub User Trade
-   * @param user - User PublicKey the main user
-   *
-   * @param options - RPC options
-   *
-   */
-  async createSubUserTrade(user: PublicKey, options?: RpcOptions) {
-    const ixs: TransactionInstruction[] = [];
-
-    const userTrade = await this.getUserTrade(user);
-
-    const subUserTradePDA = getSubUserTradePDA(
+    const marketPositionsPDA = getPositionAccountPDA(
       this.program.programId,
-      user,
-      userTrade.nonce + 1
+      marketId
     );
 
-    ixs.push(
-      await this.program.methods
-        .createSubUserTrade(subUserTradePDA)
-        .accounts({
-          signer: this.program.provider.publicKey,
-        })
-        .instruction()
+    /** DO NOT UMCOMMENT OR CALL METHOD IF NOT IMPLEMENTED THOROUGHLY */
+
+    // close any sub position accounts (need to write code)
+    // const subPositionAccounts = await this.position.getPositionsAccountsForMarket(marketId);
+    // for (const subPositionAccount of subPositionAccounts) {
+    //   ixs.push(
+    //     await this.program.methods
+    //       .closeSubPositionAccount(subPositionAccount.subPositionAccount)
+    //       .accountsPartial({})
+    //       .instruction()
+    //   );
+    // }
+
+    const feeVaultUsdcAta = getAssociatedTokenAddressSync(
+      this.USDC_MINT,
+      this.FEE_VAULT,
+      true,
+      TOKEN_PROGRAM_ID
     );
 
-    return sendVersionedTransaction(this.program, ixs, options);
+    const marketVault = getAssociatedTokenAddressSync(
+      this.USDC_MINT,
+      marketPDA,
+      true,
+      TOKEN_PROGRAM_ID
+    );
+
+    try {
+      ixs.push(
+        await this.program.methods
+          .closeMarket({
+            marketId: marketIdBN,
+          })
+          .accountsPartial({
+            signer: payer,
+            feeVault: this.FEE_VAULT,
+            market: marketPDA,
+            marketPositionsAccount: marketPositionsPDA,
+            config: configPDA,
+            feeVaultUsdcAta: feeVaultUsdcAta,
+            usdcMint: this.USDC_MINT,
+            marketVault: marketVault,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .instruction()
+      );
+    } catch (error) {
+      console.log("error", error);
+      throw error;
+    }
+    return ixs;
   }
 
   /**
    * Update Market
    * @param marketId - The ID of the market
+   * @param payer - The payer of the Market
    * @param marketEnd - The end time of the market
-   *
-   * @param options - RPC options
+   * @param marketState - The state of the market to update to (cannot be resolved)
    *
    */
   async updateMarket(
     marketId: number,
-    marketEnd: number,
-    options?: RpcOptions
+    payer: PublicKey,
+    marketEnd?: number,
+    marketState?: MarketStates
   ) {
     const ixs: TransactionInstruction[] = [];
 
+    if (marketState == MarketStates.RESOLVED) {
+      throw new Error("Market state cannot be resolved");
+    }
+
+    try{
     ixs.push(
       await this.program.methods
         .updateMarket({
-          marketId: new BN(marketId),
-          marketEnd: new BN(marketEnd),
-          winningDirection: null,
-          state: null,
+          marketEnd: marketEnd ? new BN(marketEnd) : null,
+          marketState:
+            marketState == MarketStates.ACTIVE
+              ? { active: {} }
+              : marketState == MarketStates.ENDED
+              ? { ended: {} }
+              : marketState == MarketStates.RESOLVING
+              ? { resolving: {} }
+              : null,
         })
         .accounts({
-          signer: this.program.provider.publicKey,
+          signer: payer,
           market: getMarketPDA(this.program.programId, marketId),
         })
-        .instruction()
-    );
+          .instruction()
+      );
 
-    return sendVersionedTransaction(this.program, ixs, options);
+      const updateMarketTx = await createVersionedTransaction(this.program, ixs, payer);
+      return updateMarketTx;
+    } catch (error) {
+      console.log("error", error);
+      throw error;
+    }
   }
 
-  /**
-   * Create Customer
-   * @param args.id - The ID of the customer
-   * @param args.name - The name of the customer
-   * @param args.authority - The authority of the customer
-   *
-   * @param options - RPC options
-   *
-   */
-  async createCustomer(
-    { id, name, authority, feeRecipient }: CreateCustomerArgs,
+  async payoutPosition(
+    marketId: number,
+    payer: PublicKey,
+    positionId: number,
+    positionNonce: number,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
 
-    ixs.push(
-      await this.program.methods
-        .createUser({ id, authority })
-        .accounts({
-          signer: this.program.provider.publicKey,
-        })
-        .instruction()
-    );
+    const marketPda = getMarketPDA(this.program.programId, marketId);
 
-    return sendVersionedTransaction(this.program, ixs, options);
-  }
+    const collectionPda = getCollectionPDA(this.program.programId, marketId);
 
-  /**
-   * Get User Trade Nonce With Slots
-   * @param userTrades - User Trades
-   *
-   */
-  getUserTradeNonceWithSlots(userTrades: UserTrade[]) {
-    const payer = this.program.provider.publicKey;
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
-      );
-    }
-    let nonce: number | null = null;
-
-    for (const userTrade of userTrades.reverse()) {
-      if (nonce !== null) {
-        break;
-      }
-
-      let freeSlots = 0;
-
-      userTrade.orders.forEach((order) => {
-        if (nonce !== null) {
-          return;
-        }
-
-        if (
-          order.orderStatus !== OrderStatus.OPEN &&
-          order.orderStatus !== OrderStatus.WAITING &&
-          freeSlots >= 2
-        ) {
-          nonce = userTrade.isSubUser ? Number(userTrade.nonce) : 0;
-        }
-
-        if (
-          order.orderStatus !== OrderStatus.OPEN &&
-          order.orderStatus !== OrderStatus.WAITING
-        ) {
-          freeSlots += 1;
-        }
-      });
-    }
-
-    if (nonce === null) {
-      throw new Error("No open orders found");
-    }
-
-    if (nonce === 0) {
-      return getUserTradePDA(
-        this.program.programId,
-        payer
-      );
-    }
-
-    const subUserTradePDA = getSubUserTradePDA(
-      this.program.programId,
+    const userUsdcAta = getAssociatedTokenAddressSync(
+      this.USDC_MINT,
       payer,
-      nonce
+      false,
+      TOKEN_PROGRAM_ID
     );
 
-    const userTradePDA = getUserTradePDA(
+    const marketVault = getAssociatedTokenAddressSync(
+      this.USDC_MINT,
+      marketPda,
+      true, // allowOwnerOffCurve since marketPda is a PDA
+      TOKEN_PROGRAM_ID
+    );
+
+    let positionAccountPDA = getPositionAccountPDA(
       this.program.programId,
-      subUserTradePDA
+      marketId
     );
 
-    return userTradePDA;
-  }
+    if (positionNonce !== 0) {
+      // if a sub position account
+      const subPositionAccountPDA = getSubPositionAccountPDA(
+        this.program.programId,
+        marketId,
+        marketPda,
+        positionNonce
+      );
 
-  async getUserTradeIxs() {
-    const payer = this.program.provider.publicKey;
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
+      positionAccountPDA = getPositionAccountPDA(
+        this.program.programId,
+        marketId,
+        subPositionAccountPDA
       );
     }
 
-    let userTradePDA = getUserTradePDA(
-      this.program.programId,
-      payer
+    // get the position from the position account
+    const positionAccount = await this.program.account.positionAccount.fetch(
+      positionAccountPDA
     );
+    const currentPosition = positionAccount.positions.find(
+      (p) => p.positionId.toNumber() === positionId
+    );
+    if (!currentPosition) {
+      throw new Error("Position not found in position account");
+    }
 
-    const ixs: TransactionInstruction[] = [];
+    const nftMint = currentPosition.mint;
 
-    let myUserTrades: UserTrade[] = [];
-
-    myUserTrades = await this.getMyUserTrades(payer);
-
-    if (myUserTrades.length === 0) {
-      ixs.push(
-        await this.program.methods
-          .createUserTrade()
-          .accounts({
-            signer: payer,
-          })
-          .instruction()
-      );
-
-      return {
-        userTradePDA,
-        ixs,
-        nonce: 0,
-      };
+    if (!nftMint) {
+      throw new Error("Position is not an NFT");
     }
 
     try {
-      const userTradePDA = this.getUserTradeNonceWithSlots(myUserTrades);
-
-      return { userTradePDA, ixs };
-    } catch {
-      const mainUserTrade = myUserTrades.find((trade) => !trade.isSubUser);
-      if (!mainUserTrade) {
-        throw new Error("Main user trade account not found. Cannot determine next sub-user nonce.");
-      }
-
-      const subUserTradePDA = getSubUserTradePDA(
-        this.program.programId,
-        payer,
-        Number(mainUserTrade.nonce) + 1
-      );
-
       ixs.push(
         await this.program.methods
-          .createSubUserTrade(subUserTradePDA)
-          .accounts({
+          .settlePosition()
+          .accountsPartial({
             signer: payer,
+            marketPositionsAccount: positionAccountPDA,
+            nftMint: nftMint,
+            userUsdcAta: userUsdcAta,
+            marketUsdcVault: marketVault,
+            usdcMint: this.USDC_MINT,
+            market: marketPda,
+            collection: collectionPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            mplCoreProgram: MPL_CORE_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
           })
           .instruction()
       );
-
-      return {
-        userTradePDA: getUserTradePDA(this.program.programId, subUserTradePDA),
-        ixs,
-      };
+    } catch (error) {
+      console.log("error", error);
+      throw error;
     }
+
+    const tx = await createVersionedTransaction(
+      this.program,
+      ixs,
+      payer,
+      options
+    );
+
+    return tx;
   }
-
-//   /**
-//    * Get Orders By Market ID
-//    * @param marketId - The ID of the market
-//    *
-//    */
-//   async getOrderBook(marketId: number) {
-//     const marketIdBytes = bs58.encode(
-//       new BN(marketId).toArrayLike(Buffer, "le", 8)
-//     );
-
-//     const memcmpFilters = Array.from({ length: 10 }).map((_, index) => ({
-//       memcmp: {
-//         offset:
-//           8 + // discriminator
-//           1 + // bump
-//           32 + // authority
-//           8 + // total_deposits
-//           8 + // total_withdraws
-//           8 + // opened_orders
-//           index * 91 + // total size of each order
-//           24, // offset to market_id (ts + order_id + filled_shares)
-//         bytes: marketIdBytes,
-//       },
-//     }));
-
-//     const allResponses = await Promise.all(
-//       memcmpFilters.map((filter) =>
-//         this.program.account.userTrade.all([filter])
-//       )
-//     );
-
-//     const uniqueResponses = Array.from(
-//       new Map(
-//         allResponses.flat().map((item) => [item.publicKey.toString(), item])
-//       ).values()
-//     );
-
-//     const userTrades = uniqueResponses.map(({ account, publicKey }) =>
-//       formatUserTrade(account, publicKey)
-//     );
-
-//     const orders = userTrades.flatMap((userTrade) =>
-//       userTrade.orders.map((order) => ({
-//         ...order,
-//       }))
-//     );
-
-//     const filteredOrders = orders.filter(
-//       (order) =>
-//         order.marketId === marketId.toString() &&
-//         order.orderStatus === OrderStatus.WAITING
-//     );
-
-//     const orderBook: {
-//       hype: {
-//         bid: Order[];
-//         ask: Order[];
-//       };
-//       flop: {
-//         bid: Order[];
-//         ask: Order[];
-//       };
-//     } = {
-//       hype: {
-//         bid: [],
-//         ask: [],
-//       },
-//       flop: {
-//         bid: [],
-//         ask: [],
-//       },
-//     };
-
-//     filteredOrders.sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
-
-//     filteredOrders.forEach((order) => {
-//       if (
-//         order.orderSide === OrderSide.BID &&
-//         order.orderDirection === OrderDirection.YES
-//       ) {
-//         orderBook.hype.bid.push(order);
-
-//         return;
-//       }
-
-//       if (
-//         order.orderSide === OrderSide.ASK &&
-//         order.orderDirection === OrderDirection.YES
-//       ) {
-//         orderBook.hype.ask.push(order);
-
-//         return;
-//       }
-
-//       if (
-//         order.orderSide === OrderSide.BID &&
-//         order.orderDirection === OrderDirection.NO
-//       ) {
-//         orderBook.flop.bid.push(order);
-
-//         return;
-//       }
-
-//       orderBook.flop.ask.push(order);
-//     });
-
-//     return orderBook;
-//   }
 }

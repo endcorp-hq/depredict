@@ -7,7 +7,7 @@ const getPriorityFee = async () => {
     const response: AxiosResponse<
       Record<'1' | '5' | '15', { priorityTx: number }>
     > = await axios.get('https://solanacompass.com/api/fees')
-
+    console.log("SDK: fee response", response.data)
     fee = response.data[1].priorityTx
   } catch (e) {
     fee = 1000

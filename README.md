@@ -1,92 +1,92 @@
-# ShortX Market Contract
 
-A Solana-based prediction market contract that allows users to bet on outcomes of events.
+![dePredict Logo](./img/depredict_logo.png "DePredict Logo")
 
-## Prerequisites
+Depredict is a decentralized prediction market protocol on Solana. Anyone can spin up their own prediction market using our open-source smart contract and TypeScript SDK.
 
-- Node.js and Yarn
-- Solana CLI tools
-- Anchor Framework
+- [Documentation](./depredict-docs) — Full guides, API reference, and examples
+- [SDK on npm](https://www.npmjs.com/package/depredict-sdk)
+- [END Corp.](https://endcorp.co) — Project lead
 
-## Setup
+`Program ID: DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG`
 
-1. Install dependencies:
-```bash
-yarn install
-```
+---
 
-2. Build the program:
-```bash
-anchor build
-```
+## 🚀 Quick Start: Launch Your Own Market
 
-## Running Tests
+1. **Install the SDK:**
+   ```bash
+   npm install depredict-sdk
+   ```
 
-The test suite is organized into several files, each testing different aspects of the contract:
+2. **Create a Market (TypeScript Example):**
+   ```typescript
+   import { Connection, PublicKey } from '@solana/web3.js';
+   import DepredictClient from 'depredict-sdk';
 
-### Configuration Tests
-```bash
-anchor run test test-config
-```
-Tests the initialization and updating of the contract configuration.
+   const connection = new Connection('https://api.devnet.solana.com');
+   const adminKey = new PublicKey('...'); // Your admin public key
+   const feeVault = new PublicKey('...'); // Your fee vault public key
+   const usdcMint = new PublicKey('...'); // USDC mint address
 
-### Market Tests
-```bash
-# Create a new market
-anchor run test test-create-market
+   const client = new DepredictClient(connection, adminKey, feeVault, usdcMint);
 
-# Close an existing market
-anchor run test test-close-market
+   await client.trade.createMarket({
+     startTime: Date.now() / 1000,
+     endTime: (Date.now() + 86400000) / 1000, // 24 hours from now
+     question: 'Will SOL be above $200 by tomorrow?',
+     metadataUri: 'https://your-metadata-url',
+     payer: adminKey,
+     oracleType: 'manual', // or 'switchboard'
+   });
+   ```
 
-# Update market parameters
-anchor run test test-update-market
-```
+For more details, see the [Getting Started Guide](./depredict-docs/docs/pages/getting-started.mdx) and [SDK API Reference](./depredict-docs/docs/pages/sdk-api.mdx).
 
-### User Tests
-```bash
-# Create a new user
-anchor run test test-create-user
+---
 
-# Create user trade account
-anchor run test test-user-trade
+## 🛠️ Contributing
 
-# Create subuser trade account
-anchor run test test-create-sub-trade
-```
+We welcome contributions to the Depredict protocol and SDK!
 
-### Order Flow Tests
-```bash
-anchor run test test-order-flow
-```
-Tests the complete order lifecycle:
-- Creating orders (Yes/No)
-- Market resolution
-- Order payouts
+### Setup
 
-## Test Structure
+1. **Clone the repo:**
+   ```bash
+   git clone https://github.com/endcorp-hq/depredict.git
+   cd depredict
+   ```
 
-- `tests/config.ts`: Tests contract configuration
-- `tests/market/`: Market-related tests
-  - `create-market.ts`: Market creation
-  - `close-market.ts`: Market closure
-  - `update-market.ts`: Market updates
-- `tests/user/`: User-related tests
-  - `create-user.ts`: User creation
-  - `create-user-trade.ts`: User trade account creation
-  - `create-subuser-trade.ts`: Subuser trade account creation
-- `tests/trade/`: Trading tests
-  - `order-flow.ts`: Complete order lifecycle
+2. **Install dependencies:**
+   ```bash
+   yarn install
+   ```
 
-## Key Files (need to be created in the root)
+3. **Build the program:**
+   ```bash
+   anchor build
+   ```
 
-- `keypair.json`: Admin keypair
-- `fee-vault.json`: Fee vault keypair
-- `local_mint.json`: Local token mint keypair
-- `user.json`: Test user keypair
+4. **Run tests:**
+   ```bash
+   anchor test
+   ```
 
-## Notes
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
 
-- Tests run on a local Solana validator
-- Each test file is independent and can be run separately
-- Some tests require specific market IDs to be set correctly
-- The order flow test includes delays to ensure proper transaction sequencing
+---
+
+## 📚 Documentation
+
+- [Depredict Docs](./depredict-docs) — Full protocol and SDK documentation
+
+---
+
+## 💬 Community & Support
+
+- [GitHub Issues](https://github.com/endcorp-hq/depredict/issues) — Bug reports & feature requests
+- [END Corp.](https://endcorp.co) — Project lead
+
+---
+
+MIT License
+

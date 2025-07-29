@@ -1,48 +1,20 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { ShortxContract } from "../../target/types/shortx_contract";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import * as fs from "fs";
+import { getNetworkConfig, ADMIN, program, getCurrentMarketId } from "../helpers";
 
-describe("shortx-contract", () => {
+describe("depredict", () => {
 
-  const MarketStates = {
-    Active: { active: {} },
-    Ended: { ended: {} },
-    Resolving: { resolving: {} },
-    Resolved: { resolved: {} },
-  }
-
-  const WinningDirection = {
-    Yes: { yes: {} },
-    No: { no: {} },
-    Draw: { draw: {} },
-    None: { none: {} },
-  }
-
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.ShortxContract as Program<ShortxContract>;
-  const admin = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./keypair.json", "utf-8")))
-  );
-
-  const localMint = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(fs.readFileSync("./local_mint.json", "utf-8")))
-  );
-
-  let localMintPubkey: PublicKey;
 
   before(async () => {
-    localMintPubkey = localMint.publicKey;
-    console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
+    const { isDevnet } = await getNetworkConfig();
+    console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
   });
 
   describe("Market", () => {
     it("Updates market", async () => {
-      const marketId = new anchor.BN(4); //ID of market that exists
+      // Get the current market ID
+      const marketId = await getCurrentMarketId();
 
       const newMarketEnd = new anchor.BN(
         Math.floor(Date.now() / 1000) + 172800
@@ -60,17 +32,15 @@ describe("shortx-contract", () => {
 
       await program.methods
         .updateMarket({
-          marketId,
           marketEnd: newMarketEnd,
-          winningDirection: { yes: {} },
-          state: { resolved: {} },
+          marketState: null,
         })
         .accountsPartial({
-          signer: admin.publicKey,
+          signer: ADMIN.publicKey,
           market: marketPda,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
-        .signers([admin])
+        .signers([ADMIN])
         .rpc(
           {
             skipPreflight: true,

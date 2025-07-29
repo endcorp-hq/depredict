@@ -1,21 +1,34 @@
-import { AnchorProvider, Program, Wallet } from '@coral-xyz/anchor'
-import { Connection } from '@solana/web3.js'
-import { ShortxContract } from './types/shortx'
-import IDL from './types/idl_shortx.json'
-import Trade from './trade'
-import Config from './config'
+import { Program } from '@coral-xyz/anchor'
+import { Connection, PublicKey } from '@solana/web3.js'
+import { Depredict } from './types/depredict.js'
+import IDL from './types/depredict.json'  // tsup will handle this
+import Trade from './trade.js'
+import Config from './config.js'
+import Position from './position.js'
 
-export default class ShortXClient {
-  program: Program<ShortxContract>
-  provider: AnchorProvider
+// Re-export all types
+export * from './types/trade.js'
+export * from './types/position.js'
+export * from './types/index.js'
+
+export default class DepredictClient {
+  program: Program<Depredict>
   trade: Trade
   config: Config
-  constructor(connection: Connection, wallet: Wallet) {
-    this.provider = new AnchorProvider(connection, wallet, {
-      commitment: 'confirmed'
-    })
-    this.program = new Program(IDL as ShortxContract, this.provider)
-    this.trade = new Trade(this.program)
-    this.config = new Config(this.program)
+  position: Position
+  ADMIN_KEY: PublicKey
+  FEE_VAULT: PublicKey
+  USDC_MINT: PublicKey
+  
+  constructor(connection: Connection, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
+    this.program = new Program(IDL as Depredict, { connection })
+    this.trade = new Trade(this.program, adminKey, feeVault, usdcMint)
+    this.position = new Position(this.program)
+    this.config = new Config(this.program, adminKey, feeVault, usdcMint)
+    this.ADMIN_KEY = adminKey
+    this.FEE_VAULT = feeVault
+    this.USDC_MINT = usdcMint
   }
 }
+
+

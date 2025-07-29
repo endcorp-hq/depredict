@@ -1,67 +1,54 @@
 import {
-    TransactionInstruction,
-    TransactionMessage,
-    VersionedTransaction,
-    ComputeBudgetProgram,
-    PublicKey
-  } from '@solana/web3.js'
-  import { RpcOptions } from '../types/index'
-  import { AddressLookupTableAccount } from '@solana/web3.js'
-  import { Program } from '@coral-xyz/anchor'
-  import getPriorityFee from './getPriorityFee'
-  import { ShortxContract } from '../types/shortx'
-  
-  const sendVersionedTransaction = async (
-    program: Program<ShortxContract>,
-    ixs: TransactionInstruction[],
-    options?: RpcOptions,
-    addressLookupTableAccounts?: AddressLookupTableAccount[]
-  ): Promise<string> => {
-    if (!program.provider.publicKey) {
-      throw new Error(
-        'Payer public key is not available on the program provider. Ensure the wallet is connected and initialized.'
-      )
-    }
-    const payerPublicKey: PublicKey = program.provider.publicKey;
+  TransactionInstruction,
+  TransactionMessage,
+  VersionedTransaction,
+  ComputeBudgetProgram,
+  PublicKey,
+} from "@solana/web3.js";
+import { RpcOptions } from "../types/index.js";
+import { AddressLookupTableAccount } from "@solana/web3.js";
+import { Program } from "@coral-xyz/anchor";
+import getPriorityFee from "./getPriorityFee.js";
+import { Depredict } from "../types/depredict.js";
 
-    if (options?.microLamports) {
-      ixs.push(
-        ComputeBudgetProgram.setComputeUnitPrice({
-          microLamports: options.microLamports
-        })
-      )
-    }
-  
-    if (!options?.microLamports) {
-      const priorityFee = await getPriorityFee()
-  
-      ixs.push(
-        ComputeBudgetProgram.setComputeUnitPrice({
-          microLamports: priorityFee
-        })
-      )
-    }
-  
-    const { blockhash } = await program.provider.connection.getLatestBlockhash()
-  
-    const tx = new VersionedTransaction(
-      new TransactionMessage({
-        instructions: ixs,
-        recentBlockhash: blockhash,
-        payerKey: payerPublicKey
-      }).compileToV0Message(addressLookupTableAccounts)
-    )
-  
-    if (!program.provider.sendAndConfirm) {
-        throw new Error(
-            'sendAndConfirm method is not available on the program provider.'
-        );
-    }
+const createVersionedTransaction = async (
+  program: Program<Depredict>,
+  ixs: TransactionInstruction[],
+  payer: PublicKey,
+  options?: RpcOptions,
+  addressLookupTableAccounts?: AddressLookupTableAccount[]
+): Promise<VersionedTransaction> => {
+  const payerPublicKey: PublicKey = payer;
 
-    return program.provider.sendAndConfirm(tx, [], {
-      skipPreflight: options?.skipPreflight,
-      commitment: 'confirmed'
-    })
+  if (options?.microLamports) {
+    ixs.push(
+      ComputeBudgetProgram.setComputeUnitLimit({
+        units: options.microLamports,
+      })
+    );
   }
-  
-  export default sendVersionedTransaction
+
+  if (!options?.microLamports) {
+    const priorityFee = await getPriorityFee();
+
+    ixs.push(
+      ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: priorityFee,
+      })
+    );
+  }
+
+  const { blockhash } = await program.provider.connection.getLatestBlockhash();
+
+  const tx = new VersionedTransaction(
+    new TransactionMessage({
+      instructions: ixs,
+      recentBlockhash: blockhash,
+      payerKey: payerPublicKey,
+    }).compileToV0Message(addressLookupTableAccounts)
+  );
+
+  return tx;
+};
+
+export default createVersionedTransaction;

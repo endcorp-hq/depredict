@@ -1,0 +1,62 @@
+# SDK Example Usage: Build Your Own Prediction Market Frontend
+
+Depredict is designed for builders. You can use the SDK to create your own custom prediction market frontend, dApp, or integration. Here's how to get started:
+
+## 1. Initialize the SDK
+
+```typescript
+import { Connection, PublicKey } from '@solana/web3.js';
+import DepredictClient from 'depredict-sdk';
+
+const connection = new Connection('https://api.devnet.solana.com');
+const adminKey = new PublicKey('...'); // Your admin public key
+const feeVault = new PublicKey('...'); // Your fee vault public key
+const usdcMint = new PublicKey('...'); // USDC mint address
+
+const client = new DepredictClient(connection, adminKey, feeVault, usdcMint);
+```
+
+## 2. Fetch and Display Markets
+
+```typescript
+const markets = await client.trade.getAllMarkets();
+// Render these in your UI
+```
+
+## 3. Create a New Market
+
+```typescript
+await client.trade.createMarket({
+  startTime: Date.now() / 1000,
+  endTime: (Date.now() + 86400000) / 1000, // 24 hours from now
+  question: 'Will SOL be above $200 by tomorrow?',
+  metadataUri: 'https://your-metadata-url',
+  payer: adminKey,
+  oracleType: 'manual', // or 'switchboard'
+});
+```
+
+## 4. Place a Trade (Open a Position)
+
+```typescript
+await client.trade.openPosition({
+  marketId: 1, // The market you want to trade on
+  amount: 100, // Amount in USDC
+  direction: { yes: {} }, // or { no: {} }
+  mint: usdcMint,
+  token: usdcMint.toBase58(),
+  payer: /* user's public key */,
+  metadataUri: 'https://your-nft-metadata',
+});
+```
+
+## 5. Settle and Resolve Markets
+
+- Use `resolveMarket` to resolve outcomes (admin or oracle)
+- Use `payoutPosition` for users to claim winnings
+
+---
+
+You can build any UI/UX you want on top of these primitives—leaderboards, custom market creation flows, trading bots, and more. The SDK is open, composable, and ready for your ideas!
+
+For a full API reference, see the [SDK API Reference](/sdk-api). 

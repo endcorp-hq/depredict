@@ -4,46 +4,32 @@ export type Market = {
   address: string
   bump: number
   authority: string
+  oraclePubkey: string
+  nftCollectionMint: string
+  marketUsdcVault: string
   marketId: string
   yesLiquidity: string
   noLiquidity: string
   volume: string
   updateTs: string
-  nextOrderId: string
+  nextPositionId: string
   marketState: MarketStates
   marketStart: string
   marketEnd: string
+  bettingStartTime: string
   question: string
   winningDirection: WinningDirection
+  marketType: MarketType
 }
 
-export type MarketStates =
-  | { active: {} }
-  | { ended: {} }
-  | { resolving: {} }
-  | { resolved: {} }
 
-export type UserTrade = {
-  user: string
-  totalDeposits: string
-  totalWithdraws: string
-  orders: Order[]
-  nonce: string
-  isSubUser: boolean
+export enum MarketStates {
+  ACTIVE = 'active',
+  ENDED = 'ended',
+  RESOLVING = 'resolving',
+  RESOLVED = 'resolved'
 }
 
-export type Order = {
-  ts: string
-  orderId: string
-  marketId: string
-  orderStatus: OrderStatus
-  price: string
-  version: string
-  orderDirection: OrderDirection
-  userNonce: string
-  authority: string
-  createdAt: string
-}
 
 export enum WinningDirection {
   NONE = 'None',
@@ -52,19 +38,6 @@ export enum WinningDirection {
   DRAW = 'Draw'
 }
 
-export enum OrderDirection {
-  YES = 'yes',
-  NO = 'no'
-}
-
-export enum OrderStatus {
-  INIT = 'init',
-  OPEN = 'open',
-  CLOSED = 'closed',
-  CLAIMED = 'claimed',
-  LIQUIDATED = 'liquidated',
-  WAITING = 'waiting'
-}
 
 export type InitializeMarketArgs = {
   marketId: number
@@ -93,17 +66,33 @@ export type OpenOrderArgs = {
     | {
         no: {}
       }
-  mint: PublicKey
+  mint: PublicKey,
+  payer: PublicKey,
+  feeVaultAccount: PublicKey,
+  usdcMintAddress: PublicKey
+  metadataUri: string
+}
+
+export enum OracleType {
+  SWITCHBOARD = 'switchboard',
+  MANUAL = 'manual'
+}
+
+export enum MarketType {
+  LIVE = 'live',
+  FUTURE = 'future'
 }
 
 export type CreateMarketArgs = {
-  marketId: number
+  bettingStartTime?: number
   startTime: number
   endTime: number
   question: string
-  feeBps: number
-  customer: PublicKey | null
-  payoutFee: number
-  mint: PublicKey
-  poolId?: number
+  metadataUri: string
+  payer: PublicKey
+  feeVaultAccount: PublicKey
+  usdcMintAddress: PublicKey
+  oraclePubkey?: PublicKey
+  oracleType: OracleType
+  marketType: MarketType
 }

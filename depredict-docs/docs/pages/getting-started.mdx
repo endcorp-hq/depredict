@@ -1,0 +1,32 @@
+# Getting Started with Depredict SDK
+
+The Depredict SDK is a TypeScript library for interacting with the Depredict Protocol on Solana.
+
+## Installation
+
+```bash
+npm install depredict-sdk
+```
+
+## Usage Example
+
+```typescript
+import { Connection } from '@solana/web3.js';
+import { Wallet } from '@coral-xyz/anchor';
+import DepredictClient from 'depredict-sdk';
+
+// Initialize the client
+const connection = new Connection('https://api.devnet.solana.com');
+const wallet = new Wallet(/* your wallet */);
+const client = new DepredictClient(connection, wallet);
+
+// Example: Get all markets
+const markets = await client.trade.getAllMarkets();
+```
+
+## Features
+
+- Create and manage prediction markets
+- Place and manage orders
+- View market data and order books
+- Handle user trades and positions

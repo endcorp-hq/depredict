@@ -9,3 +9,11 @@ fee-vault.json
 user.json
 keypair.json
 local-mint.json
+admin.json
+
+sdk/dist/
+sdk/dist/**/*
+
+*.so
+validator-ledger/
+.env

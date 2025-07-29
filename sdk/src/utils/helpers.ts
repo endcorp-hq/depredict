@@ -1,16 +1,14 @@
 import {
   Market,
-  Order,
-  OrderDirection,
-  OrderStatus,
-  UserTrade,
   WinningDirection,
-  MarketStates
-} from '../types/trade'
+  MarketStates,
+  MarketType
+} from '../types/trade.js'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { IdlAccounts } from '@coral-xyz/anchor'
-import { ShortxContract } from '../types/shortx'
+import { Depredict } from '../types/depredict.js'
+import { PositionAccount, Position, PositionDirection, PositionStatus } from '../types/position.js'
 
 export const encodeString = (value: string, alloc = 32): number[] => {
   const buffer = Buffer.alloc(alloc, 32)
@@ -26,7 +24,7 @@ export const decodeString = (bytes: number[]): string => {
 }
 
 export const formatMarket = (
-  account: IdlAccounts<ShortxContract>['marketState'],
+  account: IdlAccounts<Depredict>['marketState'],
   address: PublicKey
 ): Market => {
   return {
@@ -37,61 +35,70 @@ export const formatMarket = (
     yesLiquidity: account.yesLiquidity.toString(),
     noLiquidity: account.noLiquidity.toString(),
     volume: account.volume.toString(),
+    oraclePubkey: account.oraclePubkey ? account.oraclePubkey.toString() : '',
+    nftCollectionMint: account.nftCollection ? account.nftCollection.toString() : '',
+    marketUsdcVault: account.marketUsdcVault ? account.marketUsdcVault.toString() : '',
     marketState: getMarketState(account.marketState),
     updateTs: account.updateTs.toString(),
-    nextOrderId: account.nextOrderId.toString(),
+    nextPositionId: account.nextPositionId.toString(),
     marketStart: account.marketStart.toString(),
     marketEnd: account.marketEnd.toString(),
     question: Buffer.from(account.question).toString().replace(/\0+$/, ''),
     winningDirection: getWinningDirection(account.winningDirection),
+    marketType: getMarketType(account.marketType),
+    bettingStartTime: account.bettingStart.toString(),
   }
 }
 
-export const formatUserTrade = (
-  account: IdlAccounts<ShortxContract>['userTrade'],
-  publicKey: PublicKey
-): UserTrade => {
+export const formatPositionAccount = (
+  account: IdlAccounts<Depredict>['positionAccount'],
+  marketId?: number
+): PositionAccount => {
+  console.log('formatPositionAccount', account)
   return {
-    user: publicKey.toString(),
-    totalDeposits: account.totalDeposits.toString(),
-    totalWithdraws: account.totalWithdraws.toString(),
-    orders: account.orders.map((order: any) =>
-      formatOrder(order, account.authority.toString())
+    authority: account.authority,
+    marketId: marketId ? marketId : account.marketId ? account.marketId.toNumber() : 0,
+    positions: account.positions.map((position: any) =>
+      formatPosition(position)
     ),
-    nonce: account.nonce.toString(),
-    isSubUser: account.isSubUser
+    nonce: account.nonce,
+    isSubPosition: account.isSubPosition
   }
 }
 
-export const formatOrder = (
-  order: IdlAccounts<ShortxContract>['userTrade']['orders'][number],
-  authority?: string
-): Order => {
+export const formatPosition = (
+  position: IdlAccounts<Depredict>['positionAccount']['positions'][number]
+): Position => {
   return {
-    ts: order.ts.toString(),
-    authority: authority ? authority : '',
-    userNonce: order.userNonce.toString(),
-    createdAt: order.createdAt ? order.createdAt.toString() : '',
-    orderId: order.orderId.toString(),
-    marketId: order.marketId.toString(),
-    orderStatus: getOrderStatus(order.orderStatus),
-    orderDirection: getOrderDirection(order.orderDirection),
-    price: order.price.toString(),
-    version: order.version.toString(),
+    ts: position.ts.toString(),
+    positionNonce: position.positionNonce.toString(),
+    createdAt: position.createdAt ? position.createdAt.toString() : '',
+    positionId: position.positionId.toString(),
+    marketId: position.marketId.toString(),
+    mint: position.mint ? position.mint.toString() : '',
+    positionStatus: getPositionStatus(position.positionStatus),
+    direction: getPositionDirection(position.direction),
+    amount: position.amount.toString(),
   }
 }
 
 export const getMarketState = (
-  status: IdlAccounts<ShortxContract>['marketState']['marketState']
+  status: IdlAccounts<Depredict>['marketState']['marketState']
 ): MarketStates => {
   const currentStatus = Object.keys(status)[0];
   return currentStatus as unknown as MarketStates;
 }
 
+export const getMarketType = (
+  type: IdlAccounts<Depredict>['marketState']['marketType']
+): MarketType => {
+  const currentType = Object.keys(type)[0];
+  return currentType as unknown as MarketType;
+}
 
 
 export const getWinningDirection = (
-  direction: IdlAccounts<ShortxContract>['marketState']['winningDirection']
+  direction: IdlAccounts<Depredict>['marketState']['winningDirection']
 ): WinningDirection => {
   const key = Object.keys(direction)[0];
   switch (key) {
@@ -115,7 +122,7 @@ export const getTokenProgram = (mint: PublicKey): PublicKey => {
   return TOKEN_PROGRAM_ID
 }
 
-export const getOrderDirection = (
+export const getPositionDirection = (
   direction:
     | {
         yes: {}
@@ -123,15 +130,15 @@ export const getOrderDirection = (
     | {
         no: {}
       }
-): OrderDirection => {
+): PositionDirection => {
   if (Object.keys(direction)[0] === 'yes') {
-    return OrderDirection.YES
+    return PositionDirection.YES
   }
 
-  return OrderDirection.NO
+  return PositionDirection.NO
 }
 
-export const getOrderStatus = (
+export const getPositionStatus = (
   status:
     | {
         init: {}
@@ -151,22 +158,22 @@ export const getOrderStatus = (
     | {
         waiting: {}
       }
-): OrderStatus => {
+): PositionStatus => {
   let currentStatus = Object.keys(status)[0]
 
   switch (currentStatus) {
     case 'init':
-      return OrderStatus.INIT
+      return PositionStatus.INIT
     case 'open':
-      return OrderStatus.OPEN
+      return PositionStatus.OPEN
     case 'closed':
-      return OrderStatus.CLOSED
+      return PositionStatus.CLOSED
     case 'claimed':
-      return OrderStatus.CLAIMED
+      return PositionStatus.CLAIMED
     case 'liquidated':
-      return OrderStatus.LIQUIDATED
+      return PositionStatus.LIQUIDATED
     case 'waiting':
-      return OrderStatus.WAITING
+      return PositionStatus.WAITING
     default:
       throw new Error('Invalid order status')
   }
