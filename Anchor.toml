@@ -8,7 +8,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-depredict = "xx2sutwqmrcJmw6WUoFDnGbPzKJxcuq3ey49vpppn3w"
+depredict = "DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG"
 
 [programs.localnet]
 depredict = "xxPh89tXRKwKox7CijrQHHSAmz3TKP7DgF5x8uEazfu"

@@ -7,6 +7,8 @@ Depredict is a decentralized prediction market protocol on Solana. Anyone can sp
 - [SDK on npm](https://www.npmjs.com/package/depredict-sdk)
 - [END Corp.](https://endcorp.co) — Project lead
 
+`Program ID: DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG`
+
 ---
 
 ## 🚀 Quick Start: Launch Your Own Market
