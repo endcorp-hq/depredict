@@ -19,11 +19,11 @@ export default class DepredictClient {
   ADMIN_KEY: PublicKey
   FEE_VAULT: PublicKey
   
-  constructor(connection: Connection, adminKey: PublicKey, feeVault: PublicKey, mint: PublicKey) {
+  constructor(connection: Connection, adminKey: PublicKey, feeVault: PublicKey) {
     this.program = new Program(IDL as Depredict, { connection })
-    this.trade = new Trade(this.program, adminKey, feeVault, mint)
+    this.trade = new Trade(this.program, adminKey, feeVault)
     this.position = new Position(this.program)
-    this.config = new Config(this.program, adminKey, feeVault, mint)
+    this.config = new Config(this.program, adminKey, feeVault)
     this.ADMIN_KEY = adminKey
     this.FEE_VAULT = feeVault
   }

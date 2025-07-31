@@ -67,10 +67,8 @@ export type OpenOrderArgs = {
     | {
         no: {}
       }
-  mint: PublicKey,
   payer: PublicKey,
   feeVaultAccount: PublicKey,
-  mintAddress: PublicKey
   metadataUri: string
 }
 

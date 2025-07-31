@@ -42,16 +42,13 @@ export default class Trade {
   position: Position;
   ADMIN_KEY: PublicKey;
   FEE_VAULT: PublicKey;
-  MINT: PublicKey;
   constructor(
     private program: Program<Depredict>,
     adminKey: PublicKey,
-    feeVault: PublicKey,
-    mint: PublicKey
+    feeVault: PublicKey
   ) {
     this.ADMIN_KEY = adminKey;
     this.FEE_VAULT = feeVault;
-    this.MINT = mint;
     this.position = new Position(this.program);
   }
 
@@ -117,6 +114,7 @@ export default class Trade {
       payer,
       oracleType,
       marketType,
+      mintAddress,
     }: CreateMarketArgs,
     options?: RpcOptions
   ) {
@@ -192,7 +190,7 @@ export default class Trade {
                 : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
             market: marketPDA,
             marketPositionsAccount: marketPositionsPDA,
-            mint: this.MINT,
+            mint: mintAddress,
             collection: collectionMintPDA,
             tokenProgram: TOKEN_PROGRAM_ID,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,
@@ -233,7 +231,6 @@ export default class Trade {
       marketId,
       amount,
       direction,
-      mint,
       token,
       payer,
       metadataUri,
@@ -257,6 +254,12 @@ export default class Trade {
       marketPDA
     );
 
+    // Ensure the market has a mint configured
+    if (!marketAccount.mint) {
+      throw new Error(`Market ${marketId} does not have a mint configured`);
+    }
+
+    const marketMint = marketAccount.mint;
     const nextPositionId = marketAccount.nextPositionId;
 
     const configPDA = getConfigPDA(this.program.programId);
@@ -275,7 +278,7 @@ export default class Trade {
 
     let amountInMint = amount * 10 ** this.decimals;
 
-    if (token !== this.MINT.toBase58()) {
+    if (token !== marketMint.toBase58()) {
       const {
         setupInstructions,
         swapIxs,
@@ -286,7 +289,7 @@ export default class Trade {
         wallet: payer.toBase58(),
         inToken: token,
         amount,
-        mint: this.MINT.toBase58(),
+        mint: marketMint.toBase58(),
       });
 
       amountInMint = mintAmount;
@@ -313,7 +316,7 @@ export default class Trade {
             feeVault: this.FEE_VAULT,
             marketPositionsAccount: positionAccountPDA,
             market: marketPDA,
-            mint: mint,
+            mint: marketMint,
             config: configPDA,
             collection: collectionPDA,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,
@@ -395,6 +398,13 @@ export default class Trade {
 
     const marketPDA = getMarketPDA(this.program.programId, marketId);
 
+    // Get the market account to access its mint
+    const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+    if (!marketAccount.mint) {
+      throw new Error(`Market ${marketId} does not have a mint configured`);
+    }
+    const marketMint = marketAccount.mint;
+
     const configPDA = getConfigPDA(this.program.programId);
 
     const marketPositionsPDA = getPositionAccountPDA(
@@ -416,14 +426,14 @@ export default class Trade {
     // }
 
     const feeVaultMintAta = getAssociatedTokenAddressSync(
-      this.MINT,
+      marketMint,
       this.FEE_VAULT,
       true,
       TOKEN_PROGRAM_ID
     );
 
     const marketVault = getAssociatedTokenAddressSync(
-      this.MINT,
+      marketMint,
       marketPDA,
       true,
       TOKEN_PROGRAM_ID
@@ -442,7 +452,7 @@ export default class Trade {
             marketPositionsAccount: marketPositionsPDA,
             config: configPDA,
             feeVaultMintAta: feeVaultMintAta,
-            mint: this.MINT,
+            mint: marketMint,
             marketVault: marketVault,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -517,17 +527,24 @@ export default class Trade {
 
     const marketPda = getMarketPDA(this.program.programId, marketId);
 
+    // Get the market account to access its mint
+    const marketAccount = await this.program.account.marketState.fetch(marketPda);
+    if (!marketAccount.mint) {
+      throw new Error(`Market ${marketId} does not have a mint configured`);
+    }
+    const marketMint = marketAccount.mint;
+
     const collectionPda = getCollectionPDA(this.program.programId, marketId);
 
     const userMintAta = getAssociatedTokenAddressSync(
-      this.MINT,
+      marketMint,
       payer,
       false,
       TOKEN_PROGRAM_ID
     );
 
     const marketVault = getAssociatedTokenAddressSync(
-      this.MINT,
+      marketMint,
       marketPda,
       true, // allowOwnerOffCurve since marketPda is a PDA
       TOKEN_PROGRAM_ID
@@ -581,7 +598,7 @@ export default class Trade {
             nftMint: nftMint,
             userMintAta: userMintAta,
             marketVault: marketVault,
-            mint: this.MINT,
+            mint: marketMint,
             market: marketPda,
             collection: collectionPda,
             tokenProgram: TOKEN_PROGRAM_ID,
