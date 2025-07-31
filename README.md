@@ -4,7 +4,7 @@
 Depredict is a decentralized prediction market protocol on Solana. Anyone can spin up their own prediction market using our open-source smart contract and TypeScript SDK.
 
 - [Documentation](./depredict-docs) — Full guides, API reference, and examples
-- [SDK on npm](https://www.npmjs.com/package/depredict-sdk)
+- [SDK on npm](https://www.npmjs.com/package/@endcorp/depredict)
 - [END Corp.](https://endcorp.co) — Project lead
 
 `Program ID: DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG`
@@ -15,13 +15,13 @@ Depredict is a decentralized prediction market protocol on Solana. Anyone can sp
 
 1. **Install the SDK:**
    ```bash
-   npm install depredict-sdk
+   npm install @endcorp/depredict
    ```
 
 2. **Create a Market (TypeScript Example):**
    ```typescript
    import { Connection, PublicKey } from '@solana/web3.js';
-   import DepredictClient from 'depredict-sdk';
+   import DepredictClient from '@endcorp/depredict';
 
    const connection = new Connection('https://api.devnet.solana.com');
    const adminKey = new PublicKey('...'); // Your admin public key
@@ -40,7 +40,7 @@ Depredict is a decentralized prediction market protocol on Solana. Anyone can sp
    });
    ```
 
-For more details, see the [Getting Started Guide](./depredict-docs/docs/pages/getting-started.mdx) and [SDK API Reference](./depredict-docs/docs/pages/sdk-api.mdx).
+For more details, see the [Getting Started Guide](https://depredict.vercel.app/getting-started) and [SDK API Reference](https://depredict.vercel.app/sdk-api).
 
 ---
 
