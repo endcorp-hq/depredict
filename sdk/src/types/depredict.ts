@@ -1837,6 +1837,10 @@ export type Depredict = {
             }
           },
           {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
             "name": "marketVault",
             "type": {
               "option": "pubkey"

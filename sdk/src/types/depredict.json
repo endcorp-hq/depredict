@@ -1831,6 +1831,10 @@
             }
           },
           {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
             "name": "market_vault",
             "type": {
               "option": "pubkey"
