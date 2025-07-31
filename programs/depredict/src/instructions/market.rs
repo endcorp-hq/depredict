@@ -262,6 +262,7 @@ impl<'info> MarketContext<'info> {
             update_ts: ts,
             market_vault: Some(self.market_vault.key()),
             mint: Some(self.mint.key()),
+            decimals: self.mint.decimals,
             oracle_type: args.oracle_type,
             oracle_pubkey: oracle_pubkey,
             ..Default::default()
