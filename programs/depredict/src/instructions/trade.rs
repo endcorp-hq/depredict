@@ -373,9 +373,13 @@ impl<'info> PositionContext<'info> {
 
 impl<'info> PayoutNftContext<'info> {
     pub fn payout_position(&mut self) -> Result<()> {
+
         let market = &mut self.market;
         let market_positions_account = &mut self.market_positions_account;
         let ts = Clock::get()?.unix_timestamp;
+        let payer = &self.signer.to_account_info();
+        let system_program = &self.system_program.to_account_info();
+        let mpl_core_program = &self.mpl_core_program.to_account_info();
 
         msg!("Market ID: {}", market.market_id);
         msg!("Market bump: {}", market.bump);
@@ -391,13 +395,15 @@ impl<'info> PayoutNftContext<'info> {
         require!(market.market_state == MarketStates::Resolved, DepredictError::MarketNotAllowedToPayout);
 
         // check the signer of the tx owns the nft
-        let asset = self.nft_mint.to_account_info();
-        let data = asset.try_borrow_data()?;
-        let base_asset: BaseAssetV1 = BaseAssetV1::from_bytes(&data.as_ref())?;
+        let data = self.nft_mint.try_borrow_data()?;
+        let base_asset: BaseAssetV1 = BaseAssetV1::from_bytes(data.as_ref())?;
 
         msg!("Base asset: {:?}", base_asset.owner);
 
         require!(&base_asset.owner == &self.signer.key(), DepredictError::Unauthorized);
+
+        // Drop the borrow before fetching plugin data
+        drop(data);
 
         let (_, attribute_list, _) = fetch_plugin::<BaseAssetV1, Attributes>(&self.nft_mint.to_account_info(), mpl_core::types::PluginType::Attributes)?;
 
@@ -487,12 +493,6 @@ impl<'info> PayoutNftContext<'info> {
                 self.usdc_mint.decimals
             )?;
 
-
-            let asset = self.nft_mint.to_account_info();
-            let collection = self.collection.to_account_info();
-            let payer = self.signer.to_account_info();
-            let system_program = self.system_program.to_account_info();
-
             // let nft_signer_seeds: &[&[u8]] = &[
             //     NFT.as_bytes(),
             //     &market.market_id.to_le_bytes(),
@@ -507,15 +507,16 @@ impl<'info> PayoutNftContext<'info> {
                 &[market.bump],
             ];
 
-        
             msg!("Burning NFT");
-            BurnV1CpiBuilder::new(&self.mpl_core_program.to_account_info())
-            .asset(&asset)
-            .collection(Some(&collection))
-            .payer(&payer)
-            .authority(Some(&payer))
-            .system_program(Some(&system_program))
-            .invoke_signed(&[ market_signer_seeds])?;
+            let mut burn_asset_cpi = BurnV1CpiBuilder::new(mpl_core_program);
+
+            burn_asset_cpi
+            .asset(&self.nft_mint.to_account_info())
+            .collection(Some(&self.collection.to_account_info()))
+            .payer(payer)
+            .authority(Some(payer))
+            .system_program(Some(system_program))
+            .invoke_signed(&[market_signer_seeds])?;
 
             msg!("NFT burn successful");
         }
