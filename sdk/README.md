@@ -67,12 +67,12 @@ const { tx, marketId } = await client.trade.createMarket(marketArgs);
 
 ### Position Trading
 
-When opening a position, the mint is automatically determined from the market:
+When opening a position, the mint and decimals are automatically determined from the market:
 
 ```typescript
 const positionArgs = {
   marketId: 1,
-  amount: 100, // Amount in the market's token
+  amount: 100, // Amount in the market's token (will be converted using market's decimals)
   token: "USDC_MINT_ADDRESS", // Token to pay with (will be swapped if different from market mint)
   direction: { yes: {} },
   payer: wallet.publicKey,
@@ -82,6 +82,10 @@ const positionArgs = {
 
 const { ixs, addressLookupTableAccounts } = await client.trade.openPosition(positionArgs);
 ```
+
+**Note**: The SDK automatically handles decimal conversion based on each market's configured mint. For example:
+- USDC markets (6 decimals): `amount: 100` becomes `100000000` (100 * 10^6)
+- SOL markets (9 decimals): `amount: 1` becomes `1000000000` (1 * 10^9)
 
 ## License
 

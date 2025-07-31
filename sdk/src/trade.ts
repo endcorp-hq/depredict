@@ -38,7 +38,6 @@ import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
 export default class Trade {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
-  decimals: number = 6; // TODO: make this dynamic, need to caluclate the decimals from the input mint
   position: Position;
   ADMIN_KEY: PublicKey;
   FEE_VAULT: PublicKey;
@@ -276,7 +275,7 @@ export default class Trade {
       ixs.push(...positionAccountIxs);
     }
 
-    let amountInMint = amount * 10 ** this.decimals;
+    let amountInMint = amount * 10 ** marketAccount.decimals;
 
     if (token !== marketMint.toBase58()) {
       const {

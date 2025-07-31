@@ -8,6 +8,7 @@ export type Market = {
   nftCollectionMint: string
   marketVault: string
   mint: string
+  decimals: number
   marketId: string
   yesLiquidity: string
   noLiquidity: string

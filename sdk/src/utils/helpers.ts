@@ -38,6 +38,7 @@ export const formatMarket = (
     oraclePubkey: account.oraclePubkey ? account.oraclePubkey.toString() : '',
     nftCollectionMint: account.nftCollection ? account.nftCollection.toString() : '',
     mint: account.mint ? account.mint.toString() : '',
+    decimals: account.decimals,
     marketVault: account.marketVault ? account.marketVault.toString() : '',
     marketState: getMarketState(account.marketState),
     updateTs: account.updateTs.toString(),
