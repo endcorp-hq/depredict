@@ -54,23 +54,18 @@ export default class Config {
   }
 
   /**
-   * Update a config account to maintain details
+   * Update the fee amount for the config account
    *
    */
-  async updateConfig(
-    payer: PublicKey,
-    feeAmount?: number,
-    authority?: PublicKey,
-    feeVault?: PublicKey
+  async updateFee(
+    feeAmount: number,
   ) {
     const configPDA = getConfigPDA(this.program.programId);
     const ixs: TransactionInstruction[] = [];
-    const feeAmountBN = feeAmount ? new BN(feeAmount) : null;
-    const authorityBN = authority || null;
-    const feeVaultBN = feeVault || null;
+    const feeAmountBN = new BN(feeAmount);
     ixs.push(
       await this.program.methods
-        .updateConfig(feeAmountBN, authorityBN, feeVaultBN)
+        .updateFeeAmount(feeAmountBN)
         .accountsPartial({
           signer: this.ADMIN_KEY,
           feeVault: this.FEE_VAULT,
@@ -82,6 +77,55 @@ export default class Config {
     return ixs;
     // sendVersionedTransaction(this.program, ixs, payer);
   }
+
+  /**
+   * Update the fee vault for the config account
+   *
+   */
+  async updateFeeVault(
+    newFeeVault: PublicKey,
+  ) {
+    const configPDA = getConfigPDA(this.program.programId);
+    const ixs: TransactionInstruction[] = [];
+    const currentFeeVault = this.FEE_VAULT;
+    ixs.push(
+      await this.program.methods
+        .updateFeeVault(newFeeVault)
+        .accountsPartial({
+          signer: this.ADMIN_KEY,
+          feeVault: currentFeeVault,
+          config: configPDA,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .instruction()
+    );
+    return ixs;
+    // sendVersionedTransaction(this.program, ixs, payer);
+  }
+
+    /**
+   * Update the authority for the config account
+   *
+   */
+    async updateAuthority(
+      newAuthority: PublicKey,
+    ) {
+      const configPDA = getConfigPDA(this.program.programId);
+      const ixs: TransactionInstruction[] = [];
+      const currentAuthority = this.ADMIN_KEY;
+             ixs.push(
+         await this.program.methods
+           .updateAuthority(newAuthority)
+           .accountsPartial({
+             signer: this.ADMIN_KEY,
+             config: configPDA,
+             systemProgram: web3.SystemProgram.programId,
+           })
+           .instruction()
+       );
+      return ixs;
+      // sendVersionedTransaction(this.program, ixs, payer);
+    }
 
   /**
    * Close a config account
