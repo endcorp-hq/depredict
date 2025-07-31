@@ -1,6 +1,6 @@
 {
-  "name": "depredict-sdk",
-  "version": "0.1.128",
+  "name": "@endcorp/depredict",
+  "version": "0.2.0",
   "description": "SDK for interacting with the Depredict Protocol",
   "type": "module",
   "types": "./dist/cjs/index.d.cts",
@@ -30,7 +30,7 @@
     "depredict",
     "protocol"
   ],
-  "author": "",
+  "author": "END Corp.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/endcorp-hq/depredict.git"
@@ -49,5 +49,8 @@
   "license": "MIT",
   "engines": {
     "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "bs58": "^6.0.0"
   }
 }
