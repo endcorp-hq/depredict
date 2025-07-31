@@ -4,8 +4,6 @@ use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
 
-use mpl_core::fetch_plugin;
-use mpl_core::instructions::BurnV1CpiBuilder;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 use std::str::FromStr;
@@ -17,12 +15,14 @@ use crate::{
     state::{ MarketState, WinningDirection },
 };
 use mpl_core::{
+    fetch_plugin,
     accounts::{
         BaseAssetV1
     },
     ID as MPL_CORE_ID,
     instructions::{
-        CreateV2CpiBuilder
+        CreateV2CpiBuilder,
+        BurnV1CpiBuilder,
     },
     types::{
         Attribute, 
