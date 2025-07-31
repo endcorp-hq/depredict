@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/depredict.json`.
  */
 export type Depredict = {
-  "address": "5QGKiFSjLjnMTrx2K9tgsMzpv9BqXT365kDeoHMLnnda",
+  "address": "DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG",
   "metadata": {
     "name": "depredict",
     "version": "0.1.0",
@@ -1117,16 +1117,69 @@ export type Depredict = {
       "args": []
     },
     {
-      "name": "updateConfig",
+      "name": "updateAuthority",
       "discriminator": [
-        29,
-        158,
-        252,
-        191,
-        10,
-        83,
-        219,
-        99
+        32,
+        46,
+        64,
+        28,
+        149,
+        75,
+        243,
+        88
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "feeVault",
+          "writable": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "updateFeeAmount",
+      "discriminator": [
+        42,
+        132,
+        206,
+        131,
+        241,
+        110,
+        113,
+        96
       ],
       "accounts": [
         {
@@ -1165,21 +1218,60 @@ export type Depredict = {
       "args": [
         {
           "name": "feeAmount",
-          "type": {
-            "option": "u64"
-          }
-        },
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "updateFeeVault",
+      "discriminator": [
+        186,
+        252,
+        216,
+        197,
+        126,
+        152,
+        213,
+        9
+      ],
+      "accounts": [
         {
-          "name": "authority",
-          "type": {
-            "option": "pubkey"
-          }
+          "name": "signer",
+          "writable": true,
+          "signer": true
         },
         {
           "name": "feeVault",
-          "type": {
-            "option": "pubkey"
+          "writable": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
           }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "feeVault",
+          "type": "pubkey"
         }
       ]
     },
@@ -1330,181 +1422,196 @@ export type Depredict = {
     },
     {
       "code": 6002,
+      "name": "sameFeeAmount",
+      "msg": "Same fee amount"
+    },
+    {
+      "code": 6003,
+      "name": "invalidFeeAmount",
+      "msg": "Invalid fee amount"
+    },
+    {
+      "code": 6004,
+      "name": "sameFeeVault",
+      "msg": "Same fee vault"
+    },
+    {
+      "code": 6005,
       "name": "arithmeticOverflow",
       "msg": "Arithmetic overflow"
     },
     {
-      "code": 6003,
+      "code": 6006,
       "name": "insufficientFunds",
       "msg": "Insufficient funds"
     },
     {
-      "code": 6004,
+      "code": 6007,
       "name": "invalidPrice",
       "msg": "Invalid price"
     },
     {
-      "code": 6005,
+      "code": 6008,
       "name": "noAvailablePositionSlot",
       "msg": "No available position slot"
     },
     {
-      "code": 6006,
+      "code": 6009,
       "name": "invalidOracle",
       "msg": "Invalid oracle"
     },
     {
-      "code": 6007,
+      "code": 6010,
       "name": "oracleNotResolved",
       "msg": "Oracle not resolved"
     },
     {
-      "code": 6008,
+      "code": 6011,
       "name": "marketInactive",
       "msg": "Market is inactive"
     },
     {
-      "code": 6009,
+      "code": 6012,
       "name": "invalidBettingStart",
       "msg": "Invalid betting start"
     },
     {
-      "code": 6010,
+      "code": 6013,
       "name": "positionNotFound",
       "msg": "Position not found"
     },
     {
-      "code": 6011,
+      "code": 6014,
       "name": "bettingPeriodNotStarted",
       "msg": "Betting period not started"
     },
     {
-      "code": 6012,
+      "code": 6015,
       "name": "bettingPeriodExceeded",
       "msg": "Betting period exceeded"
     },
     {
-      "code": 6013,
+      "code": 6016,
       "name": "bettingPeriodEnded",
       "msg": "Betting period ended"
     },
     {
-      "code": 6014,
+      "code": 6017,
       "name": "marketStillActive",
       "msg": "Market still active"
     },
     {
-      "code": 6015,
+      "code": 6018,
       "name": "insufficientLiquidity",
       "msg": "Insufficient liquidity"
     },
     {
-      "code": 6016,
+      "code": 6019,
       "name": "marketAlreadyResolved",
       "msg": "Market already resolved"
     },
     {
-      "code": 6017,
+      "code": 6020,
       "name": "concurrentTransaction",
       "msg": "Concurrent transaction"
     },
     {
-      "code": 6018,
+      "code": 6021,
       "name": "marketNotAllowedToPayout",
       "msg": "Market Not allowed to payout"
     },
     {
-      "code": 6019,
+      "code": 6022,
       "name": "userTradeIsSubUser",
       "msg": "User trade is sub user"
     },
     {
-      "code": 6020,
+      "code": 6023,
       "name": "prizeNotFound",
       "msg": "Prize not found"
     },
     {
-      "code": 6021,
+      "code": 6024,
       "name": "noPrizesAvailable",
       "msg": "No Prize Available"
     },
     {
-      "code": 6022,
+      "code": 6025,
       "name": "alreadyLinked",
       "msg": "Already linked"
     },
     {
-      "code": 6023,
+      "code": 6026,
       "name": "notLinked",
       "msg": "Not linked"
     },
     {
-      "code": 6024,
+      "code": 6027,
       "name": "invalidCustomer",
       "msg": "Invalid customer"
     },
     {
-      "code": 6025,
+      "code": 6028,
       "name": "invalidMint",
       "msg": "Invalid mint"
     },
     {
-      "code": 6026,
+      "code": 6029,
       "name": "invalidFeeVault",
       "msg": "Invalid fee vault"
     },
     {
-      "code": 6027,
+      "code": 6030,
       "name": "invalidShares",
       "msg": "Invalid shares"
     },
     {
-      "code": 6028,
+      "code": 6031,
       "name": "unauthorizedToOrderBook",
       "msg": "Unauthorized to order book"
     },
     {
-      "code": 6029,
+      "code": 6032,
       "name": "orderIsFullFilled",
       "msg": "Order is full filled"
     },
     {
-      "code": 6030,
+      "code": 6033,
       "name": "overflow",
       "msg": "overflow"
     },
     {
-      "code": 6031,
+      "code": 6034,
       "name": "marketAlreadyAggregated",
       "msg": "Market already aggregated"
     },
     {
-      "code": 6032,
+      "code": 6035,
       "name": "invalidMarketId",
       "msg": "Invalid market id"
     },
     {
-      "code": 6033,
+      "code": 6036,
       "name": "invalidCollection",
       "msg": "Invalid collection"
     },
     {
-      "code": 6034,
+      "code": 6037,
       "name": "invalidCollectionMint",
       "msg": "Invalid collection mint"
     },
     {
-      "code": 6035,
+      "code": 6038,
       "name": "invalidAuthority",
       "msg": "Invalid collection authority"
     },
     {
-      "code": 6036,
+      "code": 6039,
       "name": "invalidMplCoreProgram",
       "msg": "Invalid mpl core program"
     },
     {
-      "code": 6037,
+      "code": 6040,
       "name": "invalidNft",
       "msg": "Invalid NFT"
     }
