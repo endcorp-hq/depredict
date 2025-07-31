@@ -32,26 +32,26 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { USDC_DECIMALS, METAPLEX_ID } from "./utils/constants.js";
+import { METAPLEX_ID } from "./utils/constants.js";
 import Position from "./position.js";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
 export default class Trade {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
-  decimals: number = USDC_DECIMALS;
+  decimals: number = 6; // TODO: make this dynamic, need to caluclate the decimals from the input mint
   position: Position;
   ADMIN_KEY: PublicKey;
   FEE_VAULT: PublicKey;
-  USDC_MINT: PublicKey;
+  MINT: PublicKey;
   constructor(
     private program: Program<Depredict>,
     adminKey: PublicKey,
     feeVault: PublicKey,
-    usdcMint: PublicKey
+    mint: PublicKey
   ) {
     this.ADMIN_KEY = adminKey;
     this.FEE_VAULT = feeVault;
-    this.USDC_MINT = usdcMint;
+    this.MINT = mint;
     this.position = new Position(this.program);
   }
 
@@ -192,7 +192,7 @@ export default class Trade {
                 : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
             market: marketPDA,
             marketPositionsAccount: marketPositionsPDA,
-            usdcMint: this.USDC_MINT,
+            mint: this.MINT,
             collection: collectionMintPDA,
             tokenProgram: TOKEN_PROGRAM_ID,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,
@@ -273,23 +273,23 @@ export default class Trade {
       ixs.push(...positionAccountIxs);
     }
 
-    let amountInUSDC = amount * 10 ** USDC_DECIMALS;
+    let amountInMint = amount * 10 ** this.decimals;
 
-    if (token !== this.USDC_MINT.toBase58()) {
+    if (token !== this.MINT.toBase58()) {
       const {
         setupInstructions,
         swapIxs,
         addressLookupTableAccounts: swapAddressLookupTableAccounts,
-        usdcAmount,
+        mintAmount,
       } = await swap({
         connection: this.program.provider.connection,
         wallet: payer.toBase58(),
         inToken: token,
         amount,
-        usdcMint: this.USDC_MINT.toBase58(),
+        mint: this.MINT.toBase58(),
       });
 
-      amountInUSDC = usdcAmount;
+      amountInMint = mintAmount;
 
       if (swapIxs.length === 0) {
         return;
@@ -304,7 +304,7 @@ export default class Trade {
       ixs.push(
         await this.program.methods
           .createPosition({
-            amount: new BN(amountInUSDC),
+          amount: new BN(amountInMint),
             direction: direction,
             metadataUri: metadataUri,
           })
@@ -313,7 +313,7 @@ export default class Trade {
             feeVault: this.FEE_VAULT,
             marketPositionsAccount: positionAccountPDA,
             market: marketPDA,
-            usdcMint: mint,
+            mint: mint,
             config: configPDA,
             collection: collectionPDA,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,
@@ -415,15 +415,15 @@ export default class Trade {
     //   );
     // }
 
-    const feeVaultUsdcAta = getAssociatedTokenAddressSync(
-      this.USDC_MINT,
+    const feeVaultMintAta = getAssociatedTokenAddressSync(
+      this.MINT,
       this.FEE_VAULT,
       true,
       TOKEN_PROGRAM_ID
     );
 
     const marketVault = getAssociatedTokenAddressSync(
-      this.USDC_MINT,
+      this.MINT,
       marketPDA,
       true,
       TOKEN_PROGRAM_ID
@@ -441,8 +441,8 @@ export default class Trade {
             market: marketPDA,
             marketPositionsAccount: marketPositionsPDA,
             config: configPDA,
-            feeVaultUsdcAta: feeVaultUsdcAta,
-            usdcMint: this.USDC_MINT,
+            feeVaultMintAta: feeVaultMintAta,
+            mint: this.MINT,
             marketVault: marketVault,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -519,15 +519,15 @@ export default class Trade {
 
     const collectionPda = getCollectionPDA(this.program.programId, marketId);
 
-    const userUsdcAta = getAssociatedTokenAddressSync(
-      this.USDC_MINT,
+    const userMintAta = getAssociatedTokenAddressSync(
+      this.MINT,
       payer,
       false,
       TOKEN_PROGRAM_ID
     );
 
     const marketVault = getAssociatedTokenAddressSync(
-      this.USDC_MINT,
+      this.MINT,
       marketPda,
       true, // allowOwnerOffCurve since marketPda is a PDA
       TOKEN_PROGRAM_ID
@@ -579,9 +579,9 @@ export default class Trade {
             signer: payer,
             marketPositionsAccount: positionAccountPDA,
             nftMint: nftMint,
-            userUsdcAta: userUsdcAta,
-            marketUsdcVault: marketVault,
-            usdcMint: this.USDC_MINT,
+            userMintAta: userMintAta,
+            marketVault: marketVault,
+            mint: this.MINT,
             market: marketPda,
             collection: collectionPda,
             tokenProgram: TOKEN_PROGRAM_ID,

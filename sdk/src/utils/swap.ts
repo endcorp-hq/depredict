@@ -12,13 +12,13 @@ export const swap = async ({
   wallet,
   inToken,
   amount,
-  usdcMint
+  mint
 }: {
   connection: Connection
   wallet: string
   inToken: string
   amount: number
-  usdcMint: string
+  mint: string
 }) => {
   const token = TOKENS[inToken]
 
@@ -29,7 +29,7 @@ export const swap = async ({
   const formattedAmountIn = amount * 10 ** token.decimals
 
   const quoteResponse = await axios.get(
-    `https://quote-api.jup.ag/v6/quote?inputMint=${inToken}&outputMint=${usdcMint}&amount=${formattedAmountIn}&slippageBps=1000`
+    `https://quote-api.jup.ag/v6/quote?inputMint=${inToken}&outputMint=${mint}&amount=${formattedAmountIn}&slippageBps=1000`
   )
 
   const { data: quoteData } = quoteResponse
@@ -63,7 +63,7 @@ export const swap = async ({
     ),
     setupInstructions: setupInstructions.map(deserializeInstruction),
     cleanupInstruction: deserializeInstruction(cleanupInstruction),
-    usdcAmount: quoteData.outAmount
+    mintAmount: quoteData.outAmount
   }
 }
 

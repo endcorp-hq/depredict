@@ -6,7 +6,8 @@ export type Market = {
   authority: string
   oraclePubkey: string
   nftCollectionMint: string
-  marketUsdcVault: string
+  marketVault: string
+  mint: string
   marketId: string
   yesLiquidity: string
   noLiquidity: string
@@ -69,7 +70,7 @@ export type OpenOrderArgs = {
   mint: PublicKey,
   payer: PublicKey,
   feeVaultAccount: PublicKey,
-  usdcMintAddress: PublicKey
+  mintAddress: PublicKey
   metadataUri: string
 }
 
@@ -91,7 +92,7 @@ export type CreateMarketArgs = {
   metadataUri: string
   payer: PublicKey
   feeVaultAccount: PublicKey
-  usdcMintAddress: PublicKey
+  mintAddress: PublicKey
   oraclePubkey?: PublicKey
   oracleType: OracleType
   marketType: MarketType

@@ -7,13 +7,11 @@ import Trade from "./trade.js";
 export default class Config {
   ADMIN_KEY: PublicKey;
   FEE_VAULT: PublicKey;
-  USDC_MINT: PublicKey;
   trade: Trade;
-  constructor(private program: Program<Depredict>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
+  constructor(private program: Program<Depredict>, adminKey: PublicKey, feeVault: PublicKey, mint: PublicKey) {
     this.ADMIN_KEY = adminKey;
     this.FEE_VAULT = feeVault;
-    this.USDC_MINT = usdcMint;
-    this.trade = new Trade(this.program, this.ADMIN_KEY, this.FEE_VAULT, this.USDC_MINT);
+    this.trade = new Trade(this.program, this.ADMIN_KEY, this.FEE_VAULT, mint);
   }
 
   /**
