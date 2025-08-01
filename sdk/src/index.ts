@@ -11,6 +11,9 @@ export * from './types/trade.js'
 export * from './types/position.js'
 export * from './types/index.js'
 
+// Re-export constants
+export * from './utils/constants.js'
+
 export default class DepredictClient {
   program: Program<Depredict>
   trade: Trade

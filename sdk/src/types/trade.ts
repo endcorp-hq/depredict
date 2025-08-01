@@ -91,7 +91,7 @@ export type CreateMarketArgs = {
   metadataUri: string
   payer: PublicKey
   feeVaultAccount: PublicKey
-  mintAddress: PublicKey
+  mintAddress?: PublicKey // Optional, defaults to USDC_DEVNET
   oraclePubkey?: PublicKey
   oracleType: OracleType
   marketType: MarketType

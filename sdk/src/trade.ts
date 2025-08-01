@@ -32,7 +32,7 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { METAPLEX_ID } from "./utils/constants.js";
+import { METAPLEX_ID, DEFAULT_MINT } from "./utils/constants.js";
 import Position from "./position.js";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
@@ -117,6 +117,8 @@ export default class Trade {
     }: CreateMarketArgs,
     options?: RpcOptions
   ) {
+    // Use default mint if none specified
+    const marketMint = mintAddress || DEFAULT_MINT;
     if (question.length > 80) {
       throw new Error("Question must be less than 80 characters");
     }
@@ -189,7 +191,7 @@ export default class Trade {
                 : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
             market: marketPDA,
             marketPositionsAccount: marketPositionsPDA,
-            mint: mintAddress,
+            mint: marketMint,
             collection: collectionMintPDA,
             tokenProgram: TOKEN_PROGRAM_ID,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,

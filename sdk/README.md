@@ -11,9 +11,8 @@ npm install depredict-sdk
 ## Usage
 
 ```typescript
-import { Connection } from '@solana/web3.js';
-import { Wallet } from '@coral-xyz/anchor';
-import DepredictClient from 'depredict-sdk';
+import { Connection, PublicKey } from '@solana/web3.js';
+import DepredictClient, { TOKEN_MINTS, DEFAULT_MINT } from 'depredict-sdk';
 
 // Initialize the client
 const connection = new Connection('https://api.devnet.solana.com');
@@ -32,6 +31,8 @@ const markets = await client.trade.getAllMarkets();
 - Place and manage orders
 - View market data and order books
 - Handle user trades and positions
+- Built-in token constants for easy access
+- Default USDC mint for markets
 
 ## API Documentation
 
@@ -45,11 +46,29 @@ const markets = await client.trade.getAllMarkets();
 - `resolveMarket(args)`: Resolve a market
 - `payoutPosition(args)`: Payout a position
 
-### Market Creation
+### Token Constants
 
-When creating a market, you must specify the mint address:
+The SDK provides easy access to common token mints:
 
 ```typescript
+import { TOKEN_MINTS, DEFAULT_MINT } from 'depredict-sdk';
+
+// Available token mints
+console.log(TOKEN_MINTS.USDC_DEVNET); // USDC on devnet
+console.log(TOKEN_MINTS.USDC_MAINNET); // USDC on mainnet
+console.log(TOKEN_MINTS.BONK); // BONK token
+console.log(TOKEN_MINTS.SOL); // SOL token
+
+// Default mint (USDC devnet)
+console.log(DEFAULT_MINT); // Same as TOKEN_MINTS.USDC_DEVNET
+```
+
+### Market Creation
+
+When creating a market, you can specify the mint address or use the default (USDC devnet):
+
+```typescript
+// Using default mint (USDC devnet)
 const marketArgs = {
   startTime: Date.now() / 1000,
   endTime: (Date.now() / 1000) + 86400, // 24 hours from now
@@ -57,9 +76,16 @@ const marketArgs = {
   metadataUri: "https://example.com/metadata.json",
   payer: wallet.publicKey,
   feeVaultAccount: feeVault,
-  mintAddress: new PublicKey("USDC_MINT_ADDRESS"), // Specify the mint for this market
+  // mintAddress is optional - defaults to USDC_DEVNET
   oracleType: OracleType.MANUAL,
   marketType: MarketType.FUTURE
+};
+
+// Using specific token mint
+const bonkMarketArgs = {
+  ...marketArgs,
+  question: "Will BONK reach $1 by end of year?",
+  mintAddress: TOKEN_MINTS.BONK, // Use BONK token
 };
 
 const { tx, marketId } = await client.trade.createMarket(marketArgs);
@@ -73,7 +99,7 @@ When opening a position, the mint and decimals are automatically determined from
 const positionArgs = {
   marketId: 1,
   amount: 100, // Amount in the market's token (will be converted using market's decimals)
-  token: "USDC_MINT_ADDRESS", // Token to pay with (will be swapped if different from market mint)
+  token: TOKEN_MINTS.USDC_DEVNET.toBase58(), // Token to pay with (will be swapped if different from market mint)
   direction: { yes: {} },
   payer: wallet.publicKey,
   feeVaultAccount: feeVault,
