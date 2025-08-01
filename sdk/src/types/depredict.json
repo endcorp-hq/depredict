@@ -2,7 +2,7 @@
   "address": "DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG",
   "metadata": {
     "name": "depredict",
-    "version": "0.1.0",
+    "version": "0.5.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
@@ -78,7 +78,7 @@
           "writable": true
         },
         {
-          "name": "fee_vault_usdc_ata",
+          "name": "fee_vault_mint_ata",
           "writable": true,
           "pda": {
             "seeds": [
@@ -125,7 +125,7 @@
               },
               {
                 "kind": "account",
-                "path": "usdc_mint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -191,7 +191,7 @@
           }
         },
         {
-          "name": "usdc_mint",
+          "name": "mint",
           "writable": true
         },
         {
@@ -242,7 +242,7 @@
               },
               {
                 "kind": "account",
-                "path": "usdc_mint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -441,11 +441,11 @@
           }
         },
         {
-          "name": "usdc_mint",
+          "name": "mint",
           "writable": true
         },
         {
-          "name": "market_usdc_vault",
+          "name": "market_vault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -459,7 +459,7 @@
               },
               {
                 "kind": "account",
-                "path": "usdc_mint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -606,11 +606,11 @@
           }
         },
         {
-          "name": "usdc_mint",
+          "name": "mint",
           "writable": true
         },
         {
-          "name": "user_usdc_ata",
+          "name": "user_mint_ata",
           "writable": true,
           "pda": {
             "seeds": [
@@ -624,7 +624,7 @@
               },
               {
                 "kind": "account",
-                "path": "usdc_mint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -667,7 +667,7 @@
           }
         },
         {
-          "name": "market_usdc_vault",
+          "name": "market_vault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -681,7 +681,7 @@
               },
               {
                 "kind": "account",
-                "path": "usdc_mint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -966,11 +966,11 @@
           "writable": true
         },
         {
-          "name": "usdc_mint",
+          "name": "mint",
           "writable": true
         },
         {
-          "name": "user_usdc_ata",
+          "name": "user_mint_ata",
           "writable": true,
           "pda": {
             "seeds": [
@@ -984,7 +984,7 @@
               },
               {
                 "kind": "account",
-                "path": "usdc_mint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -1027,7 +1027,7 @@
           }
         },
         {
-          "name": "market_usdc_vault",
+          "name": "market_vault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1041,7 +1041,7 @@
               },
               {
                 "kind": "account",
-                "path": "usdc_mint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -1825,7 +1825,17 @@
             }
           },
           {
-            "name": "market_usdc_vault",
+            "name": "mint",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
+            "name": "market_vault",
             "type": {
               "option": "pubkey"
             }

@@ -8,7 +8,7 @@ export type Depredict = {
   "address": "DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG",
   "metadata": {
     "name": "depredict",
-    "version": "0.1.0",
+    "version": "0.5.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
@@ -84,7 +84,7 @@ export type Depredict = {
           "writable": true
         },
         {
-          "name": "feeVaultUsdcAta",
+          "name": "feeVaultMintAta",
           "writable": true,
           "pda": {
             "seeds": [
@@ -131,7 +131,7 @@ export type Depredict = {
               },
               {
                 "kind": "account",
-                "path": "usdcMint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -197,7 +197,7 @@ export type Depredict = {
           }
         },
         {
-          "name": "usdcMint",
+          "name": "mint",
           "writable": true
         },
         {
@@ -248,7 +248,7 @@ export type Depredict = {
               },
               {
                 "kind": "account",
-                "path": "usdcMint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -447,11 +447,11 @@ export type Depredict = {
           }
         },
         {
-          "name": "usdcMint",
+          "name": "mint",
           "writable": true
         },
         {
-          "name": "marketUsdcVault",
+          "name": "marketVault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -465,7 +465,7 @@ export type Depredict = {
               },
               {
                 "kind": "account",
-                "path": "usdcMint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -612,11 +612,11 @@ export type Depredict = {
           }
         },
         {
-          "name": "usdcMint",
+          "name": "mint",
           "writable": true
         },
         {
-          "name": "userUsdcAta",
+          "name": "userMintAta",
           "writable": true,
           "pda": {
             "seeds": [
@@ -630,7 +630,7 @@ export type Depredict = {
               },
               {
                 "kind": "account",
-                "path": "usdcMint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -673,7 +673,7 @@ export type Depredict = {
           }
         },
         {
-          "name": "marketUsdcVault",
+          "name": "marketVault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -687,7 +687,7 @@ export type Depredict = {
               },
               {
                 "kind": "account",
-                "path": "usdcMint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -972,11 +972,11 @@ export type Depredict = {
           "writable": true
         },
         {
-          "name": "usdcMint",
+          "name": "mint",
           "writable": true
         },
         {
-          "name": "userUsdcAta",
+          "name": "userMintAta",
           "writable": true,
           "pda": {
             "seeds": [
@@ -990,7 +990,7 @@ export type Depredict = {
               },
               {
                 "kind": "account",
-                "path": "usdcMint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -1033,7 +1033,7 @@ export type Depredict = {
           }
         },
         {
-          "name": "marketUsdcVault",
+          "name": "marketVault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1047,7 +1047,7 @@ export type Depredict = {
               },
               {
                 "kind": "account",
-                "path": "usdcMint"
+                "path": "mint"
               }
             ],
             "program": {
@@ -1831,7 +1831,17 @@ export type Depredict = {
             }
           },
           {
-            "name": "marketUsdcVault",
+            "name": "mint",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
+            "name": "marketVault",
             "type": {
               "option": "pubkey"
             }

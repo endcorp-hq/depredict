@@ -5,10 +5,7 @@ use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
 
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
-
-use std::str::FromStr;
-
-use crate::constants::{MARKET, NFT, USDC_MINT};
+use crate::constants::{MARKET, NFT};
 use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
 use crate::{
     errors::DepredictError,
@@ -71,26 +68,26 @@ pub struct PositionContext<'info> {
 
     #[account(
         mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
+        constraint = mint.key() == market.mint.unwrap() @ DepredictError::InvalidMint
     )]
-    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         init_if_needed,
         payer = signer,
-        associated_token::mint = usdc_mint,
+        associated_token::mint = mint,
         associated_token::authority = signer,
         associated_token::token_program = token_program
     )]
-    pub user_usdc_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
+        associated_token::mint = mint,
         associated_token::authority = market,
         associated_token::token_program = token_program
     )]
-    pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub config: Box<Account<'info, Config>>,
     
@@ -125,26 +122,26 @@ pub struct PayoutNftContext<'info> {
 
     #[account(
         mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
+        constraint = mint.key() == market.mint.unwrap() @ DepredictError::InvalidMint
     )]
-    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         init_if_needed,
         payer = signer,
-        associated_token::mint = usdc_mint,
+        associated_token::mint = mint,
         associated_token::authority = signer,
         associated_token::token_program = token_program
     )]
-    pub user_usdc_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub user_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
+        associated_token::mint = mint,
         associated_token::authority = market,
         associated_token::token_program = token_program
     )]
-    pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     // TODO: Check nft_mint address against the position.mint address.
     /// CHECK: this account is checked by the address constraint
@@ -255,13 +252,13 @@ impl<'info> PositionContext<'info> {
 
         transfer_checked(
             CpiContext::new(self.token_program.to_account_info(), TransferChecked {
-                from: self.user_usdc_ata.to_account_info(),
-                mint: self.usdc_mint.to_account_info(),
-                to: self.market_usdc_vault.to_account_info(),
+                from: self.user_mint_ata.to_account_info(),
+                mint: self.mint.to_account_info(),
+                to: self.market_vault.to_account_info(),
                 authority: self.signer.to_account_info(),
             }),
             net_amount,
-            self.usdc_mint.decimals
+            self.mint.decimals
         )?;
     
         let current_position = market_positions_account.positions[position_index];    
@@ -384,8 +381,8 @@ impl<'info> PayoutNftContext<'info> {
         msg!("Market ID: {}", market.market_id);
         msg!("Market bump: {}", market.bump);
         msg!("Market authority: {}", market.authority);
-        msg!("Market vault: {}", self.market_usdc_vault.key());
-        msg!("Market vault owner: {}", self.market_usdc_vault.owner);
+        msg!("Market vault: {}", self.market_vault.key());
+        msg!("Market vault owner: {}", self.market_vault.owner);
 
         // Check market is resolved
         require!(
@@ -475,31 +472,23 @@ impl<'info> PayoutNftContext<'info> {
             // Transfer payout
             let market_signer: &[&[&[u8]]] = &[&[MARKET.as_bytes(), &market.market_id.to_le_bytes(), &[market.bump]]];
             msg!("Using signer seeds: {:?}", market_signer);
-            msg!("Market vault amount before transfer: {}", self.market_usdc_vault.amount);
-            msg!("User ATA amount before transfer: {}", self.user_usdc_ata.amount);
+            msg!("Market vault amount before transfer: {}", self.market_vault.amount);
+            msg!("User ATA amount before transfer: {}", self.user_mint_ata.amount);
 
             transfer_checked(
                 CpiContext::new_with_signer(
                     self.token_program.to_account_info(),
                     TransferChecked {
-                        from: self.market_usdc_vault.to_account_info(),
-                        mint: self.usdc_mint.to_account_info(),
-                        to: self.user_usdc_ata.to_account_info(),
+                        from: self.market_vault.to_account_info(),
+                        mint: self.mint.to_account_info(),
+                        to: self.user_mint_ata.to_account_info(),
                         authority: market.to_account_info(),
                     },
                     market_signer
                 ),
                 payout,
-                self.usdc_mint.decimals
+                self.mint.decimals
             )?;
-
-            // let nft_signer_seeds: &[&[u8]] = &[
-            //     NFT.as_bytes(),
-            //     &market.market_id.to_le_bytes(),
-            //     &market_positions_account.positions[position_index].position_id.to_le_bytes(),
-            //     &[self.nft_mint.bump],
-            // ];
-
 
             let market_signer_seeds: &[&[u8]] = &[
                 MARKET.as_bytes(),

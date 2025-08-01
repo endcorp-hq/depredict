@@ -191,7 +191,7 @@ describe("depredict", () => {
 
       // Get the market account again for position ID and vault
       const marketAccount = await program.account.marketState.fetch(marketPda);
-      const marketVault = marketAccount.marketUsdcVault;
+      const marketVault = marketAccount.marketVault;
       const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("nft"),
@@ -236,10 +236,10 @@ describe("depredict", () => {
           user: USER,
           amount,
           direction,
-          usdcMint,
+          mint: usdcMint,
           userTokenAccount,
           marketPda,
-          marketUsdcVault: marketVault,
+          marketVault: marketVault,
           positionAccountPda,
           positionNftAccountPda,
           collectionPubkey,
@@ -350,7 +350,7 @@ describe("depredict", () => {
       const { error } = await tryCreatePositionTx({
         user: poorUser,
         userTokenAccount: poorUserTokenAccount,
-        usdcMint,
+        mint: usdcMint,
         amount: new anchor.BN(1_000_000),
         direction: { yes: {} },
         metadataUri: "https://arweave.net/position-metadata",
@@ -393,7 +393,7 @@ describe("depredict", () => {
       const { error } = await tryCreatePositionTx({
         user: noSolUser,
         userTokenAccount: noSolUserTokenAccount,
-        usdcMint,
+        mint: usdcMint,
         amount: new anchor.BN(1_000_000),
         direction: { yes: {} },
         metadataUri: "https://arweave.net/position-metadata",
@@ -438,7 +438,7 @@ describe("depredict", () => {
         return;
       }
       
-      const marketVault = marketAccount.marketUsdcVault;
+      const marketVault = marketAccount.marketVault;
       const collectionPubkey = marketAccount.nftCollection;
       const [configPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("config")],
@@ -449,10 +449,10 @@ describe("depredict", () => {
       const { error } = await tryCreatePositionTx({
         amount: new anchor.BN(1_000_000),
         direction: { yes: {} },
-        usdcMint,
+        mint: usdcMint,
         userTokenAccount,
         marketPda,
-        marketUsdcVault: marketVault,
+        marketVault: marketVault,
         positionAccountPda,
         positionNftAccountPda,
         collectionPubkey,
@@ -500,7 +500,7 @@ describe("depredict", () => {
         return;
       }
       
-      const marketVault = marketAccount.marketUsdcVault;
+      const marketVault = marketAccount.marketVault;
       const collectionPubkey = marketAccount.nftCollection;
       const [configPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("config")],
@@ -511,10 +511,10 @@ describe("depredict", () => {
       const { error } = await tryCreatePositionTx({
         amount: new anchor.BN(1_000_000),
         direction: { yes: {} },
-        usdcMint,
+        mint: usdcMint,
         userTokenAccount,
         marketPda,
-        marketUsdcVault: marketVault,
+        marketVault: marketVault,
         positionAccountPda,
         positionNftAccountPda,
         collectionPubkey,
@@ -564,7 +564,7 @@ describe("depredict", () => {
         return;
       }
       
-      const marketVault = marketAccount.marketUsdcVault;
+      const marketVault = marketAccount.marketVault;
       const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("nft"), 
@@ -584,10 +584,10 @@ describe("depredict", () => {
       const { tx, error } = await tryCreatePositionTx({
         amount: new anchor.BN(1_000_000),
         direction: { yes: {} },
-        usdcMint,
+        mint: usdcMint,
         userTokenAccount,
         marketPda,
-        marketUsdcVault: marketVault,
+        marketVault: marketVault,
         positionAccountPda,
         positionNftAccountPda,
         collectionPubkey,
@@ -640,10 +640,10 @@ describe("depredict", () => {
               user: USER,
               amount: new anchor.BN(1_000_000),
               direction: { yes: {} },
-              usdcMint,
+              mint: usdcMint,
               userTokenAccount,
               marketPda,
-              marketUsdcVault: marketVault,
+              marketVault: marketVault,
               positionAccountPda,
               positionNftAccountPda,
               collectionPubkey,
@@ -696,10 +696,10 @@ type TryCreatePositionParams = {
   user?: typeof USER,
   amount?: anchor.BN,
   direction?: any,
-  usdcMint?: PublicKey,
+  mint?: PublicKey,
   userTokenAccount?: PublicKey,
   marketPda?: PublicKey,
-  marketUsdcVault?: PublicKey,
+  marketVault?: PublicKey,
   positionAccountPda?: PublicKey,
   positionNftAccountPda?: PublicKey,
   collectionPubkey?: PublicKey,
@@ -713,10 +713,10 @@ async function tryCreatePositionTx({
   user = USER,
   amount = new anchor.BN(1_000_000),
   direction = { yes: {} },
-  usdcMint,
+  mint,
   userTokenAccount,
   marketPda,
-  marketUsdcVault,
+  marketVault,
   positionAccountPda,
   positionNftAccountPda,
   collectionPubkey,
@@ -737,9 +737,9 @@ async function tryCreatePositionTx({
         feeVault: FEE_VAULT.publicKey,
         marketPositionsAccount: positionAccountPda,
         market: marketPda,
-        usdcMint: usdcMint,
-        userUsdcAta: userTokenAccount,
-        marketUsdcVault: marketUsdcVault,
+        mint: mint,
+        userMintAta: userTokenAccount,
+        marketVault: marketVault,
         positionNftAccount: positionNftAccountPda,
         collection: collectionPubkey,
         mplCoreProgram: mplCoreProgram,

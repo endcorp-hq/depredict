@@ -2,18 +2,13 @@ import { Program, BN, web3 } from "@coral-xyz/anchor";
 import { Depredict } from "./types/depredict.js";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { getConfigPDA } from "./utils/pda/index.js";
-import Trade from "./trade.js";
 
 export default class Config {
   ADMIN_KEY: PublicKey;
   FEE_VAULT: PublicKey;
-  USDC_MINT: PublicKey;
-  trade: Trade;
-  constructor(private program: Program<Depredict>, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
+  constructor(private program: Program<Depredict>, adminKey: PublicKey, feeVault: PublicKey) {
     this.ADMIN_KEY = adminKey;
     this.FEE_VAULT = feeVault;
-    this.USDC_MINT = usdcMint;
-    this.trade = new Trade(this.program, this.ADMIN_KEY, this.FEE_VAULT, this.USDC_MINT);
   }
 
   /**
@@ -134,7 +129,7 @@ export default class Config {
    */
   async closeConfig(payer: PublicKey) {
     const configPDA = getConfigPDA(this.program.programId);
-    const markets = await this.trade.getAllMarkets();
+    const markets = await this.program.account.marketState.all();
     if(markets.length > 0){
       throw new Error("Cannot close config with active markets");
     }

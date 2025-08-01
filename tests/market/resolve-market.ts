@@ -114,7 +114,7 @@ describe("Market Resolution", () => {
       return; // Skip this test if market doesn't exist
     }
 
-    console.log("Market USDC VAULT:", marketAccountBefore.marketUsdcVault.toString());
+    console.log("Market USDC VAULT:", marketAccountBefore.marketVault.toString());
     
     // Check the oracle type from the market
     const oracleType = marketAccountBefore.oracleType;
