@@ -70,7 +70,7 @@ describe("depredict", () => {
         throw error;
       }
 
-      console.log("Market USDC VAULT:", marketAccountBefore.marketUsdcVault.toString());
+      console.log("Market USDC VAULT:", marketAccountBefore.marketVault.toString());
 
       // Get the position account PDA
       const [positionAccountPda] = PublicKey.findProgramAddressSync(
@@ -193,7 +193,7 @@ describe("depredict", () => {
             marketPositionsAccount: positionAccountPda,
             nftMint: asset.publicKey,
             userUsdcAta: userUsdcAta,
-            marketUsdcVault: marketVault,
+            marketVault: marketVault,
             usdcMint: usdcMint,
             tokenProgram: TOKEN_PROGRAM_ID,
             collection: collection,

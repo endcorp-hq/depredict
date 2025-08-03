@@ -1,0 +1,200 @@
+# Architecture & Technical Details
+
+This page provides a detailed overview of the Depredict protocol's technical architecture and implementation.
+
+---
+
+## Protocol Overview
+
+Depredict is built on Solana using the Anchor framework, with three main components:
+
+1. **On-chain Program** (`programs/depredict/`): Rust smart contracts
+2. **TypeScript SDK** (`sdk/`): Client library for protocol interaction
+3. **Documentation** (`depredict-docs/`): Guides and API reference
+
+---
+
+## Smart Contract Architecture
+
+### Core Accounts
+
+#### Config Account
+- **Purpose**: Protocol-wide configuration and fee management
+- **Key Fields**:
+  - `fee_amount`: Protocol fee in basis points
+  - `authority`: Admin authority for config updates
+  - `fee_vault`: Address to receive protocol fees
+  - `next_market_id`: Auto-incrementing market ID
+
+#### Market State Account
+- **Purpose**: Individual market data and state
+- **Key Fields**:
+  - `market_id`: Unique market identifier
+  - `question`: Market question (max 80 characters)
+  - `market_start/end`: Market timing
+  - `betting_start`: When trading begins (for future markets)
+  - `oracle_type`: Switchboard or manual resolution
+  - `market_type`: Live or future market
+  - `yes_liquidity/no_liquidity`: Current liquidity pools
+  - `next_position_id`: Auto-incrementing position ID
+  - `mint`: Token used for trading (defaults to USDC)
+
+#### Position Account
+- **Purpose**: User positions within a market
+- **Key Fields**:
+  - `market_id`: Associated market
+  - `authority`: Position owner
+  - `positions`: Array of individual positions
+  - `nonce`: Account nonce for sub-accounts
+
+#### Position NFT
+- **Purpose**: Individual position representation
+- **Implementation**: MPL Core NFT with metadata
+- **Key Fields**:
+  - `position_id`: Unique position identifier
+  - `direction`: YES or NO position
+  - `amount`: Position size
+  - `status`: OPEN, WAITING, SETTLED, etc.
+
+---
+
+## Market Types
+
+### Live Markets
+- **Start**: Trading begins immediately when market is created
+- **Use Case**: Real-time events, breaking news, etc.
+
+### Future Markets
+- **Start**: Trading begins at a specified future time
+- **Use Case**: Scheduled events, elections, etc.
+
+---
+
+## Oracle Integration
+
+### Switchboard Oracle
+- **Usage**: Automated, decentralized resolution
+- **Cost**: ~$0.15 per resolution
+- **Setup**: Requires oracle pubkey during market creation
+
+### Manual Resolution
+- **Usage**: Admin-controlled resolution
+- **Cost**: Gas fees only
+- **Process**: Admin calls `resolveMarket` with outcome
+
+---
+
+## Token Integration
+
+### Automatic Token Swapping
+- **Feature**: Users can trade with any SPL token
+- **Process**: Automatic conversion to market's base token
+- **Implementation**: Jupiter aggregator integration
+
+### Fee Structure
+- **Protocol Fee**: Configurable percentage of trade volume
+- **Oracle Fee**: Per-resolution cost for Switchboard markets
+- **NFT Minting**: ~0.002 SOL per position
+
+---
+
+## Position Management
+
+### NFT-Powered Positions
+- **Technology**: MPL Core for NFT minting
+- **Benefits**:
+  - True ownership and transferability
+  - Secondary market trading
+  - Composability with other protocols
+
+### Position Lifecycle
+1. **Creation**: User opens position, NFT is minted
+2. **Trading**: Position can be transferred or held
+3. **Resolution**: Market outcome determines position value
+4. **Settlement**: User claims payout by burning NFT
+
+### Sub-Position Accounts
+- **Purpose**: Handle multiple positions per user per market
+- **Implementation**: Hierarchical account structure
+- **Benefits**: Efficient storage and gas optimization
+
+---
+
+## Security Features
+
+### Access Control
+- **Config Authority**: Controls protocol parameters
+- **Market Authority**: Controls individual market settings
+- **Position Authority**: Controls individual positions
+
+### Validation
+- **Market State**: Prevents invalid state transitions
+- **Timing**: Enforces market start/end times
+- **Liquidity**: Ensures sufficient liquidity for trades
+
+### Error Handling
+- **Custom Errors**: Specific error types for different scenarios
+- **Graceful Degradation**: Markets can be paused or closed
+- **Recovery Mechanisms**: Admin tools for emergency situations
+
+---
+
+## Performance Considerations
+
+### Gas Optimization
+- **PDA Usage**: Program-derived addresses for deterministic account creation
+- **Batch Operations**: Multiple operations in single transaction
+- **Account Reuse**: Efficient account structure design
+
+### Scalability
+- **Parallel Processing**: Solana's concurrent transaction processing
+- **State Management**: Efficient account state updates
+- **Memory Usage**: Optimized data structures
+
+---
+
+## Development Workflow
+
+### Local Development
+```bash
+# Build program
+anchor build
+
+# Run tests
+anchor run test-runner-continue
+
+# Deploy to localnet
+anchor deploy
+```
+
+### SDK Development
+```bash
+cd sdk
+yarn install
+yarn build
+```
+
+### Documentation
+```bash
+cd depredict-docs
+yarn install
+yarn dev
+```
+
+---
+
+## Integration Points
+
+### External Protocols
+- **Jupiter**: Token swapping and aggregation
+- **Switchboard**: Oracle data feeds
+- **MPL Core**: NFT minting and management
+
+### Developer Tools
+- **Anchor**: Framework for Solana development
+- **TypeScript**: SDK and tooling
+- **Vocs**: Documentation site generation
+
+---
+
+This architecture provides a robust, scalable foundation for decentralized prediction markets while maintaining security, performance, and developer experience. 

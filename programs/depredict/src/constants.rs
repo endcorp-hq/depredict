@@ -1,5 +1,3 @@
-
-pub const USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; //devnet USDC
 pub const CONFIG: &str = "config";
 pub const MARKET: &str = "market";
 pub const POSITION: &str = "position";

@@ -11,6 +11,9 @@ export * from './types/trade.js'
 export * from './types/position.js'
 export * from './types/index.js'
 
+// Re-export constants
+export * from './utils/constants.js'
+
 export default class DepredictClient {
   program: Program<Depredict>
   trade: Trade
@@ -18,16 +21,14 @@ export default class DepredictClient {
   position: Position
   ADMIN_KEY: PublicKey
   FEE_VAULT: PublicKey
-  USDC_MINT: PublicKey
   
-  constructor(connection: Connection, adminKey: PublicKey, feeVault: PublicKey, usdcMint: PublicKey) {
+  constructor(connection: Connection, adminKey: PublicKey, feeVault: PublicKey) {
     this.program = new Program(IDL as Depredict, { connection })
-    this.trade = new Trade(this.program, adminKey, feeVault, usdcMint)
+    this.trade = new Trade(this.program, adminKey, feeVault)
     this.position = new Position(this.program)
-    this.config = new Config(this.program, adminKey, feeVault, usdcMint)
+    this.config = new Config(this.program, adminKey, feeVault)
     this.ADMIN_KEY = adminKey
     this.FEE_VAULT = feeVault
-    this.USDC_MINT = usdcMint
   }
 }
 

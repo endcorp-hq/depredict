@@ -9,7 +9,7 @@ The main entry point for interacting with the Depredict protocol.
 ```typescript
 import DepredictClient from '@endcorp/depredict';
 
-const client = new DepredictClient(connection, adminKey, feeVault, usdcMint);
+const client = new DepredictClient(connection, adminKey, feeVault);
 ```
 
 ### Properties
@@ -21,13 +21,17 @@ const client = new DepredictClient(connection, adminKey, feeVault, usdcMint);
 
 ## Trade Methods
 
+### Market Operations
 - `getAllMarkets()`: Get all markets
 - `getMarketById(marketId)`: Get market by ID
+- `getMarketByAddress(address)`: Get market by PDA address
 - `createMarket(args)`: Create a new market
-- `openPosition(args)`: Open a new position/order
 - `resolveMarket({ marketId, payer, resolutionValue? })`: Resolve a market
-- `closeMarket(marketId, payer)`: Close a market
-- `updateMarket(marketId, marketEnd, payer)`: Update a market's end time
+- `closeMarket(marketId, payer)`: Close a market and collect remaining liquidity
+- `updateMarket(marketId, payer, marketEnd?, marketState?)`: Update a market's end time or state
+
+### Position Operations
+- `openPosition(args)`: Open a new position/order
 - `payoutPosition(marketId, payer, positionId, positionNonce)`: Settle a position and claim payout
 
 ---
@@ -36,7 +40,9 @@ const client = new DepredictClient(connection, adminKey, feeVault, usdcMint);
 
 - `createConfig(feeAmount, payer)`: Initialize protocol config
 - `getConfig()`: Fetch protocol config
-- `updateConfig(payer, feeAmount?, authority?, feeVault?)`: Update config
+- `updateFee(feeAmount)`: Update fee amount
+- `updateFeeVault(newFeeVault)`: Update fee vault address
+- `updateAuthority(newAuthority)`: Update config authority
 - `closeConfig(payer)`: Close config (if no active markets)
 
 ---
@@ -46,6 +52,25 @@ const client = new DepredictClient(connection, adminKey, feeVault, usdcMint);
 - `getPositionsAccountsForMarket(marketId)`: Get all position accounts for a market
 - `getPositionsAccountPda(marketId, positionNonce?)`: Get PDA for a position account
 - `getPositionAccountIxs(marketId, payer)`: Get instructions for position account creation/lookup
+- `createSubPositionAccount(marketId, payer, marketAddress, options?)`: Create sub-position account
+
+---
+
+## Market Types
+
+### Market States
+- `ACTIVE`: Market is open for trading
+- `ENDED`: Market has ended, no new positions
+- `RESOLVING`: Market is being resolved
+- `RESOLVED`: Market has been resolved
+
+### Market Types
+- `LIVE`: Market starts immediately
+- `FUTURE`: Market starts at a future time
+
+### Oracle Types
+- `SWITCHBOARD`: Uses Switchboard oracle for resolution
+- `MANUAL`: Manual resolution by admin
 
 ---
 

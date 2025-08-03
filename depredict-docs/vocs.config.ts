@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'dePredict Docs',
   topNav: [
     { text: 'Getting Started', link: '/getting-started', match: '/getting-started' },
+    { text: 'Architecture', link: '/architecture', match: '/architecture' },
     { text: 'GitHub', link: 'https://github.com/endcorp-hq/depredict' },
     { text: 'END Corp.', link: 'https://endcorp.co' }
   ],
@@ -15,6 +16,10 @@ export default defineConfig({
     {
       text: 'Getting Started',
       link: '/getting-started',
+    },
+    {
+      text: 'Architecture',
+      link: '/architecture',
     },
     {
       text: 'SDK API Reference',

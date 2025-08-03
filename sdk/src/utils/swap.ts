@@ -6,19 +6,20 @@ import {
   TransactionInstruction,
   ComputeBudgetProgram
 } from '@solana/web3.js'
+import { TOKEN_MINTS, TOKEN_DECIMALS } from './constants.js'
 
 export const swap = async ({
   connection,
   wallet,
   inToken,
   amount,
-  usdcMint
+  mint
 }: {
   connection: Connection
   wallet: string
   inToken: string
   amount: number
-  usdcMint: string
+  mint: string
 }) => {
   const token = TOKENS[inToken]
 
@@ -29,7 +30,7 @@ export const swap = async ({
   const formattedAmountIn = amount * 10 ** token.decimals
 
   const quoteResponse = await axios.get(
-    `https://quote-api.jup.ag/v6/quote?inputMint=${inToken}&outputMint=${usdcMint}&amount=${formattedAmountIn}&slippageBps=1000`
+    `https://quote-api.jup.ag/v6/quote?inputMint=${inToken}&outputMint=${mint}&amount=${formattedAmountIn}&slippageBps=1000`
   )
 
   const { data: quoteData } = quoteResponse
@@ -63,7 +64,7 @@ export const swap = async ({
     ),
     setupInstructions: setupInstructions.map(deserializeInstruction),
     cleanupInstruction: deserializeInstruction(cleanupInstruction),
-    usdcAmount: quoteData.outAmount
+    mintAmount: quoteData.outAmount
   }
 }
 
@@ -103,12 +104,20 @@ export const getAddressLookupTableAccounts = async (
 }
 
 const TOKENS: Record<string, { mint: string; decimals: number }> = {
-  So11111111111111111111111111111111111111112: {
-    mint: 'So11111111111111111111111111111111111111112',
-    decimals: 9
+  [TOKEN_MINTS.SOL.toBase58()]: {
+    mint: TOKEN_MINTS.SOL.toBase58(),
+    decimals: TOKEN_DECIMALS[TOKEN_MINTS.SOL.toBase58()]
   },
-  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: {
-    mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-    decimals: 6
+  [TOKEN_MINTS.USDC_MAINNET.toBase58()]: {
+    mint: TOKEN_MINTS.USDC_MAINNET.toBase58(),
+    decimals: TOKEN_DECIMALS[TOKEN_MINTS.USDC_MAINNET.toBase58()]
+  },
+  [TOKEN_MINTS.USDC_DEVNET.toBase58()]: {
+    mint: TOKEN_MINTS.USDC_DEVNET.toBase58(),
+    decimals: TOKEN_DECIMALS[TOKEN_MINTS.USDC_DEVNET.toBase58()]
+  },
+  [TOKEN_MINTS.BONK.toBase58()]: {
+    mint: TOKEN_MINTS.BONK.toBase58(),
+    decimals: TOKEN_DECIMALS[TOKEN_MINTS.BONK.toBase58()]
   }
 }

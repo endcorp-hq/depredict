@@ -11,14 +11,15 @@ npm install @endcorp/depredict
 ## Usage Example
 
 ```typescript
-import { Connection } from '@solana/web3.js';
-import { Wallet } from '@coral-xyz/anchor';
+import { Connection, PublicKey } from '@solana/web3.js';
 import DepredictClient from '@endcorp/depredict';
 
 // Initialize the client
 const connection = new Connection('https://api.devnet.solana.com');
-const wallet = new Wallet(/* your wallet */);
-const client = new DepredictClient(connection, wallet);
+const adminKey = new PublicKey('...'); // Your admin public key
+const feeVault = new PublicKey('...'); // Your fee vault public key
+
+const client = new DepredictClient(connection, adminKey, feeVault);
 
 // Example: Get all markets
 const markets = await client.trade.getAllMarkets();
@@ -27,6 +28,7 @@ const markets = await client.trade.getAllMarkets();
 ## Features
 
 - Create and manage prediction markets
-- Place and manage orders
-- View market data and order books
-- Handle user trades and positions
+- Place and manage positions
+- View market data and liquidity
+- Handle user trades and NFT positions
+- Protocol configuration management

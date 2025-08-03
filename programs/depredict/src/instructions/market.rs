@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
@@ -29,7 +28,7 @@ use mpl_core::{
 
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
-    MARKET, NFT_COLLECTION, POSITION, USDC_MINT
+    MARKET, NFT_COLLECTION, POSITION
     }, 
     constraints::{
         get_oracle_value, 
@@ -91,19 +90,20 @@ pub struct MarketContext<'info> {
     pub collection: UncheckedAccount<'info>,
 
     #[account(
-        mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
+        mut,
+        // check that the mint is owned by the token program
+        owner = token_program.key() @ DepredictError::InvalidMint
     )]
-    pub usdc_mint: InterfaceAccount<'info, Mint>,
+    pub mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         init,
         payer = payer,
-        associated_token::mint = usdc_mint,
+        associated_token::mint = mint,
         associated_token::authority = market,
         associated_token::token_program = token_program
     )]
-    pub market_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
      /// CHECK: this account is checked by the address constraint and in MPL core.
      #[account(
@@ -170,10 +170,10 @@ pub struct CloseMarketContext<'info> {
     #[account(
         init_if_needed,
         payer = signer,
-        associated_token::mint = usdc_mint,
+        associated_token::mint = mint,
         associated_token::authority = fee_vault
     )]
-    pub fee_vault_usdc_ata: InterfaceAccount<'info, TokenAccount>,
+    pub fee_vault_mint_ata: InterfaceAccount<'info, TokenAccount>,
 
     // Market must exist and match args.market_id
     #[account(
@@ -187,14 +187,15 @@ pub struct CloseMarketContext<'info> {
     // Mint needed for ATA derivation and transfer checks
     #[account(
         mut, 
-        constraint = usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap() @ DepredictError::InvalidMint
+        // check that the mint is owned by the token program
+        owner = token_program.key() @ DepredictError::InvalidMint
     )]
-    pub usdc_mint: InterfaceAccount<'info, Mint>,
+    pub mint: InterfaceAccount<'info, Mint>,
 
     // Market vault to close, must exist
     #[account(
         mut,
-        associated_token::mint = usdc_mint,
+        associated_token::mint = mint,
         associated_token::authority = market,
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -236,8 +237,7 @@ impl<'info> MarketContext<'info> {
             }
         }
 
-        msg!("Checking USDC mint is valid");
-        require!(self.usdc_mint.key() == Pubkey::from_str(USDC_MINT).unwrap(), DepredictError::InvalidMint);
+        msg!("Checking mint is valid");
 
 
         let market_id = config.next_market_id();
@@ -260,7 +260,9 @@ impl<'info> MarketContext<'info> {
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
-            market_usdc_vault: Some(self.market_usdc_vault.key()),
+            market_vault: Some(self.market_vault.key()),
+            mint: Some(self.mint.key()),
+            decimals: self.mint.decimals,
             oracle_type: args.oracle_type,
             oracle_pubkey: oracle_pubkey,
             ..Default::default()
@@ -457,14 +459,14 @@ impl<'info> CloseMarketContext<'info> {
                     self.token_program.to_account_info(),
                     TransferChecked {
                         from: self.market_vault.to_account_info(),
-                        mint: self.usdc_mint.to_account_info(),
-                        to: self.fee_vault_usdc_ata.to_account_info(),
+                        mint: self.mint.to_account_info(),
+                        to: self.fee_vault_mint_ata.to_account_info(),
                         authority: self.market.to_account_info(), // Market PDA is authority
                     },
                     market_signer,
                 ),
                 self.market_vault.amount,
-                self.usdc_mint.decimals,
+                self.mint.decimals,
             )?;
         }
 

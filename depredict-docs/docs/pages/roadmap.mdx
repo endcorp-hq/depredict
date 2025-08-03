@@ -11,6 +11,8 @@ We use [MPL Core](https://www.metaplex.com/core) to represent all markets and po
 - **Transferable and composable**
 - **Immutable and censorship-resistant**
 
+**Current Implementation:** All positions are minted as NFTs, providing true ownership and enabling secondary market trading.
+
 **Challenge:** Each NFT costs about 0.002 SOL (roughly $0.30 at the time of writing). This is a significant cost for high-frequency or micro markets.
 
 ---
@@ -20,6 +22,9 @@ We use [MPL Core](https://www.metaplex.com/core) to represent all markets and po
 We leverage [Switchboard](https://switchboard.xyz/) for decentralized, trustless market resolution. This enables:
 - Automated, on-chain outcome resolution
 - Support for a wide range of data feeds
+- Manual resolution option for admin-controlled markets
+
+**Current Implementation:** Markets can be configured for either Switchboard oracle resolution or manual resolution by the admin.
 
 **Challenge:** Each oracle resolution costs about $0.15. For example, running an hourly market on the weather in one location would cost ~$100/month (24 x 30 x $0.15). This limits the viability of high-frequency, low-stakes markets.
 
