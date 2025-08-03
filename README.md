@@ -9,6 +9,52 @@ Depredict is a decentralized prediction market protocol on Solana. Anyone can sp
 
 `Program ID: DePrXVZYoWZkUwayZkp9sxJDUavCPai1Xexv1mmFzXYG`
 
+## 📁 Repository Map
+
+This is a monorepo containing all components of the Depredict ecosystem:
+
+### 🏗️ Core Components
+
+| Component | Location | Description | Tech Stack |
+|-----------|----------|-------------|------------|
+| **On-chain Program** | [`programs/depredict/`](./programs/depredict/) | Solana smart contracts for prediction markets | Rust, Anchor |
+| **TypeScript SDK** | [`sdk/`](./sdk/) | Client library for protocol interaction | TypeScript, Solana Web3.js |
+| **Documentation** | [`depredict-docs/`](./depredict-docs/) | Comprehensive guides and API docs | Vocs, React |
+
+### 🛠️ Development & Testing
+
+| Directory | Purpose |
+|-----------|---------|
+| [`tests/`](./tests/) | Integration tests and test utilities |
+| [`deploy/`](./deploy/) | Deployment scripts and configuration |
+| [`migrations/`](./migrations/) | Database and state migrations |
+| [`Anchor.toml`](./Anchor.toml) | Anchor framework configuration |
+
+### 📦 Package Structure
+
+```
+depredict/
+├── 📄 Anchor.toml              # Anchor configuration & test scripts
+├── 📄 package.json             # Root dependencies & scripts
+├── 🦀 programs/depredict/      # Solana smart contracts
+│   ├── src/instructions/       # Program instructions
+│   ├── src/state/             # Account state structures
+│   └── Cargo.toml             # Rust dependencies
+├── 📚 sdk/                     # TypeScript SDK
+│   ├── src/types/             # TypeScript definitions
+│   ├── src/utils/             # Utility functions
+│   └── package.json           # SDK package config
+├── 📖 depredict-docs/          # Documentation site
+│   ├── docs/pages/            # Documentation pages
+│   └── package.json           # Docs dependencies
+├── 🧪 tests/                   # Integration tests
+│   ├── market/                # Market-related tests
+│   ├── trade/                 # Trading tests
+│   └── helpers.ts             # Test utilities
+├── 🚀 deploy/                  # Deployment scripts
+└── 🔄 migrations/              # State migrations
+```
+
 ---
 
 ## 🚀 Quick Start: Launch Your Own Market
@@ -48,7 +94,7 @@ For more details, see the [Getting Started Guide](https://depredict.vercel.app/g
 
 We welcome contributions to the Depredict protocol and SDK!
 
-### Setup
+### Quick Start
 
 1. **Clone the repo:**
    ```bash
@@ -68,10 +114,17 @@ We welcome contributions to the Depredict protocol and SDK!
 
 4. **Run tests:**
    ```bash
-   anchor test
+   anchor run test-runner-continue
    ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
+### Development Workflow
+
+- **On-chain Program**: Work in `programs/depredict/` for smart contract changes
+- **SDK**: Work in `sdk/` for TypeScript client library updates
+- **Documentation**: Work in `depredict-docs/` for guides and API docs
+- **Tests**: Add integration tests in `tests/` directory
+
+📖 **For detailed guidelines, see [CONTRIBUTING.md](./CONTRIBUTING.md)**
 
 ---
 
@@ -89,4 +142,3 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
 ---
 
 MIT License
-
