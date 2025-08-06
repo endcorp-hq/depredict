@@ -53,12 +53,11 @@ export default class Trade {
 
   /**
    * Get All Markets
-   *
+   * @returns Markets
    */
   async getAllMarkets() {
     try {
       const marketV2 = await this.program.account.marketState.all();
-      console.log("SDK:marketV2", marketV2);
       return marketV2.map(({ account, publicKey }) =>
         formatMarket(account, publicKey)
       );
@@ -69,9 +68,25 @@ export default class Trade {
   }
 
   /**
+   * Get Markets By Authority
+   * @param authority - The authority of the markets
+   * (The idea is that every platform can query their own markets)
+   * @returns Markets
+   */
+  async getMarketsByAuthority(authority: PublicKey) {
+    const markets = await this.program.account.marketState.all();
+    const filteredMarkets = markets.filter((market) =>
+      market.account.authority.equals(authority)
+    );
+    return filteredMarkets.map(({ account, publicKey }) =>
+      formatMarket(account, publicKey)
+    );
+  }
+
+  /**
    * Get Market By Market ID
    * @param marketId - The ID of the market
-   *
+   * @returns Market
    */
   async getMarketById(marketId: number) {
     const marketPDA = getMarketPDA(this.program.programId, marketId);
@@ -82,7 +97,7 @@ export default class Trade {
   /**
    * Get Market By Address
    * @param address - The address of the market PDA
-   *
+   * @returns Market
    */
   async getMarketByAddress(address: PublicKey) {
     const account = await this.program.account.marketState.fetch(address);
@@ -100,7 +115,7 @@ export default class Trade {
    * @param args.payer - payer
    * @param args.oracleType - oracle type (manual or switchboard)
    * @param options - RPC options
-   *
+   * @returns Transaction, marketId
    */
   async createMarket(
     {
@@ -225,17 +240,10 @@ export default class Trade {
    * @param args.payer - The payer of the Order
    * @param args.metadataUri - The metadata URI of the Order NFT
    * @param options - RPC options
-   *
+   * @returns Transaction, addressLookupTableAccounts || null (if no swap)
    */
   async openPosition(
-    {
-      marketId,
-      amount,
-      direction,
-      token,
-      payer,
-      metadataUri,
-    }: OpenOrderArgs,
+    { marketId, amount, direction, token, payer, metadataUri }: OpenOrderArgs,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
@@ -308,7 +316,7 @@ export default class Trade {
       ixs.push(
         await this.program.methods
           .createPosition({
-          amount: new BN(amountInMint),
+            amount: new BN(amountInMint),
             direction: direction,
             metadataUri: metadataUri,
           })
@@ -357,7 +365,6 @@ export default class Trade {
     const oracleType = marketAccount.oracleType;
     const oraclePubkey = marketAccount.oraclePubkey;
 
-
     if (!oraclePubkey && "switchboard" in oracleType) {
       throw new Error("Market has no oracle pubkey");
     }
@@ -388,6 +395,7 @@ export default class Trade {
   }
 
   /**
+   * WIP: Not implemented yet
    * Close Market and related accounts to collect remaining liquidity
    * @param marketId - The ID of the market
    * @param payer - The payer of the Market
@@ -400,7 +408,9 @@ export default class Trade {
     const marketPDA = getMarketPDA(this.program.programId, marketId);
 
     // Get the market account to access its mint
-    const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPDA
+    );
     if (!marketAccount.mint) {
       throw new Error(`Market ${marketId} does not have a mint configured`);
     }
@@ -488,28 +498,32 @@ export default class Trade {
       throw new Error("Market state cannot be resolved");
     }
 
-    try{
-    ixs.push(
-      await this.program.methods
-        .updateMarket({
-          marketEnd: marketEnd ? new BN(marketEnd) : null,
-          marketState:
-            marketState == MarketStates.ACTIVE
-              ? { active: {} }
-              : marketState == MarketStates.ENDED
-              ? { ended: {} }
-              : marketState == MarketStates.RESOLVING
-              ? { resolving: {} }
-              : null,
-        })
-        .accounts({
-          signer: payer,
-          market: getMarketPDA(this.program.programId, marketId),
-        })
+    try {
+      ixs.push(
+        await this.program.methods
+          .updateMarket({
+            marketEnd: marketEnd ? new BN(marketEnd) : null,
+            marketState:
+              marketState == MarketStates.ACTIVE
+                ? { active: {} }
+                : marketState == MarketStates.ENDED
+                ? { ended: {} }
+                : marketState == MarketStates.RESOLVING
+                ? { resolving: {} }
+                : null,
+          })
+          .accounts({
+            signer: payer,
+            market: getMarketPDA(this.program.programId, marketId),
+          })
           .instruction()
       );
 
-      const updateMarketTx = await createVersionedTransaction(this.program, ixs, payer);
+      const updateMarketTx = await createVersionedTransaction(
+        this.program,
+        ixs,
+        payer
+      );
       return updateMarketTx;
     } catch (error) {
       console.log("error", error);
@@ -529,7 +543,9 @@ export default class Trade {
     const marketPda = getMarketPDA(this.program.programId, marketId);
 
     // Get the market account to access its mint
-    const marketAccount = await this.program.account.marketState.fetch(marketPda);
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPda
+    );
     if (!marketAccount.mint) {
       throw new Error(`Market ${marketId} does not have a mint configured`);
     }
