@@ -14,7 +14,8 @@ import {
   LOCAL_MINT, 
   ORACLE_KEY, 
   updateMarketIds,
-  extractErrorCode 
+  extractErrorCode,
+  ensureAllAccountsFunded
 } from "./helpers";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
@@ -30,6 +31,9 @@ describe("Market Setup", () => {
     isDevnet = networkConfig.isDevnet;
     isLocalnet = !isDevnet;
     console.log(`Setting up markets on ${isDevnet ? "devnet" : "localnet"}`);
+
+    // Ensure all accounts are properly funded
+    await ensureAllAccountsFunded();
 
     // Get config PDA
     configPda = PublicKey.findProgramAddressSync(
@@ -96,7 +100,7 @@ describe("Market Setup", () => {
           collection: collectionPda,
           marketPositionsAccount: marketPositionsPda,
           oraclePubkey: oraclePubkey,
-          usdcMint: LOCAL_MINT.publicKey,
+          mint: LOCAL_MINT.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           config: configPda,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

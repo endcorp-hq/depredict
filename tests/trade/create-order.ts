@@ -7,7 +7,7 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, FEE_VAULT, program, provider, USER, getCurrentMarketId, getMarketIdByState, ADMIN, LOCAL_MINT } from "../helpers";
+import { getNetworkConfig, FEE_VAULT, program, provider, USER, getCurrentMarketId, getMarketIdByState, ADMIN, LOCAL_MINT, ensureAllAccountsFunded } from "../helpers";
 
 import { fetchAsset, MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { fetchCollection } from '@metaplex-foundation/mpl-core'
@@ -31,35 +31,8 @@ describe("depredict", () => {
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
     console.log("USER:", USER.publicKey.toString());
 
-    // Ensure USER has enough SOL for rent and fees by transferring from local wallet if needed
-    const userBalance = await provider.connection.getBalance(USER.publicKey);
-    const minBalance = 2_000_000_000; // 2 SOL to cover NFT rent + fees
-    if (userBalance < minBalance) {
-      // Check if local wallet has enough SOL
-      const localWalletBalance = await provider.connection.getBalance(localKeypair.publicKey);
-      const requiredAmount = 3 * LAMPORTS_PER_SOL;
-      
-      if (localWalletBalance < requiredAmount) {
-        console.log("Local wallet needs more SOL. Current balance:", localWalletBalance / LAMPORTS_PER_SOL, "SOL");
-        console.log("Required:", requiredAmount / LAMPORTS_PER_SOL, "SOL");
-        console.log("Please fund the local wallet or run: solana airdrop 5", localKeypair.publicKey.toString());
-        throw new Error("Insufficient SOL in local wallet for testing");
-      }
-      
-      console.log("Transferring 3 SOL from local wallet to USER...");
-      const recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-      const transferIx = SystemProgram.transfer({
-        fromPubkey: localKeypair.publicKey,
-        toPubkey: USER.publicKey,
-        lamports: requiredAmount,
-      });
-      const transaction = new anchor.web3.Transaction().add(transferIx);
-      transaction.recentBlockhash = recentBlockhash;
-      transaction.feePayer = localKeypair.publicKey;
-      const signature = await provider.connection.sendTransaction(transaction, [localKeypair]);
-      await provider.connection.confirmTransaction(signature);
-      console.log("Transfer to USER successful");
-    }
+    // Ensure all accounts are properly funded
+    await ensureAllAccountsFunded();
 
     // Get the USDC mint
     usdcMint = LOCAL_MINT.publicKey;
@@ -77,31 +50,6 @@ describe("depredict", () => {
     const finalLocalBalance = await provider.connection.getBalance(localKeypair.publicKey);
     console.log("USER balance:", finalUserBalance / LAMPORTS_PER_SOL, "SOL");
     console.log("Local wallet balance:", finalLocalBalance / LAMPORTS_PER_SOL, "SOL");
-    
-    // Fund MPL Core program account if needed (for localnet)
-    const mplCoreProgramId = new PublicKey(MPL_CORE_PROGRAM_ID.toString());
-    const mplCoreBalance = await provider.connection.getBalance(mplCoreProgramId);
-    console.log("MPL Core program balance:", mplCoreBalance / LAMPORTS_PER_SOL, "SOL");
-    
-    // Fund MPL Core more generously for localnet testing
-    if (mplCoreBalance < 5_000_000_000) { // Less than 5 SOL
-      console.log("Funding MPL Core program account with 10 SOL...");
-      const recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-      const transferIx = SystemProgram.transfer({
-        fromPubkey: localKeypair.publicKey,
-        toPubkey: mplCoreProgramId,
-        lamports: 10 * LAMPORTS_PER_SOL,
-      });
-      const transaction = new anchor.web3.Transaction().add(transferIx);
-      transaction.recentBlockhash = recentBlockhash;
-      transaction.feePayer = localKeypair.publicKey;
-      const signature = await provider.connection.sendTransaction(transaction, [localKeypair]);
-      await provider.connection.confirmTransaction(signature);
-      console.log("MPL Core program funded successfully");
-      
-      const newMplCoreBalance = await provider.connection.getBalance(mplCoreProgramId);
-      console.log("MPL Core program new balance:", newMplCoreBalance / LAMPORTS_PER_SOL, "SOL");
-    }
 
     // Defensive check: Create user's USDC token account
     try {

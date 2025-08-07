@@ -82,7 +82,7 @@ async function tryCreateMarketTx({
         collection: collectionPda,
         marketPositionsAccount: marketPositionsPda,
         oraclePubkey: oraclePubkey,
-        usdcMint: usdcMintToUse,
+        mint: usdcMintToUse,
         tokenProgram: TOKEN_PROGRAM_ID,
         config: configPda,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

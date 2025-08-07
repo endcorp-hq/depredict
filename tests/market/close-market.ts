@@ -82,7 +82,7 @@ describe("depredict", () => {
           signer: admin.publicKey,
           feeVault: feeVault.publicKey,
           market: marketPda,
-          usdcMint: localMintPubkey,
+          mint: localMintPubkey,
           config: configPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
