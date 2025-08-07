@@ -10,7 +10,7 @@ mod events;
 use state::*;
 use instructions::*;
 
-declare_id!("7w43ZtEh1vdmiCFkuVMRni3s1gq7DJiu1N5N5AuRu59r");
+declare_id!("deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU");
 
 #[program]
 pub mod depredict {
@@ -95,5 +95,5 @@ security_txt! {
     // Optional Fields
     preferred_languages: "en",
     source_code: "https://github.com/endcorp-hq/depredict",
-    source_revision: "5vJwnLeyjV8uNJSp1zn7VLW8GwiQbcsQbGaVSwRmkE4r"
+    source_revision: "53f53f528e83e48ef7db97bc07593918d162daa3"
 }

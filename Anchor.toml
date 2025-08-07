@@ -8,10 +8,13 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-depredict = "7w43ZtEh1vdmiCFkuVMRni3s1gq7DJiu1N5N5AuRu59r"
+depredict = "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU"
 
 [programs.localnet]
 depredict = "xxPh89tXRKwKox7CijrQHHSAmz3TKP7DgF5x8uEazfu"
+
+[programs.mainnet]
+depredict = "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU"
 
 [registry]
 url = "https://api.apr.dev"
