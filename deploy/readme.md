@@ -15,7 +15,7 @@ For devnet:
 `solana program deploy -u devnet target/deploy/depredict.so --program-id target/deploy/depredict-keypair.json --with-compute-unit-price 50000 --max-sign-attempts 100`
 
 For mainnet: 
-`solana program deploy -u mainnet target/deploy/depredict.so --program-id target/deploy/depredict-keypair.json --with-compute-unit-price 50000 --max-sign-attempts 100`
+`solana program deploy -u mainnet-beta target/deploy/depredict.so --program-id target/deploy/depredict-keypair.json --with-compute-unit-price 50000 --max-sign-attempts 100 --upgrade-authority ./path/to/auth.json`
 
 #### Check onchain program hash
 `solana-verify get-program-hash -u devnet DPxxBPxcgMwYuDDC8dbYZdqnGehErmwKQYC4ifVz5tpM`
