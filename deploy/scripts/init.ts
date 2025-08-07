@@ -89,7 +89,7 @@ async function main() {
     // Calculate config PDA
     const [configPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("config")],
-      new PublicKey(PROGRAM_ID)
+      program.programId
     );
     console.log("Config PDA:", configPda.toString());
 
