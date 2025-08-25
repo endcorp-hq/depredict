@@ -1,7 +1,11 @@
-use crate::constants::CONFIG;
+use crate::constants::{CONFIG, NFT_COLLECTION};
 use crate::errors::DepredictError;
 use crate::state::Config;
 use anchor_lang::prelude::*;
+use mpl_core::{
+    ID as MPL_CORE_ID,
+    instructions::CreateCollectionV2CpiBuilder,
+};
 
 #[derive(Accounts)]
 pub struct InitConfigContext<'info> {
@@ -20,6 +24,20 @@ pub struct InitConfigContext<'info> {
         bump
     )]
     pub config: Box<Account<'info, Config>>,
+    /// CHECK: Global collection PDA created via CPI to MPL Core
+    #[account(
+        mut,
+        seeds = [NFT_COLLECTION.as_bytes(), b"global"],
+        bump
+    )]
+    pub collection: UncheckedAccount<'info>,
+
+    /// CHECK: MPL Core program id check
+    #[account(
+        address = MPL_CORE_ID,
+        constraint = mpl_core_program.key() == MPL_CORE_ID @ DepredictError::InvalidMplCoreProgram
+    )]
+    pub mpl_core_program: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -69,7 +87,7 @@ pub struct CloseConfigContext<'info> {
 }
 
 impl<'info> InitConfigContext<'info> {
-    pub fn init_config(&mut self, fee_amount: u64, bump: &InitConfigContextBumps) -> Result<()> {
+    pub fn init_config(&mut self, fee_amount: u64, collection_name: String, collection_uri: String, bump: &InitConfigContextBumps) -> Result<()> {
         let config = &mut self.config;
         config.bump = bump.config;
         config.authority = *self.signer.key;
@@ -78,6 +96,30 @@ impl<'info> InitConfigContext<'info> {
         config.version = 1;
         config.next_market_id = 1;
         config.num_markets = 0;
+        config.global_collection = Pubkey::default();
+        config.global_tree = Pubkey::default();
+
+        // Create a global Core collection now (owner/update authority = config)
+        let payer = &self.signer.to_account_info();
+        let system_program = &self.system_program.to_account_info();
+        let mpl_core_program = &self.mpl_core_program.to_account_info();
+
+        let collection_signer_seeds: &[&[u8]] = &[
+            NFT_COLLECTION.as_bytes(),
+            b"global",
+            &[bump.collection],
+        ];
+
+        CreateCollectionV2CpiBuilder::new(mpl_core_program)
+            .collection(&self.collection.to_account_info())
+            .payer(payer)
+            .update_authority(Some(&config.to_account_info()))
+            .system_program(system_program)
+            .name(collection_name)
+            .uri(collection_uri)
+            .invoke_signed(&[collection_signer_seeds])?;
+
+        config.global_collection = self.collection.key();
         Ok(())
     }
 }
@@ -149,6 +191,37 @@ impl<'info> UpdateConfigContext<'info> {
         Ok(())
     }
 
+    pub fn update_global_assets(
+        &mut self,
+        global_collection: Pubkey,
+        global_tree: Pubkey,
+    ) -> Result<()> {
+        let config = &mut self.config;
+        require!(
+            config.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+
+        require!(global_collection != Pubkey::default(), DepredictError::InvalidMplCoreProgram);
+        require!(global_tree != Pubkey::default(), DepredictError::InvalidOracle);
+
+        // Only update if changes provided
+        let mut changed = false;
+        if config.global_collection != global_collection {
+            config.global_collection = global_collection;
+            changed = true;
+        }
+        if config.global_tree != global_tree {
+            config.global_tree = global_tree;
+            changed = true;
+        }
+        if changed {
+            config.version = config.version.checked_add(1).unwrap();
+        }
+
+        msg!("Global assets updated: collection={}, tree={}", global_collection, global_tree);
+        Ok(())
+    }
 }
 
 impl<'info> CloseConfigContext<'info> {

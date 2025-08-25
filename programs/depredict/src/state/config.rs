@@ -6,10 +6,12 @@ pub struct Config {
     pub bump: u8,
     pub authority: Pubkey,
     pub fee_vault: Pubkey,
-    pub fee_amount: u64,
+    pub fee_amount: u64, // refactor amount, can be smaller, or potentially a percentage
     pub version: u64,
     pub next_market_id: u64,
     pub num_markets: u64,
+    pub global_collection: Pubkey,
+    pub global_tree: Pubkey,
 }
 
 impl Config {

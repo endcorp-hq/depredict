@@ -17,8 +17,8 @@ pub mod depredict {
     use super::*;
 
     // CONFIG INSTRUCTIONS
-    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64) -> Result<()> {
-        ctx.accounts.init_config(fee_amount, &ctx.bumps)?;
+    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64, collection_name: String, collection_uri: String) -> Result<()> {
+        ctx.accounts.init_config(fee_amount, collection_name, collection_uri, &ctx.bumps)?;
         Ok(())
     }
 
@@ -34,6 +34,11 @@ pub mod depredict {
 
     pub fn update_fee_vault(ctx: Context<UpdateConfigContext>, fee_vault: Pubkey) -> Result<()> {
         ctx.accounts.update_fee_vault(fee_vault)?;
+        Ok(())
+    }
+
+    pub fn update_global_assets(ctx: Context<UpdateConfigContext>, global_collection: Pubkey, global_tree: Pubkey) -> Result<()> {
+        ctx.accounts.update_global_assets(global_collection, global_tree)?;
         Ok(())
     }
 

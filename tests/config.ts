@@ -21,6 +21,10 @@ describe("depredict", () => {
   describe("Config", () => {
     let newAuthority: Keypair;
     let newFeeVault: Keypair;
+    const GLOBALS = {
+      collection: Keypair.generate().publicKey,
+      tree: Keypair.generate().publicKey,
+    };
 
     it("Initializes config", async () => {
       const feeAmount = new anchor.BN(100);
@@ -28,15 +32,23 @@ describe("depredict", () => {
       try {
         // Get a fresh blockhash to avoid expiration issues
         const { blockhash } = await provider.connection.getLatestBlockhash('confirmed');
-        
-        const tx = await program.methods
-          .initializeConfig(feeAmount)
+
+        const collectionName = "DEPREDICT";
+        const collectionUri = "https://example.com/depredict-collection.json";
+
+        // @ts-ignore - IDL types will update after build
+        const tx = await (program.methods as any)
+          .initializeConfig(feeAmount, collectionName, collectionUri)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            // @ts-ignore - new accounts added in program, types update after build
+            collection: PublicKey.findProgramAddressSync([Buffer.from("collection"), Buffer.from("global")], program.programId)[0],
+            // @ts-ignore - constant not present in older IDL
+            mplCoreProgram: new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"),
             systemProgram: anchor.web3.SystemProgram.programId,
-          })
+          } as any)
           .signers([ADMIN])
           .rpc({
             skipPreflight: false,
@@ -61,10 +73,12 @@ describe("depredict", () => {
         throw error;
       }
 
-      const configAccount = await program.account.config.fetch(configPda);
+      const configAccount: any = await program.account.config.fetch(configPda);
       assert.ok(configAccount.authority.equals(ADMIN.publicKey));
       assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
       assert.ok(configAccount.feeAmount.eq(feeAmount));
+      // After init, global_collection should be set by program
+      assert.ok(!new PublicKey(configAccount.globalCollection).equals(PublicKey.default));
     });
 
     it("Updates fee amount", async () => {
@@ -95,6 +109,35 @@ describe("depredict", () => {
 
       const configAccount = await program.account.config.fetch(configPda);
       assert.ok(configAccount.feeAmount.eq(newFeeAmount));
+    });
+
+    it("Updates global collection and tree", async () => {
+      try {
+        const tx = await program.methods
+          .updateGlobalAssets(GLOBALS.collection, GLOBALS.tree)
+          .accountsPartial({
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        console.log("Update globals tx:", tx);
+      } catch (error) {
+        console.error("Update globals error:", error);
+        if ((error as any).logs) {
+          console.error("Program logs:", (error as any).logs);
+        }
+        throw error;
+      }
+
+      const configAccount = await program.account.config.fetch(configPda);
+      assert.ok(configAccount.globalCollection.equals(GLOBALS.collection));
+      assert.ok(configAccount.globalTree.equals(GLOBALS.tree));
     });
 
     it("Fails to update fee amount with wrong authority", async () => {
