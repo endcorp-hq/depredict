@@ -14,21 +14,11 @@ use anchor_spl::{
         TokenInterface
     }
 };
-use mpl_core::{
-    ID as MPL_CORE_ID,
-    instructions::CreateCollectionV2CpiBuilder, 
-    types::{
-        Plugin,
-        Attributes,
-        Attribute,
-        PluginAuthorityPair,
-        PluginAuthority
-    }
-};
+
 
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
-    MARKET, NFT_COLLECTION, POSITION
+    MARKET, POSITION
     }, 
     constraints::{
         get_oracle_value, 
@@ -78,17 +68,6 @@ pub struct MarketContext<'info> {
     )]
     pub market_positions_account: Box<Account<'info, PositionAccount>>,
     
-    /// CHECK: This account will be created by the CPI to mpl_core
-    #[account(
-        mut,
-        seeds = [ 
-            NFT_COLLECTION.as_bytes(), 
-            &config.next_market_id.to_le_bytes()
-        ],
-        bump
-    )]
-    pub collection: UncheckedAccount<'info>,
-
     #[account(
         mut,
         // check that the mint is owned by the token program
@@ -104,14 +83,6 @@ pub struct MarketContext<'info> {
         associated_token::token_program = token_program
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-
-     /// CHECK: this account is checked by the address constraint and in MPL core.
-     #[account(
-        address = MPL_CORE_ID,
-        constraint = mpl_core_program.key() == MPL_CORE_ID @ DepredictError::InvalidMplCoreProgram
-    )]
-     pub mpl_core_program: AccountInfo<'info>,
-
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -218,7 +189,6 @@ impl<'info> MarketContext<'info> {
         let payer = &self.payer.to_account_info();
         let market_positions = &mut self.market_positions_account;
         let config = &mut self.config;
-        let mpl_core_program = &self.mpl_core_program.to_account_info();
         let market_type = args.market_type;
 
         let ts = Clock::get()?.unix_timestamp;
@@ -265,19 +235,14 @@ impl<'info> MarketContext<'info> {
             decimals: self.mint.decimals,
             oracle_type: args.oracle_type,
             oracle_pubkey: oracle_pubkey,
+            nft_collection: Some(self.config.global_collection),
             ..Default::default()
         });
 
-
-        config.set_inner(Config {
-            next_market_id: config.next_market_id,
-            bump: config.bump,
-            authority: config.authority,
-            fee_vault: config.fee_vault,
-            fee_amount: config.fee_amount,
-            version: config.version,
-            num_markets: config.num_markets.checked_add(1).ok_or(DepredictError::ArithmeticOverflow)?,
-        });
+        config.num_markets = config
+            .num_markets
+            .checked_add(1)
+            .ok_or(DepredictError::ArithmeticOverflow)?;
     
         let mut positions = [Position::default(); 10];
         for pos in positions.iter_mut() {
@@ -301,51 +266,6 @@ impl<'info> MarketContext<'info> {
             msg!("Position {}: status = {:?}", i, pos.position_status);
         }
     
-        market.emit_market_event()?;
-
-
-        msg!("Creating collection NFT");
-
-        let market_nft_name = format!("DEPREDICT-MKT-{}", market_id);
-        let mut create_collection_cpi = CreateCollectionV2CpiBuilder::new(mpl_core_program);
-        let mut plugins: Vec<PluginAuthorityPair> = vec![];
-
-        let attributes = Attributes {
-            attribute_list: vec![
-                Attribute {
-                    key: "market_id".to_string(),
-                    value: market.market_id.to_string(),
-                },
-            ],
-        };
-
-        plugins.push(
-            PluginAuthorityPair { 
-                plugin: Plugin::Attributes(attributes), 
-                authority: Some(PluginAuthority::UpdateAuthority) 
-            }
-        );
-
-        let system_program = &self.system_program.to_account_info();
-
-        let collection_signer_seeds: &[&[u8]] = &[
-            NFT_COLLECTION.as_bytes(),
-            &market_id.to_le_bytes(),
-            &[bumps.collection],
-        ];
-
-        create_collection_cpi
-        .collection(&self.collection.to_account_info())
-        .payer(&payer)
-        .update_authority(Some(&market.to_account_info()))
-        .system_program(&system_program)
-        .name(market_nft_name)
-        .uri(args.metadata_uri)
-        .plugins(plugins)  
-        .invoke_signed(&[collection_signer_seeds])?;
-
-
-        market.nft_collection = Some(self.collection.key());
         market.emit_market_event()?;
         Ok(())
     }

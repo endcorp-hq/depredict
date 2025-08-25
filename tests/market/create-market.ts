@@ -17,7 +17,6 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode } from "../helpers";
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
 
 // At the top of your file:
@@ -42,10 +41,6 @@ async function tryCreateMarketTx({
   );
   const [marketPositionsPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
-  const [collectionPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("collection"), marketId.toArrayLike(Buffer, "le", 8)],
     program.programId
   );
 
@@ -79,25 +74,23 @@ async function tryCreateMarketTx({
         payer: ADMIN.publicKey,
         feeVault,
         market: marketPda,
-        collection: collectionPda,
         marketPositionsAccount: marketPositionsPda,
         oraclePubkey: oraclePubkey,
-        usdcMint: usdcMintToUse,
+        mint: usdcMintToUse,
         tokenProgram: TOKEN_PROGRAM_ID,
         config: configPda,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
-        mplCoreProgram: MPL_CORE_PROGRAM_ID,
       })
       .signers([ADMIN])
       .rpc();
-    return { tx, error: null, marketPda, collectionPda, marketId };
+    return { tx, error: null, marketPda, marketId };
   } catch (error) {
     console.log("error", error);
     if (expectError) {
       assert.include(error.toString(), expectError);
     }
-    return { tx: null, error, marketPda, collectionPda, marketId };
+    return { tx: null, error, marketPda, marketId };
   }
 }
 
