@@ -5,28 +5,11 @@ use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
 
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
-use crate::constants::{MARKET, NFT};
-use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
+use crate::constants::{MARKET, POSITION_PAGE};
+use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionStatus, PositionPage, POSITION_PAGE_ENTRIES};
 use crate::{
     errors::DepredictError,
     state::{ MarketState, WinningDirection },
-};
-use mpl_core::{
-    fetch_plugin,
-    accounts::{
-        BaseAssetV1
-    },
-    ID as MPL_CORE_ID,
-    instructions::{
-        CreateV2CpiBuilder,
-        BurnV1CpiBuilder,
-    },
-    types::{
-        Attribute, 
-        Attributes, 
-        Plugin, 
-        PluginAuthorityPair,
-    },
 };
 
 #[derive(Accounts)]
@@ -41,27 +24,19 @@ pub struct PositionContext<'info> {
     )]
     pub fee_vault: AccountInfo<'info>,
 
+    // Paged positions account for this market and page index
     #[account(
-        mut,
-        constraint = market_positions_account.market_id == market.market_id @ DepredictError::InvalidMarketId
-    )]
-    pub market_positions_account: Box<Account<'info, PositionAccount>>,
-
-    /// CHECK: This account will be created by the CPI to mpl_core
-    #[account(
-        mut,
-        seeds = [ 
-            NFT.as_bytes(), 
-            market_positions_account.market_id.to_le_bytes().as_ref(), 
-            market.next_position_id.to_le_bytes().as_ref(),
-        ],
+        init_if_needed,
+        payer = signer,
+        space = 8 + PositionPage::INIT_SPACE,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
         bump
     )]
-    pub position_nft_account: AccountInfo<'info>,
+    pub position_page: Box<Account<'info, PositionPage>>,
 
 
     #[account(mut,
-        seeds = [MARKET.as_bytes(), &market_positions_account.market_id.to_le_bytes()],
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
@@ -90,17 +65,6 @@ pub struct PositionContext<'info> {
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub config: Box<Account<'info, Config>>,
-    
-    /// CHECK: this account is checked by the address constraint and in MPL core.
-    #[account(
-        mut,
-        constraint = collection.key() == market.nft_collection.unwrap() @ DepredictError::InvalidCollection
-    )]
-    pub collection: AccountInfo<'info>,
-
-    /// CHECK: this account is checked by the address constraint and in MPL core.
-    #[account(address = MPL_CORE_ID)]
-    pub mpl_core_program: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -117,8 +81,10 @@ pub struct PayoutNftContext<'info> {
 
     #[account(
         mut,
-        constraint = market_positions_account.market_id == market.market_id @ DepredictError::InvalidMarketId)]
-    pub market_positions_account: Box<Account<'info, PositionAccount>>,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &page_index.to_le_bytes()],
+        bump
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
 
     #[account(
         mut, 
@@ -143,24 +109,9 @@ pub struct PayoutNftContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    // TODO: Check nft_mint address against the position.mint address.
-    /// CHECK: this account is checked by the address constraint
+    /// CHECK: cNFT verification accounts will be added when Bubblegum CPI is integrated
     #[account(mut)]
-    pub nft_mint: AccountInfo<'info>,
-
-    /// CHECK: this account is checked by the address constraint
-    #[account(
-        mut,
-        constraint = collection.key() == market.nft_collection.unwrap() @ DepredictError::InvalidCollection
-    )]
-    pub collection: AccountInfo<'info>,
-
-    /// CHECK: this account is checked by the address constraint and in MPL core.
-     #[account(
-        address = MPL_CORE_ID,
-        constraint = mpl_core_program.key() == MPL_CORE_ID @ DepredictError::InvalidMplCoreProgram
-    )]
-     pub mpl_core_program: AccountInfo<'info>,
+    pub merkle_tree: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -172,7 +123,7 @@ impl<'info> PositionContext<'info> {
         let next_position_id = self.market.next_position_id; // Store before increment
         let market = &mut self.market;
         let market_type = market.market_type;
-        let market_positions_account = &mut self.market_positions_account;
+        let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
     
 
@@ -206,38 +157,17 @@ impl<'info> PositionContext<'info> {
             .unwrap();
         msg!("markets liquidity {:?}", markets_liquidity);
         
-        // Add debug logging for positions
-        msg!("Checking position slots:");
-        for (i, pos) in market_positions_account.positions.iter().enumerate() {
-            msg!("Position {}: status = {:?}", i, pos.position_status);
-        }
-    
-        let position_index = market_positions_account.positions
-            .iter()
-            .position(
-                |position|
-                    position.position_status == PositionStatus::Init
-            )
-            .ok_or(DepredictError::NoAvailablePositionSlot)?;
+        // Determine free slot within page
+        let position_index = (position_page.count as usize).min(POSITION_PAGE_ENTRIES - 1);
     
             
         msg!("Position Index {:?}", position_index);
 
-        let position_nonce = market_positions_account.get_position_nonce();
-        msg!("Position Nonce {:?}", position_nonce);
-        market_positions_account.positions[position_index] = Position {
-            ts,
-            position_id: market.next_position_id(),
-            market_id: market.market_id,
-            position_status: PositionStatus::Open,
-            amount: net_amount,
-            direction: args.direction,
-            mint: Some(self.position_nft_account.key()),
-            created_at: ts,
-            version: 0,
-            position_nonce: position_nonce,
-            padding: [0; 3],
-        };
+        // Update compact entry; leaf_index will be set after mint when integrated
+        position_page.entries[position_index].amount = net_amount;
+        position_page.entries[position_index].direction = args.direction;
+        position_page.entries[position_index].status = PositionStatus::Open;
+        position_page.count = position_page.count.saturating_add(1);
     
         market.volume = market.volume.checked_add(net_amount).unwrap();
 
@@ -261,8 +191,7 @@ impl<'info> PositionContext<'info> {
             self.mint.decimals
         )?;
     
-        let current_position = market_positions_account.positions[position_index];    
-        market_positions_account.emit_position_event(current_position)?;
+        // Emit minimal event via existing structure if needed (optional)
     
         let fee = self.config.fee_amount;
     
@@ -284,85 +213,7 @@ impl<'info> PositionContext<'info> {
     
         market.emit_market_event()?;
 
-        msg!("Position created");
-
-        msg!("Creating NFT");
-
-
-        // Add attributes to the NFT
-        msg!("Adding attributes to NFT");
-        let attributes = Attributes {
-            attribute_list: vec![
-                Attribute {
-                    key: "market_id".to_string(),
-                    value: market_positions_account.market_id.to_string(),
-                },
-                Attribute {
-                    key: "position_id".to_string(),
-                    value: current_position.position_id.to_string(),
-                },
-                Attribute {
-                    key: "position_nonce".to_string(),
-                    value: current_position.position_nonce.to_string(),
-                },
-                Attribute {
-                    key: "position_amount".to_string(),
-                    value: current_position.amount.to_string(),
-                },
-                Attribute {
-                    key: "bet_direction".to_string(),
-                    value: current_position.direction.to_string(),
-                },
-            ],
-        };
-       
-        
-        let position_nft_account_bump = bumps.position_nft_account;
-        let market_id = &market_positions_account.market_id.to_le_bytes();
-
-        let nft_signer_seeds: &[&[u8]] = &[
-            NFT.as_bytes(),
-            market_id,
-            &next_position_id.to_le_bytes(),
-            &[position_nft_account_bump],
-        ];
-
-        let market_signer_seeds: &[&[u8]] = &[
-            MARKET.as_bytes(),
-            &self.market.market_id.to_le_bytes(),
-            &[bumps.market],
-        ];
-
-        msg!("NFT Signer Seeds: {:?}", nft_signer_seeds);
-        msg!("market_id: {:?}", market_id);
-        msg!("position_id: {:?}", &next_position_id.to_le_bytes());
-        msg!("position_nft_account_bump: {:?}", position_nft_account_bump);
-
-
-        let nft_name = format!("DEPREDICT MARKET:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
-        let uri = args.metadata_uri;
-        let mpl_core_program = &self.mpl_core_program.to_account_info();
-        
-        msg!("Collection: {:?}", self.collection.key());
-        
-        msg!("Create the asset");
-        let mut create_asset_cpi = CreateV2CpiBuilder::new(mpl_core_program);
-        create_asset_cpi    
-        .asset(&self.position_nft_account.to_account_info())
-        .name(nft_name)
-        .uri(uri)
-        .collection(Some(&self.collection.to_account_info()))
-        .authority(Some(&self.market.to_account_info()))
-        .owner(Some(&self.signer.to_account_info()))
-        .payer(&self.signer.to_account_info())
-        .plugins(vec![PluginAuthorityPair {
-            plugin: Plugin::Attributes(attributes),
-            authority: None,
-        }])
-        .system_program(&self.system_program.to_account_info())
-        .invoke_signed(&[nft_signer_seeds, market_signer_seeds])?;
-
-        msg!("NFT created");
+        msg!("Position created (cNFT mint via Bubblegum to be integrated)");
         Ok(())
     }
 }

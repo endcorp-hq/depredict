@@ -39,10 +39,6 @@ async function tryCreateMarketTx({
     [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
     program.programId
   );
-  const [marketPositionsPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
 
   // Market times
   const currentSlot = await provider.connection.getSlot();
@@ -74,7 +70,6 @@ async function tryCreateMarketTx({
         payer: ADMIN.publicKey,
         feeVault,
         market: marketPda,
-        marketPositionsAccount: marketPositionsPda,
         oraclePubkey: oraclePubkey,
         mint: usdcMintToUse,
         tokenProgram: TOKEN_PROGRAM_ID,

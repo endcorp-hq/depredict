@@ -59,14 +59,7 @@ pub struct MarketContext<'info> {
     )]
     pub market: Box<Account<'info, MarketState>>,
 
-    #[account(
-        init,
-        payer = payer,
-        space = 8 + PositionAccount::INIT_SPACE,
-        seeds = [POSITION.as_bytes(), &config.next_market_id.to_le_bytes()],
-        bump
-    )]
-    pub market_positions_account: Box<Account<'info, PositionAccount>>,
+    // No per-market positions account; positions are cNFTs minted later
     
     #[account(
         mut,
@@ -187,7 +180,7 @@ impl<'info> MarketContext<'info> {
     pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &MarketContextBumps) -> Result<()> {
         let market = &mut self.market;
         let payer = &self.payer.to_account_info();
-        let market_positions = &mut self.market_positions_account;
+        // No per-market positions account; positions are represented as cNFTs
         let config = &mut self.config;
         let market_type = args.market_type;
 
@@ -244,27 +237,7 @@ impl<'info> MarketContext<'info> {
             .checked_add(1)
             .ok_or(DepredictError::ArithmeticOverflow)?;
     
-        let mut positions = [Position::default(); 10];
-        for pos in positions.iter_mut() {
-            pos.position_status = PositionStatus::Init;
-        }
-
-        market_positions.set_inner(PositionAccount {
-            bump: bumps.market_positions_account,
-            authority: self.payer.key(),
-            version: 0,
-            positions,
-            nonce: 0,
-            market_id: market_id,
-            is_sub_position: false,
-            padding: [0; 10],
-        });
-
-        // Add debug logging for positions
-        msg!("Initializing position slots:");
-        for (i, pos) in market_positions.positions.iter().enumerate() {
-            msg!("Position {}: status = {:?}", i, pos.position_status);
-        }
+        // No position slots to initialize; positions are minted as cNFTs during trades
     
         market.emit_market_event()?;
         Ok(())

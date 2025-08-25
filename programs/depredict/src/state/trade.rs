@@ -54,6 +54,7 @@ pub struct OpenPositionArgs {
     pub amount: u64,
     pub direction: PositionDirection,
     pub metadata_uri: String,
+    pub page_index: u32,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -129,4 +130,25 @@ impl PositionAccount {
 
         Ok(())
     }
+}
+
+pub const POSITION_PAGE_ENTRIES: usize = 64;
+
+#[account]
+#[derive(InitSpace)]
+pub struct PositionPage {
+    pub bump: u8,
+    pub market_id: u64,
+    pub page_index: u32,
+    pub count: u16,
+    pub entries: [PositionEntryLite; POSITION_PAGE_ENTRIES],
+    pub padding: [u8; 6],
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, InitSpace, PartialEq, Eq, Debug)]
+pub struct PositionEntryLite {
+    pub leaf_index: u64,
+    pub amount: u64,
+    pub direction: PositionDirection,
+    pub status: PositionStatus,
 }
