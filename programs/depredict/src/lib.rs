@@ -9,6 +9,7 @@ mod events;
 
 use state::*;
 use instructions::*;
+use errors::*;
 
 declare_id!("7w43ZtEh1vdmiCFkuVMRni3s1gq7DJiu1N5N5AuRu59r");
 
@@ -39,6 +40,11 @@ pub mod depredict {
 
     pub fn update_global_assets(ctx: Context<UpdateConfigContext>, global_collection: Pubkey, global_tree: Pubkey) -> Result<()> {
         ctx.accounts.update_global_assets(global_collection, global_tree)?;
+        Ok(())
+    }
+
+    pub fn update_base_uri(ctx: Context<UpdateConfigContext>, base_uri: [u8; 200]) -> Result<()> {
+        ctx.accounts.update_base_uri(base_uri)?;
         Ok(())
     }
 
@@ -77,12 +83,24 @@ pub mod depredict {
     }
 
     pub fn create_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
-        ctx.accounts.open_position(args, &ctx.bumps)?;
+        ctx.accounts.open_position(args)?;
         Ok(())
     }
 
-    pub fn settle_position(ctx: Context<PayoutNftContext>) -> Result<()> {
-        ctx.accounts.payout_position()?;
+    pub fn settle_position(ctx: Context<PayoutNftContext>, args: ClaimPositionArgs) -> Result<()> {
+        ctx.accounts.payout_position(args)?;
+        Ok(())
+    }
+
+    pub fn confirm_position(ctx: Context<ConfirmPositionContext>, args: ConfirmPositionArgs) -> Result<()> {
+        // Only market authority can confirm
+        require!(ctx.accounts.market.authority == *ctx.accounts.signer.key, DepredictError::Unauthorized);
+        let page = &mut ctx.accounts.position_page;
+        let slot_index = args.slot_index as usize;
+        require!(slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
+        // Set leaf index and mark confirmed (reuse Closed as placeholder? We'll use Claimed only at payout)
+        page.entries[slot_index].leaf_index = args.leaf_index;
+        page.entries[slot_index].status = PositionStatus::Open; // stays Open but now confirmed by having leaf_index
         Ok(())
     }
 }

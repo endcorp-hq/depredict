@@ -98,6 +98,7 @@ impl<'info> InitConfigContext<'info> {
         config.num_markets = 0;
         config.global_collection = Pubkey::default();
         config.global_tree = Pubkey::default();
+        config.base_uri = [0; 200];
 
         // Create a global Core collection now (owner/update authority = config)
         let payer = &self.signer.to_account_info();
@@ -220,6 +221,20 @@ impl<'info> UpdateConfigContext<'info> {
         }
 
         msg!("Global assets updated: collection={}, tree={}", global_collection, global_tree);
+        Ok(())
+    }
+
+    pub fn update_base_uri(
+        &mut self,
+        base_uri: [u8; 200],
+    ) -> Result<()> {
+        let config = &mut self.config;
+        require!(
+            config.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+        config.base_uri = base_uri;
+        config.version = config.version.checked_add(1).unwrap();
         Ok(())
     }
 }

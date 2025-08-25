@@ -12,6 +12,7 @@ pub struct Config {
     pub num_markets: u64,
     pub global_collection: Pubkey,
     pub global_tree: Pubkey,
+    pub base_uri: [u8; 200],
 }
 
 impl Config {

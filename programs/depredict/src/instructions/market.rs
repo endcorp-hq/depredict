@@ -18,14 +18,14 @@ use anchor_spl::{
 
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
-    MARKET, POSITION
+    MARKET
     }, 
     constraints::{
         get_oracle_value, 
         is_valid_oracle
     }, 
     state::{
-        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, MarketType, OracleType, Position, PositionAccount, PositionStatus, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
+        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, MarketType, OracleType, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
     }
 };
 use crate::errors::DepredictError;
@@ -164,13 +164,6 @@ pub struct CloseMarketContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    #[account(
-        mut,
-        seeds = [POSITION.as_bytes(), &args.market_id.to_le_bytes()],
-        bump,
-    )]
-    pub market_positions_account: Box<Account<'info, PositionAccount>>,
-
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -183,6 +176,7 @@ impl<'info> MarketContext<'info> {
         // No per-market positions account; positions are represented as cNFTs
         let config = &mut self.config;
         let market_type = args.market_type;
+        let global_collection = config.global_collection;
 
         let ts = Clock::get()?.unix_timestamp;
 
@@ -228,7 +222,7 @@ impl<'info> MarketContext<'info> {
             decimals: self.mint.decimals,
             oracle_type: args.oracle_type,
             oracle_pubkey: oracle_pubkey,
-            nft_collection: Some(self.config.global_collection),
+            nft_collection: Some(global_collection),
             ..Default::default()
         });
 
@@ -392,16 +386,7 @@ impl<'info> CloseMarketContext<'info> {
         **market_account_info.try_borrow_mut_lamports()? -= market_lamports;
         **fee_vault_info.try_borrow_mut_lamports()? += market_lamports;        
 
-        // After closing the market account, close the positions account
-        let positions_account_info = self.market_positions_account.to_account_info();
-        let positions_lamports = positions_account_info.lamports();
 
-        msg!("Closing market positions account: {}", positions_account_info.key());
-        msg!("Transferring {} lamports from positions account to fee vault.", positions_lamports);
-
-        // Transfer lamports to fee vault
-        **positions_account_info.try_borrow_mut_lamports()? -= positions_lamports;
-        **fee_vault_info.try_borrow_mut_lamports()? += positions_lamports;
 
         // Mark the market account data as closed by zeroizing (optional but good practice)
         // market_account_info.assign(&System::id()); // This reassigns owner

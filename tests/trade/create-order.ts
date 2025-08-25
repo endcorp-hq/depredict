@@ -143,7 +143,7 @@ describe("depredict", () => {
   });
 
   describe("Trade", () => {
-    it("Creates an order in an existing market", async () => {
+    it("Creates an order in an existing market", async function () {
       // Get the current market ID
       const marketId = await getCurrentMarketId();
       console.log("Using market ID:", marketId.toString());
@@ -184,37 +184,16 @@ describe("depredict", () => {
         program.programId
       );
 
-      const [positionAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
+      // New flow uses paged PDAs inside program; no per-market PositionAccount PDA
 
       // Get the market account again for position ID and vault
       const marketAccount = await program.account.marketState.fetch(marketPda);
       const marketVault = marketAccount.marketVault;
-      const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("nft"),
-          marketId.toArrayLike(Buffer, "le", 8),
-          marketAccount.nextPositionId.toArrayLike(Buffer, "le", 8),
-        ],
-        program.programId
-      );
+      // NFT seeds are internal; cNFTs are compressed. Skip Core fetches in this test.
 
-      console.log("Position account PDA:", positionAccountPda.toString());
       console.log("Market USDC Vault:", marketVault.toString());
-      const collectionPubkey = marketAccount.nftCollection;
 
-      const [collectionPda, collectionBump] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("collection"), 
-          marketId.toArrayLike(Buffer, "le", 8)
-        ],
-        program.programId
-      );
-      console.log("Collection PDA:", collectionPda.toString());
-
-      console.log("Collection pubkey:", collectionPubkey.toString());
+      // Collection is now global in Config; no per-market collection PDA.
       
       // Final check: Ensure USER has sufficient SOL for NFT creation
       const userSolBalance = await provider.connection.getBalance(USER.publicKey);
@@ -240,9 +219,6 @@ describe("depredict", () => {
           userTokenAccount,
           marketPda,
           marketVault: marketVault,
-          positionAccountPda,
-          positionNftAccountPda,
-          collectionPubkey,
           configPda,
           metadataUri: "https://arweave.net/position-metadata",
         });
@@ -271,34 +247,7 @@ describe("depredict", () => {
       }
 
 
-      const umi = createUmi(provider.connection)
-
-      const asset = await fetchAsset(umi, positionNftAccountPda.toString(), {
-        skipDerivePlugins: false,
-      })
-      
-      console.log("Asset:", asset)
-      let attributes = asset.attributes
-      // map the attributes as key value pairs and console log: 
-      let attributesMap = attributes.attributeList.map((attribute: any) => {
-        return {
-          [attribute.key]: attribute.value
-        }
-      })
-      console.log("Attributes:", attributesMap)
-
-      console.log("Fetching collection...");
-      const collection = await fetchCollection(umi, collectionPda.toString())
-      console.log(collection)
-      let collection_attributes = collection.attributes
-      // map the attributes as key value pairs and console log: 
-      let collection_attributesMap = collection_attributes.attributeList.map((attribute: any) => {
-        return {
-          [attribute.key]: attribute.value
-        }
-      })
-      console.log("Collection Attributes:", collection_attributesMap)
-      console.log("Collection fetched");
+      // Skip MPL Core asset checks in cNFT flow
 
     });
 
@@ -700,9 +649,6 @@ type TryCreatePositionParams = {
   userTokenAccount?: PublicKey,
   marketPda?: PublicKey,
   marketVault?: PublicKey,
-  positionAccountPda?: PublicKey,
-  positionNftAccountPda?: PublicKey,
-  collectionPubkey?: PublicKey,
   configPda?: PublicKey,
   metadataUri?: string,
   expectError?: string | null,
@@ -717,9 +663,6 @@ async function tryCreatePositionTx({
   userTokenAccount,
   marketPda,
   marketVault,
-  positionAccountPda,
-  positionNftAccountPda,
-  collectionPubkey,
   configPda,
   metadataUri = "https://arweave.net/position-metadata",
   expectError = null,
@@ -731,18 +674,16 @@ async function tryCreatePositionTx({
         amount,
         direction,
         metadataUri,
+        pageIndex: 0,
       })
       .accountsPartial({
         signer: user.publicKey,
         feeVault: FEE_VAULT.publicKey,
-        marketPositionsAccount: positionAccountPda,
         market: marketPda,
         mint: mint,
         userMintAta: userTokenAccount,
         marketVault: marketVault,
-        positionNftAccount: positionNftAccountPda,
-        collection: collectionPubkey,
-        mplCoreProgram: mplCoreProgram,
+        // Bubblegum/cNFT accounts would be provided here when enabled
         config: configPda,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

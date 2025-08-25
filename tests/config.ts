@@ -81,6 +81,43 @@ describe("depredict", () => {
       assert.ok(!new PublicKey(configAccount.globalCollection).equals(PublicKey.default));
     });
 
+    it("Sets base_uri for deterministic cNFT metadata", async () => {
+      // Prepare a 200-byte buffer with a simple base URI string
+      const base = Buffer.alloc(200);
+      const uriStr = "https://example.com/base";
+      base.write(uriStr, 0, "utf8");
+      const baseArray = Array.from(base.values());
+
+      try {
+        // @ts-ignore - IDL may lag shape
+        const tx = await (program.methods as any)
+          .updateBaseUri(baseArray)
+          .accountsPartial({
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc({
+            skipPreflight: false,
+            commitment: "confirmed",
+          });
+        console.log("Update base_uri tx:", tx);
+      } catch (error) {
+        console.error("Update base_uri error:", error);
+        if ((error as any).logs) {
+          console.error("Program logs:", (error as any).logs);
+        }
+        throw error;
+      }
+
+      const cfg: any = await program.account.config.fetch(configPda);
+      // Convert stored [u8;200] to trimmed string
+      const stored = Buffer.from(cfg.baseUri as number[]).toString("utf8").replace(/\x00+$/g, "").replace(/\u0000+$/g, "").replace(/\0+$/g, "");
+      assert.ok(stored.startsWith(uriStr));
+    });
+
     it("Updates fee amount", async () => {
       const newFeeAmount = new anchor.BN(200);
 

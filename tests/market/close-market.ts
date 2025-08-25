@@ -20,6 +20,7 @@ describe("depredict", () => {
 
 
   let localMintPubkey: PublicKey;
+  let feeVaultTokenAccount: PublicKey;
 
   before(async () => {
     const { mint: localMintKey, } = await getUsdcMint();
@@ -27,7 +28,7 @@ describe("depredict", () => {
     console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
 
     try {
-      const feeVaultTokenAccount = (
+      feeVaultTokenAccount = (
         await getOrCreateAssociatedTokenAccount(
           provider.connection,
           admin, // Payer
@@ -82,7 +83,8 @@ describe("depredict", () => {
           signer: admin.publicKey,
           feeVault: feeVault.publicKey,
           market: marketPda,
-          usdcMint: localMintPubkey,
+          mint: localMintPubkey,
+          feeVaultMintAta: feeVaultTokenAccount,
           config: configPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

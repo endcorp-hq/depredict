@@ -67,14 +67,7 @@ describe("Market Setup", () => {
       [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
-    const [marketPositionsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
-      program.programId
-    );
-    const [collectionPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("collection"), marketId.toArrayLike(Buffer, "le", 8)],
-      program.programId
-    );
+    // Per-market positions and collection removed in new flow
 
     const question = Array.from(Buffer.from(questionStr));
 
@@ -93,15 +86,12 @@ describe("Market Setup", () => {
           payer: ADMIN.publicKey,
           feeVault: FEE_VAULT.publicKey,
           market: marketPda,
-          collection: collectionPda,
-          marketPositionsAccount: marketPositionsPda,
           oraclePubkey: oraclePubkey,
-          usdcMint: LOCAL_MINT.publicKey,
+          mint: LOCAL_MINT.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           config: configPda,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
-          mplCoreProgram: MPL_CORE_PROGRAM_ID,
         })
         .signers([ADMIN])
         .rpc();
