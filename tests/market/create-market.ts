@@ -16,7 +16,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode } from "../helpers";
+import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode, getCurrentUnixTime } from "../helpers";
 
 
 // At the top of your file:
@@ -26,7 +26,7 @@ async function tryCreateMarketTx({
   questionStr = "Default question?",
   metadataUri = "https://arweave.net/default",
   oraclePubkey = ORACLE_KEY,
-  feeVault = FEE_VAULT.publicKey,
+  feeVault = null as PublicKey | null,
   usdcMintParam = null,
   expectError = null,
   liveMarket = false,
@@ -41,9 +41,7 @@ async function tryCreateMarketTx({
   );
 
   // Market times
-  const currentSlot = await provider.connection.getSlot();
-  const validatorTime = await provider.connection.getBlockTime(currentSlot);
-  if (!validatorTime) assert.fail("Could not fetch validator block time.");
+  const validatorTime = await getCurrentUnixTime();
  
   const marketStart = liveMarket ? new anchor.BN(validatorTime - 60) : new anchor.BN(validatorTime + 86400);
   const bettingStart = new anchor.BN(validatorTime - 60);
@@ -56,6 +54,8 @@ async function tryCreateMarketTx({
   const isManualResolve = oraclePubkey.equals(ADMIN.publicKey);
 
   try {
+    // Always source the current fee vault from config unless explicitly overridden
+    const feeVaultToUse: PublicKey = feeVault || configAccount.feeVault;
     const tx = await program.methods
       .createMarket({
         question,
@@ -68,7 +68,7 @@ async function tryCreateMarketTx({
       })
       .accountsPartial({
         payer: ADMIN.publicKey,
-        feeVault,
+        feeVault: feeVaultToUse,
         market: marketPda,
         oraclePubkey: oraclePubkey,
         mint: usdcMintToUse,

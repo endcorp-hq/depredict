@@ -67,6 +67,19 @@ export async function getCurrentMarketId(): Promise<anchor.BN> {
 }
 
 /**
+ * Returns a current unix timestamp in seconds using validator block time when available,
+ * otherwise falls back to wall-clock time. This supports Surfpool or RPCs that don't implement getBlockTime.
+ */
+export async function getCurrentUnixTime(): Promise<number> {
+  try {
+    const currentSlot = await provider.connection.getSlot();
+    const blockTime = await provider.connection.getBlockTime(currentSlot);
+    if (blockTime) return blockTime;
+  } catch (_) {}
+  return Math.floor(Date.now() / 1000);
+}
+
+/**
  * Gets a specific market ID by state
  * @param state The market state to get ('active', 'closed', 'resolved', 'manual')
  * @returns {Promise<anchor.BN>} The market ID for the specified state

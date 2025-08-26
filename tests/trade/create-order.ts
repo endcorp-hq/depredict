@@ -7,12 +7,20 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, FEE_VAULT, program, provider, USER, getCurrentMarketId, getMarketIdByState, ADMIN, LOCAL_MINT } from "../helpers";
+import { getNetworkConfig, FEE_VAULT, program, provider, USER, getCurrentMarketId, getMarketIdByState, ADMIN, LOCAL_MINT, getCurrentUnixTime } from "../helpers";
 
 import { fetchAsset, MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 import { fetchCollection } from '@metaplex-foundation/mpl-core'
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+import { publicKey as umiPublicKey } from '@metaplex-foundation/umi'
 import fs from "fs";
+import { fetchTreeConfigFromSeeds } from '@metaplex-foundation/mpl-bubblegum'
+
+// Bubblegum + MPL program IDs
+const BUBBLEGUM_PROGRAM_ID = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
+const MPL_CORE_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
+const MPL_NOOP_ID = new PublicKey("mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3");
+const ACCOUNT_COMPRESSION_ID = new PublicKey("mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW");
 
 describe("depredict", () => { 
 
@@ -163,8 +171,7 @@ describe("depredict", () => {
         console.log("Market Account found:", marketAccount.marketId.toString());
         
         // Check if market is still open for betting
-        const currentSlot = await provider.connection.getSlot();
-        const currentTime = await provider.connection.getBlockTime(currentSlot);
+        const currentTime = await getCurrentUnixTime();
         if (currentTime && marketAccount.marketEnd.toNumber() < currentTime) {
           console.log("Market is closed for betting, skipping order creation");
           console.log("Market end time:", marketAccount.marketEnd.toNumber());
@@ -254,27 +261,71 @@ describe("depredict", () => {
     // --- Negative Test Cases for Business Logic ---
 
     it("Fails if market is already resolved", async () => {
-      // TODO: Create a market and resolve it (set winning_direction != None)
-      // ...create and resolve market...
-      // const { error } = await tryCreatePositionTx({ ... });
-      // assert.isNotNull(error, "Should fail with MarketAlreadyResolved");
-      // assert.include(error.toString(), "MarketAlreadyResolved");
-    });
+      // Create a fresh manual-resolution market, resolve it, then ensure order creation fails
+      const [configPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("config")],
+        program.programId
+      );
+      const cfgAccount: any = await program.account.config.fetch(configPda);
+      const marketId = cfgAccount.nextMarketId as anchor.BN;
 
-    it("Fails if concurrent transaction is detected", async () => {
-      // TODO: Manipulate market account so update_ts >= current ts
-      // ...simulate this state...
-      // const { error } = await tryCreatePositionTx({ ... });
-      // assert.isNotNull(error, "Should fail with ConcurrentTransaction");
-      // assert.include(error.toString(), "ConcurrentTransaction");
-    });
+      const [marketPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
+        program.programId
+      );
 
-    it("Fails if no available position slot", async () => {
-      // TODO: Fill all position slots in the market_positions_account
-      // ...simulate this state...
-      // const { error } = await tryCreatePositionTx({ ... });
-      // assert.isNotNull(error, "Should fail with NoAvailablePositionSlot");
-      // assert.include(error.toString(), "NoAvailablePositionSlot");
+      const now = await getCurrentUnixTime();
+      const marketStart = new anchor.BN(now + 3600);
+      const marketEnd = new anchor.BN(now + 86400);
+      const bettingStart = new anchor.BN(now - 3600);
+      const question = Array.from(Buffer.from("Resolved market test?"));
+
+      // Create manual-resolution market
+      await program.methods
+        .createMarket({
+          question,
+          marketStart,
+          marketEnd,
+          metadataUri: "https://arweave.net/resolved-market-test",
+          oracleType: { none: {} },
+          marketType: { future: {} },
+          bettingStart,
+        })
+        .accountsPartial({
+          payer: ADMIN.publicKey,
+          feeVault: cfgAccount.feeVault,
+          market: marketPda,
+          oraclePubkey: ADMIN.publicKey,
+          mint: usdcMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          config: configPda,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([ADMIN])
+        .rpc();
+
+      // Resolve the market manually (11 = Yes)
+      await program.methods
+        .resolveMarket({ oracleValue: 11 })
+        .accounts({ signer: ADMIN.publicKey, market: marketPda, oraclePubkey: ADMIN.publicKey })
+        .signers([ADMIN])
+        .rpc();
+
+      // Attempt to create an order; expect MarketAlreadyResolved
+      const { error } = await tryCreatePositionTx({
+        amount: new anchor.BN(1_000_000),
+        direction: { yes: {} },
+        mint: usdcMint,
+        userTokenAccount,
+        marketPda,
+        marketVault: (await program.account.marketState.fetch(marketPda)).marketVault,
+        configPda,
+        metadataUri: "https://arweave.net/position-metadata",
+        expectError: "MarketAlreadyResolved",
+      });
+      assert.isNotNull(error, "Should fail with MarketAlreadyResolved");
+      assert.include(error.toString(), "MarketAlreadyResolved");
     });
 
     it("Fails if user has insufficient USDC", async () => {
@@ -402,9 +453,6 @@ describe("depredict", () => {
         userTokenAccount,
         marketPda,
         marketVault: marketVault,
-        positionAccountPda,
-        positionNftAccountPda,
-        collectionPubkey,
         configPda,
         metadataUri: "https://arweave.net/position-metadata",
         expectError: "BettingPeriodEnded"
@@ -464,9 +512,6 @@ describe("depredict", () => {
         userTokenAccount,
         marketPda,
         marketVault: marketVault,
-        positionAccountPda,
-        positionNftAccountPda,
-        collectionPubkey,
         configPda,
         metadataUri: "https://arweave.net/position-metadata",
         expectError: "MarketAlreadyResolved"
@@ -537,9 +582,6 @@ describe("depredict", () => {
         userTokenAccount,
         marketPda,
         marketVault: marketVault,
-        positionAccountPda,
-        positionNftAccountPda,
-        collectionPubkey,
         configPda,
         metadataUri: "https://arweave.net/position-metadata",
       });
@@ -593,9 +635,6 @@ describe("depredict", () => {
               userTokenAccount,
               marketPda,
               marketVault: marketVault,
-              positionAccountPda,
-              positionNftAccountPda,
-              collectionPubkey,
               configPda,
               metadataUri: "https://arweave.net/position-metadata",
             });
@@ -669,6 +708,16 @@ async function tryCreatePositionTx({
   mplCoreProgram = new PublicKey(MPL_CORE_PROGRAM_ID.toString()),
 }: TryCreatePositionParams) {
   try {
+    // Fetch global tree from config for Bubblegum mint
+    const [cfgPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId);
+    const cfg: any = await program.account.config.fetch(cfgPda);
+    const merkleTree = new PublicKey(cfg.globalTree as any);
+    const collection = new PublicKey(cfg.globalCollection as any);
+
+    // Derive treeConfig via Umi
+    const umi = createUmi((provider.connection as any).rpcEndpoint || "http://127.0.0.1:8899");
+    const treeConfig = await fetchTreeConfigFromSeeds(umi, { merkleTree: umiPublicKey(merkleTree.toBase58()) });
+
     const tx = await program.methods
       .createPosition({
         amount,
@@ -678,13 +727,20 @@ async function tryCreatePositionTx({
       })
       .accountsPartial({
         signer: user.publicKey,
-        feeVault: FEE_VAULT.publicKey,
+        feeVault: cfg.feeVault,
         market: marketPda,
         mint: mint,
         userMintAta: userTokenAccount,
         marketVault: marketVault,
-        // Bubblegum/cNFT accounts would be provided here when enabled
+        // Bubblegum/cNFT related accounts
         config: configPda,
+        merkleTree,
+        treeConfig: new PublicKey(treeConfig.publicKey.toString()),
+        collection,
+        bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+        mplCoreProgram: MPL_CORE_ID,
+        logWrapperProgram: MPL_NOOP_ID,
+        compressionProgram: ACCOUNT_COMPRESSION_ID,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,

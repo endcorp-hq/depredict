@@ -38,6 +38,16 @@ describe("Market Setup", () => {
     )[0];
   });
 
+  async function getCurrentUnixTime(): Promise<number> {
+    try {
+      const currentSlot = await provider.connection.getSlot();
+      const blockTime = await provider.connection.getBlockTime(currentSlot);
+      if (blockTime) return blockTime;
+    } catch (e) {}
+    // Surfpool or some RPCs may not return block times; fall back to wall-clock
+    return Math.floor(Date.now() / 1000);
+  }
+
   async function createMarket({
     questionStr,
     metadataUri,
@@ -72,6 +82,7 @@ describe("Market Setup", () => {
     const question = Array.from(Buffer.from(questionStr));
 
     try {
+      const cfg: any = await program.account.config.fetch(configPda);
       const tx = await program.methods
         .createMarket({
           question,
@@ -84,7 +95,7 @@ describe("Market Setup", () => {
         })
         .accountsPartial({
           payer: ADMIN.publicKey,
-          feeVault: FEE_VAULT.publicKey,
+          feeVault: cfg.feeVault,
           market: marketPda,
           oraclePubkey: oraclePubkey,
           mint: LOCAL_MINT.publicKey,
@@ -125,9 +136,7 @@ describe("Market Setup", () => {
       console.log("Creating market on localnet (MPL Core may fail but market logic will be tested)");
     }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
+    const currentTime = await getCurrentUnixTime();
 
     console.log("Current time:", currentTime);
 
@@ -160,9 +169,7 @@ describe("Market Setup", () => {
       console.log("Creating closed market on localnet (MPL Core may fail but market logic will be tested)");
     }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
+    const currentTime = await getCurrentUnixTime();
 
     // Create a market that's closed for betting (betting period ended)
     // For a closed market: current time should be after market_end but before market_start
@@ -194,9 +201,7 @@ describe("Market Setup", () => {
       console.log("Creating manual resolution market on localnet (MPL Core may fail but market logic will be tested)");
     }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
+    const currentTime = await getCurrentUnixTime();
 
     // Create a manual resolution market that's currently active
     const marketStart = new anchor.BN(currentTime + 3600); // Starts in 1 hour
@@ -226,9 +231,7 @@ describe("Market Setup", () => {
       console.log("Creating resolved market on localnet (MPL Core may fail but market logic will be tested)");
     }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
+    const currentTime = await getCurrentUnixTime();
 
     // Create a market that will be resolved
     // For a resolved market: current time should be within the betting period but market has a winner
