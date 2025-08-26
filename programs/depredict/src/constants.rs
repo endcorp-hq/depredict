@@ -1,9 +1,8 @@
 pub const CONFIG: &str = "config";
 pub const MARKET: &str = "market";
 pub const POSITION: &str = "position";
-pub const NFT: &str = "nft";
-pub const NFT_COLLECTION: &str = "collection";
 pub const POSITION_PAGE: &str = "pos_page";
+pub const MARKET_CREATOR: &str = "market_creator";
 pub const MPL_NOOP_ID: &str = "mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3";
 pub const MPL_ACCOUNT_COMPRESSION_ID: &str = "mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW";
 // pub const TREE: &str = "tree";

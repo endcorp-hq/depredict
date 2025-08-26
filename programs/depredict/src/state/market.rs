@@ -9,7 +9,7 @@ use crate::{
 pub struct MarketState {
     pub bump: u8,
     pub market_id: u64,
-    pub authority: Pubkey,
+    pub market_creator: Pubkey,      // Reference to the market creator who owns this market
     pub market_type: MarketType,
     pub oracle_type: OracleType,
     pub oracle_pubkey: Option<Pubkey>,
@@ -99,7 +99,7 @@ impl Default for MarketState {
     fn default() -> Self {
         Self {
             bump: 0,
-            authority: Pubkey::default(),
+            market_creator: Pubkey::default(),
             oracle_type: OracleType::None,
             oracle_pubkey: None,
             nft_collection: None,
@@ -247,8 +247,8 @@ impl MarketState {
     // }
 
     pub fn emit_market_event(&self) -> Result<()> {
-        emit!(MarketEvent {
-            authority: self.authority,
+            emit!(MarketEvent {
+            market_creator: self.market_creator,
             market_id: self.market_id,
             yes_liquidity: self.yes_liquidity,
             no_liquidity: self.no_liquidity,

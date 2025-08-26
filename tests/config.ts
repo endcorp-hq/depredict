@@ -95,7 +95,7 @@ describe("depredict", () => {
           createdTreePk = new PublicKey(merkleTree.publicKey.toString());
           const currentCfg: any = await program.account.config.fetch(configPda);
           await program.methods
-            .updateGlobalAssets(currentCfg.globalCollection, createdTreePk)
+            .updateGlobalAssets(createdTreePk)
             .accountsPartial({
               signer: ADMIN.publicKey,
               feeVault: FEE_VAULT.publicKey,
@@ -213,12 +213,12 @@ describe("depredict", () => {
       assert.ok(configAccount.feeAmount.eq(newFeeAmount));
     });
 
-    it("Updates global collection and tree", async () => {
+    it("Updates global tree", async () => {
       try {
         const currentCfg: any = await program.account.config.fetch(configPda);
         const treeToKeep = new PublicKey(currentCfg.globalTree);
         const tx = await program.methods
-          .updateGlobalAssets(GLOBALS.collection, treeToKeep)
+          .updateGlobalAssets(treeToKeep)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
@@ -240,7 +240,6 @@ describe("depredict", () => {
       }
 
       const configAccount = await program.account.config.fetch(configPda);
-      assert.ok(configAccount.globalCollection.equals(GLOBALS.collection));
       // globalTree should remain unchanged and equal to the created/stored tree
       assert.ok(!new PublicKey(configAccount.globalTree).equals(PublicKey.default));
     });

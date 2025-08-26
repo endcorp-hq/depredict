@@ -6,7 +6,7 @@ use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, To
 use std::str::FromStr;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
 use crate::constants::{MARKET, POSITION_PAGE, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID};
-use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, ConfirmPositionArgs, ClaimPositionArgs, PositionDirection, PositionStatus, PositionPage, POSITION_PAGE_ENTRIES};
+use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, ConfirmPositionArgs, ClaimPositionArgs, PositionDirection, PositionStatus, PositionPage, POSITION_PAGE_ENTRIES, MarketCreator};
 use crate::{
     errors::DepredictError,
     state::{ MarketState, WinningDirection },
@@ -39,12 +39,17 @@ pub struct PositionContext<'info> {
     )]
     pub position_page: Box<Account<'info, PositionPage>>,
 
-
     #[account(mut,
         seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
+
+    /// CHECK: Market creator account that owns this market
+    #[account(
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidCollection
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>,
 
     #[account(
         mut, 
@@ -79,8 +84,8 @@ pub struct PositionContext<'info> {
     #[account(mut)]
     pub tree_config: AccountInfo<'info>,
 
-    /// CHECK: Core collection asset account; must match config.global_collection
-    #[account(mut, constraint = collection.key() == config.global_collection @ DepredictError::InvalidCollection)]
+    /// CHECK: Core collection asset account; must match market creator's collection
+    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
     pub collection: AccountInfo<'info>,
 
     /// CHECK: Bubblegum program
@@ -188,7 +193,7 @@ impl<'info> PositionContext<'info> {
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
     
-        // Collection is provided as an account and constrained to match config.global_collection in the accounts struct
+        // Collection is provided as an account and constrained to match market creator's collection in the accounts struct
 
         if market_type == MarketType::Future {
             require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
@@ -293,7 +298,7 @@ impl<'info> PositionContext<'info> {
                 is_mutable: false,
                 // For Core collections, Bubblegum expects token_standard to be None
                 token_standard: None,
-                collection: None,
+                collection: Some(self.market_creator.core_collection),
                 creators: vec![],
             };
 
@@ -302,16 +307,17 @@ impl<'info> PositionContext<'info> {
             let payer_ai = self.signer.to_account_info();
             let leaf_owner_ai = self.signer.to_account_info();
             let system_ai = self.system_program.to_account_info();
+            let market_creator_ai = self.market_creator.to_account_info();
             builder
                 .tree_config(&self.tree_config)
                 .payer(&payer_ai)
                 .tree_creator_or_delegate(None)
-                .collection_authority(None)
+                .collection_authority(Some(&market_creator_ai))
                 .leaf_owner(&leaf_owner_ai)
                 .leaf_delegate(None)
                 .merkle_tree(&self.merkle_tree)
-                .core_collection(if self.collection.lamports() > 0 { Some(&self.collection) } else { None })
-                .mpl_core_cpi_signer(None)
+                .core_collection(Some(&self.collection))
+                .mpl_core_cpi_signer(Some(&market_creator_ai))
                 .log_wrapper(&self.log_wrapper_program)
                 .compression_program(&self.compression_program)
                 .mpl_core_program(&self.mpl_core_program)
@@ -336,12 +342,6 @@ impl<'info> PayoutNftContext<'info> {
         let _payer = &self.signer.to_account_info();
         let _system_program = &self.system_program.to_account_info();
         let _mpl_core_program = &self.mpl_core_program.to_account_info();
-
-        msg!("Market ID: {}", market.market_id);
-        msg!("Market bump: {}", market.bump);
-        msg!("Market authority: {}", market.authority);
-        msg!("Market vault: {}", self.market_vault.key());
-        msg!("Market vault owner: {}", self.market_vault.owner);
 
         // Check market is resolved
         require!(

@@ -25,7 +25,7 @@ use crate::{constants::{
         is_valid_oracle
     }, 
     state::{
-        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, MarketType, OracleType, ResolveMarketArgs, UpdateMarketArgs, WinningDirection
+        CloseMarketArgs, Config, CreateMarketArgs, MarketState, MarketStates, MarketType, OracleType, ResolveMarketArgs, UpdateMarketArgs, WinningDirection, MarketCreator
     }
 };
 use crate::errors::DepredictError;
@@ -49,6 +49,13 @@ pub struct MarketContext<'info> {
     
     #[account(mut)]
     pub config: Box<Account<'info, Config>>,
+
+    /// CHECK: Market creator account that will own this market
+    #[account(
+        constraint = market_creator.authority == payer.key() @ DepredictError::Unauthorized,
+        constraint = market_creator.is_active @ DepredictError::MarketCreatorInactive
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>,
 
     #[account(
         init,
@@ -89,7 +96,7 @@ pub struct UpdateMarketContext<'info> {
 
     #[account(
         mut,
-        constraint = market.authority == signer.key() @ DepredictError::Unauthorized
+        constraint = market.market_creator == signer.key() @ DepredictError::Unauthorized
     )] // Market must exist already, signer must be the market authority
     pub market: Box<Account<'info, MarketState>>,
     pub system_program: Program<'info, System>,
@@ -103,7 +110,7 @@ pub struct ResolveMarketContext<'info> {
 
     #[account(
         mut,
-        constraint = market.authority == signer.key() @ DepredictError::Unauthorized
+        constraint = market.market_creator == signer.key() @ DepredictError::Unauthorized
     )]
     pub market: Box<Account<'info, MarketState>>,
 
@@ -170,13 +177,12 @@ pub struct CloseMarketContext<'info> {
 }
 
 impl<'info> MarketContext<'info> {
-    pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &MarketContextBumps) -> Result<()> {
+    pub fn create_market(&mut self, args: CreateMarketArgs) -> Result<()> {
         let market = &mut self.market;
         let payer = &self.payer.to_account_info();
         // No per-market positions account; positions are represented as cNFTs
         let config = &mut self.config;
         let market_type = args.market_type;
-        let global_collection = config.global_collection;
 
         let ts = Clock::get()?.unix_timestamp;
 
@@ -196,7 +202,6 @@ impl<'info> MarketContext<'info> {
 
         msg!("Checking mint is valid");
 
-
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
 
@@ -208,9 +213,11 @@ impl<'info> MarketContext<'info> {
             },
         };
 
+        let market_bump = 0; // Bump not critical for market functionality
+        
         market.set_inner(MarketState {
-            bump: bumps.market,
-            authority: payer.key(),
+            bump: market_bump,
+            market_creator: self.market_creator.key(),
             market_id: market_id,
             betting_start,
             market_start: args.market_start,
@@ -222,9 +229,12 @@ impl<'info> MarketContext<'info> {
             decimals: self.mint.decimals,
             oracle_type: args.oracle_type,
             oracle_pubkey: oracle_pubkey,
-            nft_collection: Some(global_collection),
+            nft_collection: Some(self.market_creator.core_collection),
             ..Default::default()
         });
+
+        // Increment market count for the market creator
+        self.market_creator.increment_market_count();
 
         config.num_markets = config
             .num_markets
@@ -245,7 +255,7 @@ impl<'info> UpdateMarketContext<'info> {
         let ts = Clock::get()?.unix_timestamp;
 
         // only the market creator can update the market
-         require!(market.authority == *signer.key, DepredictError::Unauthorized);
+         require!(market.market_creator == *signer.key, DepredictError::Unauthorized);
 
         // Update only the fields that were passed in args
         if args.market_end.is_some() {
@@ -269,7 +279,7 @@ impl<'info> ResolveMarketContext<'info> {
 
         let ts = Clock::get()?.unix_timestamp;
 
-        require!(market.authority == *signer.key, DepredictError::Unauthorized);
+        require!(market.market_creator == *signer.key, DepredictError::Unauthorized);
         require!(market.market_state != MarketStates::Resolved, DepredictError::MarketAlreadyResolved);
 
         if oracle_type == OracleType::Switchboard {
@@ -318,7 +328,7 @@ impl<'info> CloseMarketContext<'info> {
         let signer = &self.signer;
         let config = &mut self.config;
 
-        require!(market.authority == *signer.key, DepredictError::Unauthorized);
+        require!(market.market_creator == *signer.key, DepredictError::Unauthorized);
 
         let market_state = market.market_state;
         require!(market_state == MarketStates::Resolved, DepredictError::MarketStillActive);

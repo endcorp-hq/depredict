@@ -125,4 +125,7 @@ DepredictError {
 
     #[msg("Invalid NFT")]
     InvalidNft,
+
+    #[msg("Market creator is inactive")]
+    MarketCreatorInactive,
 }

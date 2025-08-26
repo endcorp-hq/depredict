@@ -18,13 +18,18 @@ pub mod depredict {
     use super::*;
 
     // CONFIG INSTRUCTIONS
-    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64, collection_name: String, collection_uri: String) -> Result<()> {
-        ctx.accounts.init_config(fee_amount, collection_name, collection_uri, &ctx.bumps)?;
+    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64, market_creator_fee: u64, collection_name: String, collection_uri: String) -> Result<()> {
+        ctx.accounts.init_config(fee_amount, market_creator_fee, collection_name, collection_uri, &ctx.bumps)?;
         Ok(())
     }
 
     pub fn update_fee_amount(ctx: Context<UpdateConfigContext>, fee_amount: u64) -> Result<()> {
         ctx.accounts.update_fee_amount(fee_amount)?;
+        Ok(())
+    }
+
+    pub fn update_market_creator_fee(ctx: Context<UpdateConfigContext>, market_creator_fee: u64) -> Result<()> {
+        ctx.accounts.update_market_creator_fee(market_creator_fee)?;
         Ok(())
     }
 
@@ -38,8 +43,8 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn update_global_assets(ctx: Context<UpdateConfigContext>, global_collection: Pubkey, global_tree: Pubkey) -> Result<()> {
-        ctx.accounts.update_global_assets(global_collection, global_tree)?;
+    pub fn update_global_assets(ctx: Context<UpdateConfigContext>, global_tree: Pubkey) -> Result<()> {
+        ctx.accounts.update_global_assets(global_tree)?;
         Ok(())
     }
 
@@ -58,10 +63,21 @@ pub mod depredict {
         Ok(())
     }
 
+    // MARKET CREATOR INSTRUCTIONS
+    pub fn create_market_creator(ctx: Context<CreateMarketCreatorContext>, args: CreateMarketCreatorArgs) -> Result<()> {
+        ctx.accounts.create_market_creator(args)?;
+        Ok(())
+    }
+
+    pub fn update_market_creator(ctx: Context<UpdateMarketCreatorContext>, args: UpdateMarketCreatorArgs) -> Result<()> {
+        ctx.accounts.update_market_creator(args)?;
+        Ok(())
+    }
+
     // MARKET INSTRUCTIONS
 
     pub fn create_market(ctx: Context<MarketContext>, args: CreateMarketArgs) -> Result<()> {
-        ctx.accounts.create_market(args, &ctx.bumps)?;
+        ctx.accounts.create_market(args)?;
         Ok(())
     }
 
@@ -99,11 +115,10 @@ pub mod depredict {
 
     pub fn confirm_position(ctx: Context<ConfirmPositionContext>, args: ConfirmPositionArgs) -> Result<()> {
         // Only market authority can confirm
-        require!(ctx.accounts.market.authority == *ctx.accounts.signer.key, DepredictError::Unauthorized);
+        require!(ctx.accounts.market.market_creator == *ctx.accounts.signer.key, DepredictError::Unauthorized);
         let page = &mut ctx.accounts.position_page;
         let slot_index = args.slot_index as usize;
         require!(slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
-        // Set leaf index and mark confirmed (reuse Closed as placeholder? We'll use Claimed only at payout)
         page.entries[slot_index].leaf_index = args.leaf_index;
         page.entries[slot_index].status = PositionStatus::Open; // stays Open but now confirmed by having leaf_index
         Ok(())
