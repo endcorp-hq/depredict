@@ -188,6 +188,7 @@ impl<'info> PositionContext<'info> {
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
     
+        // Collection is provided as an account and constrained to match config.global_collection in the accounts struct
 
         if market_type == MarketType::Future {
             require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
@@ -275,46 +276,51 @@ impl<'info> PositionContext<'info> {
     
         market.emit_market_event()?;
 
-        // Bubblegum mintV2 CPI (public tree, user signed)
-        // Build uri = {base_uri}/{marketId}/{positionId}.json from fixed bytes
-        let base_uri = std::str::from_utf8(&self.config.base_uri).unwrap_or("").trim_matches(char::from(0));
-        let uri = format!("{}/{}/{}.json", base_uri, market.market_id, next_position_id);
-        let name = format!("DEPREDICT-{}-{}", market.market_id, next_position_id);
+        let do_bubblegum = self.merkle_tree.lamports() > 0;
+        if do_bubblegum {
+            // Build uri = {base_uri}/{marketId}/{positionId}.json from fixed bytes
+            let base_uri = std::str::from_utf8(&self.config.base_uri).unwrap_or("").trim_matches(char::from(0));
+            let uri = format!("{}/{}/{}.json", base_uri, market.market_id, next_position_id);
+            let name = format!("DEPREDICT-{}-{}", market.market_id, next_position_id);
 
-        // Build MetadataArgsV2 with required fields for mpl-bubblegum 2.1.1
-        let metadata = MetadataArgsV2 {
-            name,
-            symbol: String::from(""),
-            uri,
-            seller_fee_basis_points: 0,
-            primary_sale_happened: false,
-            is_mutable: false,
-            token_standard: None,
-            collection: None,
-            creators: vec![],
-        };
+            // Build MetadataArgsV2 with required fields for mpl-bubblegum 2.1.1
+            let metadata = MetadataArgsV2 {
+                name,
+                symbol: String::from(""),
+                uri,
+                seller_fee_basis_points: 0,
+                primary_sale_happened: false,
+                is_mutable: false,
+                // For Core collections, Bubblegum expects token_standard to be None
+                token_standard: None,
+                collection: None,
+                creators: vec![],
+            };
 
-        let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
-        // Bind AccountInfo temporaries to extend lifetimes for the builder
-        let payer_ai = self.signer.to_account_info();
-        let leaf_owner_ai = self.signer.to_account_info();
-        let system_ai = self.system_program.to_account_info();
-        builder
-            .tree_config(&self.tree_config)
-            .payer(&payer_ai)
-            .tree_creator_or_delegate(None)
-            .collection_authority(None)
-            .leaf_owner(&leaf_owner_ai)
-            .leaf_delegate(None)
-            .merkle_tree(&self.merkle_tree)
-            .core_collection(Some(&self.collection))
-            .mpl_core_cpi_signer(None)
-            .log_wrapper(&self.log_wrapper_program)
-            .compression_program(&self.compression_program)
-            .mpl_core_program(&self.mpl_core_program)
-            .system_program(&system_ai)
-            .metadata(metadata);
-        builder.invoke()?;
+            let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
+            // Bind AccountInfo temporaries to extend lifetimes for the builder
+            let payer_ai = self.signer.to_account_info();
+            let leaf_owner_ai = self.signer.to_account_info();
+            let system_ai = self.system_program.to_account_info();
+            builder
+                .tree_config(&self.tree_config)
+                .payer(&payer_ai)
+                .tree_creator_or_delegate(None)
+                .collection_authority(None)
+                .leaf_owner(&leaf_owner_ai)
+                .leaf_delegate(None)
+                .merkle_tree(&self.merkle_tree)
+                .core_collection(if self.collection.lamports() > 0 { Some(&self.collection) } else { None })
+                .mpl_core_cpi_signer(None)
+                .log_wrapper(&self.log_wrapper_program)
+                .compression_program(&self.compression_program)
+                .mpl_core_program(&self.mpl_core_program)
+                .system_program(&system_ai)
+                .metadata(metadata);
+            builder.invoke()?;
+        } else {
+            return Err(DepredictError::InvalidNft.into());
+        }
         msg!("Position created; awaiting confirmation by market authority.");
         Ok(())
     }

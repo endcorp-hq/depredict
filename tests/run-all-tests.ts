@@ -246,6 +246,12 @@ class TestRunner {
         skipOnLocalnet: false // Enable on localnet - MPL Core will be available
       },
       {
+        file: 'tests/trade/cnft-verification.ts',
+        description: 'cNFT Verification (DAS)',
+        waitForMarketId: false,
+        skipOnLocalnet: false
+      },
+      {
         file: 'tests/market/resolve-market.ts',
         description: 'Market Resolution',
         waitForMarketId: false,

@@ -6,6 +6,7 @@ use mpl_core::{
     ID as MPL_CORE_ID,
     instructions::CreateCollectionV2CpiBuilder,
 };
+// Bubblegum tree is created off-chain; we only store references on-chain
 
 #[derive(Accounts)]
 pub struct InitConfigContext<'info> {
@@ -32,11 +33,13 @@ pub struct InitConfigContext<'info> {
     )]
     pub collection: UncheckedAccount<'info>,
 
-    /// CHECK: MPL Core program id check
-    #[account(
-        address = MPL_CORE_ID,
-        constraint = mpl_core_program.key() == MPL_CORE_ID @ DepredictError::InvalidMplCoreProgram
-    )]
+    /// CHECK: Global Merkle Tree account reference (created off-chain)
+    #[account(mut)]
+    pub merkle_tree: UncheckedAccount<'info>,
+
+    // No TreeConfig required here; reference can be derived off-chain when minting
+
+    /// CHECK: MPL Core program account (validated at runtime)
     pub mpl_core_program: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -121,6 +124,37 @@ impl<'info> InitConfigContext<'info> {
             .invoke_signed(&[collection_signer_seeds])?;
 
         config.global_collection = self.collection.key();
+
+        // Store provided global merkle tree reference (tree must be created off-chain)
+        config.global_tree = self.merkle_tree.key();
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct InitMerkleTreeContext<'info> {
+    #[account(mut, constraint = signer.key() == config.authority @ DepredictError::Unauthorized)]
+    pub signer: Signer<'info>,
+
+    #[account(mut, seeds = [CONFIG.as_bytes()], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
+
+    /// CHECK: Global Merkle Tree account reference (created off-chain)
+    #[account(mut)]
+    pub merkle_tree: UncheckedAccount<'info>,
+
+    // No TreeConfig required here; reference can be derived off-chain when minting
+
+    pub system_program: Program<'info, System>,
+}
+
+impl<'info> InitMerkleTreeContext<'info> {
+    pub fn init_merkle_tree(&mut self, bump: &InitMerkleTreeContextBumps) -> Result<()> {
+        let config = &mut self.config;
+        require!(config.global_tree == Pubkey::default(), DepredictError::InvalidNft);
+
+        // Backfill: simply store provided merkle tree reference if none exists
+        config.global_tree = self.merkle_tree.key();
         Ok(())
     }
 }

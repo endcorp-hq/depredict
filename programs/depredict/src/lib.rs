@@ -48,6 +48,11 @@ pub mod depredict {
         Ok(())
     }
 
+    pub fn initialize_merkle_tree(ctx: Context<InitMerkleTreeContext>) -> Result<()> {
+        ctx.accounts.init_merkle_tree(&ctx.bumps)?;
+        Ok(())
+    }
+
     pub fn close_config(ctx: Context<CloseConfigContext>) -> Result<()> {
         ctx.accounts.close_config()?;
         Ok(())
