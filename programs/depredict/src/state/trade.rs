@@ -146,7 +146,7 @@ impl PositionAccount {
     }
 }
 
-pub const POSITION_PAGE_ENTRIES: usize = 64;
+pub const POSITION_PAGE_ENTRIES: usize = 32;
 
 #[account]
 #[derive(InitSpace)]

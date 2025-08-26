@@ -3,9 +3,9 @@ use anchor_lang::system_program::{ transfer, Transfer };
 use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
-
+use std::str::FromStr;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
-use crate::constants::{MARKET, POSITION_PAGE, SPL_NOOP_ID, SPL_ACCOUNT_COMPRESSION_ID};
+use crate::constants::{MARKET, POSITION_PAGE, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID};
 use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, ConfirmPositionArgs, ClaimPositionArgs, PositionDirection, PositionStatus, PositionPage, POSITION_PAGE_ENTRIES};
 use crate::{
     errors::DepredictError,
@@ -15,9 +15,6 @@ use mpl_bubblegum::ID as BUBBLEGUM_ID;
 use mpl_bubblegum::instructions::MintV2CpiBuilder;
 use mpl_bubblegum::types::MetadataArgsV2;
 use mpl_core::ID as MPL_CORE_ID;
-// Use hardcoded IDs from constants instead of pulling crates for IDs
-use crate::constants::SPL_NOOP_ID as MPL_NOOP_ID;
-use crate::constants::SPL_ACCOUNT_COMPRESSION_ID as MPL_ACCOUNTCOMPRESSION_ID;
 
 #[derive(Accounts)]
 #[instruction(args: OpenPositionArgs)]
@@ -95,11 +92,11 @@ pub struct PositionContext<'info> {
     pub mpl_core_program: AccountInfo<'info>,
 
     /// CHECK: Log wrapper (mpl-noop)
-    #[account(address = MPL_NOOP_ID)]
+    #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
     pub log_wrapper_program: AccountInfo<'info>,
 
     /// CHECK: Account compression program (mpl-account-compression)
-    #[account(address = MPL_ACCOUNTCOMPRESSION_ID)]
+    #[account(address = Pubkey::from_str(MPL_ACCOUNT_COMPRESSION_ID).unwrap())]
     pub compression_program: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
@@ -310,7 +307,7 @@ impl<'info> PositionContext<'info> {
             .leaf_owner(&leaf_owner_ai)
             .leaf_delegate(None)
             .merkle_tree(&self.merkle_tree)
-            .core_collection(None)
+            .core_collection(Some(&self.collection))
             .mpl_core_cpi_signer(None)
             .log_wrapper(&self.log_wrapper_program)
             .compression_program(&self.compression_program)
