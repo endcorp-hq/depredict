@@ -2,7 +2,6 @@ use crate::constants::CONFIG;
 use crate::errors::DepredictError;
 use crate::state::Config;
 use anchor_lang::prelude::*;
-use mpl_bubblegum::accounts::TreeConfig;
 
 
 #[derive(Accounts)]
@@ -188,16 +187,45 @@ impl<'info> UpdateConfigContext<'info> {
             DepredictError::Unauthorized
         );
 
-        // For now, skip TreeConfig validation since the account might not exist yet
-        // TODO: Implement proper TreeConfig validation once the account structure is confirmed
-        msg!("Skipping TreeConfig validation for now - updating global tree directly");
+        // Check if tree_config account exists and has data
+        let tree_config_data = self.tree_config.data.borrow();
         
-        // Update the global tree reference
-        config.global_tree = new_global_tree;
-        config.version = config.version.checked_add(1).unwrap();
-        msg!("Global tree updated: tree={}", new_global_tree);
-
-        Ok(())
+        if tree_config_data.len() == 0 {
+            msg!("TreeConfig account is empty or doesn't exist yet");
+        } else {
+            msg!("TreeConfig account exists with {} bytes", tree_config_data.len());
+            
+            // Extract tree_creator directly from the TreeConfig account data
+            // TreeConfig structure: [discriminator: 8 bytes][tree_creator: 32 bytes][...]
+            if tree_config_data.len() >= 40 { // 8 + 32 = 40 bytes minimum
+                let tree_creator_bytes = &tree_config_data[8..40]; // Skip 8 bytes, read 32 bytes
+                
+                match Pubkey::try_from_slice(tree_creator_bytes) {
+                    Ok(tree_creator) => {                        
+                        // Validate tree authority matches our program's authority
+                        require!(
+                            tree_creator == config.authority,
+                            DepredictError::Unauthorized
+                        );
+                        
+                        msg!("✅ TreeConfig authority validation passed");
+                        // Update the global tree reference
+                        config.global_tree = new_global_tree;
+                        config.version = config.version.checked_add(1).unwrap();
+                        msg!("Global tree updated: tree={}", new_global_tree);
+                        return Ok(());
+                    },
+                    Err(e) => {
+                        msg!("Failed to deserialize tree_creator Pubkey: {:?}", e);
+                        return Err(DepredictError::Unauthorized.into());
+                    }
+                }
+            } else {
+                msg!("TreeConfig data is too short to contain tree_creator");
+                return Err(DepredictError::Unauthorized.into());
+            }
+        }
+        return Err(DepredictError::Unauthorized.into());
     }
 
     pub fn update_base_uri(
