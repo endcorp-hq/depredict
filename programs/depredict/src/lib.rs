@@ -6,7 +6,6 @@ mod constraints;
 mod errors;
 mod events;
 
-
 use state::*;
 use instructions::*;
 use errors::*;
@@ -18,18 +17,13 @@ pub mod depredict {
     use super::*;
 
     // CONFIG INSTRUCTIONS
-    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64, market_creator_fee: u64, collection_name: String, collection_uri: String) -> Result<()> {
-        ctx.accounts.init_config(fee_amount, market_creator_fee, collection_name, collection_uri, &ctx.bumps)?;
+    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64, collection_name: String, collection_uri: String) -> Result<()> {
+        ctx.accounts.init_config(fee_amount, collection_name, collection_uri, &ctx.bumps)?;
         Ok(())
     }
 
     pub fn update_fee_amount(ctx: Context<UpdateConfigContext>, fee_amount: u64) -> Result<()> {
         ctx.accounts.update_fee_amount(fee_amount)?;
-        Ok(())
-    }
-
-    pub fn update_market_creator_fee(ctx: Context<UpdateConfigContext>, market_creator_fee: u64) -> Result<()> {
-        ctx.accounts.update_market_creator_fee(market_creator_fee)?;
         Ok(())
     }
 
@@ -43,18 +37,13 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn update_global_assets(ctx: Context<UpdateConfigContext>, global_tree: Pubkey) -> Result<()> {
-        ctx.accounts.update_global_assets(global_tree)?;
+    pub fn update_global_tree(ctx: Context<UpdateConfigContext>, new_global_tree: Pubkey) -> Result<()> {
+        ctx.accounts.update_global_tree(new_global_tree)?;
         Ok(())
     }
 
     pub fn update_base_uri(ctx: Context<UpdateConfigContext>, base_uri: [u8; 200]) -> Result<()> {
         ctx.accounts.update_base_uri(base_uri)?;
-        Ok(())
-    }
-
-    pub fn initialize_merkle_tree(ctx: Context<InitMerkleTreeContext>) -> Result<()> {
-        ctx.accounts.init_merkle_tree(&ctx.bumps)?;
         Ok(())
     }
 

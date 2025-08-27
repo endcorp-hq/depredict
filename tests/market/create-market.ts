@@ -16,7 +16,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode, getCurrentUnixTime } from "../helpers";
+import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode, getCurrentUnixTime, getMarketCreatorDetails } from "../helpers";
 
 
 // At the top of your file:
@@ -56,6 +56,8 @@ async function tryCreateMarketTx({
   try {
     // Always source the current fee vault from config unless explicitly overridden
     const feeVaultToUse: PublicKey = feeVault || configAccount.feeVault;
+    const marketCreatorDetails = await getMarketCreatorDetails();
+    
     const tx = await program.methods
       .createMarket({
         question,
@@ -74,6 +76,7 @@ async function tryCreateMarketTx({
         mint: usdcMintToUse,
         tokenProgram: TOKEN_PROGRAM_ID,
         config: configPda,
+        marketCreator: marketCreatorDetails.marketCreator,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
@@ -157,7 +160,14 @@ describe("depredict", () => {
         const configAccount = await program.account.config.fetch(configPda);
         const expectedMarketId = configAccount.nextMarketId.sub(new anchor.BN(1)); // The market that was just created
         assert.ok(marketAccount.marketId.eq(expectedMarketId));
-        assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
+        
+        // Check that marketCreator is set to the expected market creator PDA
+        const expectedMarketCreatorPda = PublicKey.findProgramAddressSync(
+          [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
+          program.programId
+        )[0];
+        assert.ok(marketAccount.marketCreator.equals(expectedMarketCreatorPda));
+        
         assert.ok('none' in marketAccount.oracleType, "Should be none oracle type");
         assert.ok(marketAccount.oraclePubkey === null, "Oracle pubkey should be null for manual resolution");
       }

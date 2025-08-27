@@ -179,7 +179,6 @@ pub struct CloseMarketContext<'info> {
 impl<'info> MarketContext<'info> {
     pub fn create_market(&mut self, args: CreateMarketArgs) -> Result<()> {
         let market = &mut self.market;
-        let payer = &self.payer.to_account_info();
         // No per-market positions account; positions are represented as cNFTs
         let config = &mut self.config;
         let market_type = args.market_type;

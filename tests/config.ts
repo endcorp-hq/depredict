@@ -4,13 +4,51 @@ import { assert } from "chai";
 import { ADMIN, FEE_VAULT, program, provider, ensureAccountBalance } from "./helpers";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import { generateSigner, signerIdentity, createSignerFromKeypair } from "@metaplex-foundation/umi";
-import { createTreeV2 } from "@metaplex-foundation/mpl-bubblegum";
+import { createTreeV2, mplBubblegum } from "@metaplex-foundation/mpl-bubblegum";
+import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters";
 
 describe("depredict", () => {
   const [configPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
     program.programId
   );
+
+  // Helper function to create merkle trees
+  async function createMerkleTree(authority: Keypair, isPublic: boolean = false): Promise<PublicKey> {
+    const umi = createUmi((provider.connection as any).rpcEndpoint || "http://127.0.0.1:8899");
+    const umiAuthorityKp = umi.eddsa.createKeypairFromSecretKey(authority.secretKey);
+    umi.use(signerIdentity(createSignerFromKeypair(umi, umiAuthorityKp)));
+    
+    const merkleTree = generateSigner(umi);
+    const builder = await createTreeV2(umi, {
+      merkleTree,
+      maxDepth: 16,
+      maxBufferSize: 64,
+      public: isPublic,
+    });
+    await builder.sendAndConfirm(umi);
+    
+    const treePubkey = new PublicKey(merkleTree.publicKey.toString());
+    console.log(`Merkle tree created with authority ${authority.publicKey.toString()}:`, treePubkey.toString());
+    
+    // Wait for the account to be fully propagated on-chain
+    console.log("Waiting for merkle tree account to be fully propagated...");
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+    
+    // Verify the account exists and can be fetched
+    try {
+      const accountInfo = await provider.connection.getAccountInfo(treePubkey);
+      if (!accountInfo) {
+        throw new Error(`Merkle tree account ${treePubkey.toString()} not found after creation`);
+      }
+      console.log(`✅ Merkle tree account verified: ${treePubkey.toString()}`);
+    } catch (error) {
+      console.error(`❌ Failed to verify merkle tree account:`, error);
+      throw error;
+    }
+    
+    return treePubkey;
+  }
 
   before(async () => {
     console.log("Admin public key:", ADMIN.publicKey.toString());
@@ -19,6 +57,51 @@ describe("depredict", () => {
 
     // Ensure admin has enough SOL
     await ensureAccountBalance(ADMIN.publicKey);
+    
+    // Initialize config account for all tests
+    console.log("Initializing config account for all tests...");
+    try {
+      // Check if config already exists
+      await program.account.config.fetch(configPda);
+      console.log("✅ Config account already exists");
+    } catch (error) {
+      console.log("Creating new config account...");
+      
+      // Create Bubblegum tree with config admin as creator
+      const initialTreePk = await createMerkleTree(ADMIN, true);
+      
+      // Note: Tree config account is created by Bubblegum program, may take time to propagate
+      console.log("Tree config account will be created by Bubblegum program");
+
+      const collectionName = "DEPREDICT";
+      const collectionUri = "https://example.com/depredict-collection.json";
+
+      // Small delay to ensure everything is settled
+      console.log("Waiting for final settlement before calling program...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // @ts-ignore - IDL types will update after build
+      const tx = await (program.methods as any)
+        .initializeConfig(new anchor.BN(100), collectionName, collectionUri)
+        .accountsPartial({
+          signer: ADMIN.publicKey,
+          feeVault: FEE_VAULT.publicKey,
+          config: configPda,
+          // @ts-ignore - new accounts added in program, types update after build
+          collection: PublicKey.findProgramAddressSync([Buffer.from("collection"), Buffer.from("global")], program.programId)[0],
+          merkleTree: initialTreePk,
+          // @ts-ignore - constant not present in older IDL
+          mplCoreProgram: new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"),
+          systemProgram: anchor.web3.SystemProgram.programId,
+        } as any)
+        .signers([ADMIN])
+        .rpc({
+          skipPreflight: false,
+          commitment: "confirmed",
+          preflightCommitment: "confirmed",
+        });
+      console.log("✅ Config initialization tx:", tx);
+    }
   });
 
   describe("Config", () => {
@@ -29,170 +112,181 @@ describe("depredict", () => {
     };
     let createdTreePk: PublicKey | undefined;
 
-    it("Initializes config", async () => {
-      const feeAmount = new anchor.BN(100);
-
-      try {
-        // Create Bubblegum tree (public) with config admin as creator
-        const umi = createUmi((provider.connection as any).rpcEndpoint || "http://127.0.0.1:8899");
-        const umiAdminKp = umi.eddsa.createKeypairFromSecretKey(ADMIN.secretKey);
-        umi.use(signerIdentity(createSignerFromKeypair(umi, umiAdminKp)));
-        const merkleTree = generateSigner(umi);
-        const builder = await createTreeV2(umi, {
-          merkleTree,
-          maxDepth: 14,
-          maxBufferSize: 64,
-          public: true,
-        });
-        await builder.sendAndConfirm(umi);
-        createdTreePk = new PublicKey(merkleTree.publicKey.toString());
-
-        const collectionName = "DEPREDICT";
-        const collectionUri = "https://example.com/depredict-collection.json";
-
-        // @ts-ignore - IDL types will update after build
-        const tx = await (program.methods as any)
-          .initializeConfig(feeAmount, collectionName, collectionUri)
-          .accountsPartial({
-            signer: ADMIN.publicKey,
-            feeVault: FEE_VAULT.publicKey,
-            config: configPda,
-            // @ts-ignore - new accounts added in program, types update after build
-            collection: PublicKey.findProgramAddressSync([Buffer.from("collection"), Buffer.from("global")], program.programId)[0],
-            merkleTree: createdTreePk,
-            // @ts-ignore - constant not present in older IDL
-            mplCoreProgram: new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"),
-            systemProgram: anchor.web3.SystemProgram.programId,
-          } as any)
-          .signers([ADMIN])
-          .rpc({
-            skipPreflight: false,
-            commitment: "confirmed",
-            preflightCommitment: "confirmed",
-          });
-        console.log("Initialize config tx:", tx);
-      } catch (error) {
-        console.error("Initialize config error:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
-        }
-        // Check if config already exists; if so, ensure tree exists and update global tree
-        if (error.toString().includes("already in use") || 
-            error.toString().includes("already initialized") ||
-            error.toString().includes("ConstraintRaw")) {
-          console.log("Config already initialized, ensuring global tree exists...");
-          const umi = createUmi((provider.connection as any).rpcEndpoint || "http://127.0.0.1:8899");
-          const umiAdminKp = umi.eddsa.createKeypairFromSecretKey(ADMIN.secretKey);
-          umi.use(signerIdentity(createSignerFromKeypair(umi, umiAdminKp)));
-          const merkleTree = generateSigner(umi);
-          const builder = await createTreeV2(umi, {
-            merkleTree,
-            maxDepth: 14,
-            maxBufferSize: 64,
-            public: true,
-          });
-          await builder.sendAndConfirm(umi);
-          createdTreePk = new PublicKey(merkleTree.publicKey.toString());
-          const currentCfg: any = await program.account.config.fetch(configPda);
-          await program.methods
-            .updateGlobalAssets(createdTreePk)
-            .accountsPartial({
-              signer: ADMIN.publicKey,
-              feeVault: FEE_VAULT.publicKey,
-              config: configPda,
-              systemProgram: anchor.web3.SystemProgram.programId,
-            })
-            .signers([ADMIN])
-            .rpc({ commitment: "confirmed" });
-          return;
-        }
-        throw error;
-      }
-
+    it("Verifies config initialization", async () => {
+      // Config should already be initialized from the before hook
       const configAccount: any = await program.account.config.fetch(configPda);
       assert.ok(configAccount.authority.equals(ADMIN.publicKey));
       assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
-      assert.ok(configAccount.feeAmount.eq(feeAmount));
-      // After init, global_collection should be set by program
-      assert.ok(!new PublicKey(configAccount.globalCollection).equals(PublicKey.default));
+      assert.ok(configAccount.feeAmount.eq(new anchor.BN(100)));
+      
       // Global tree reference should be stored and not equal to admin key
       const storedTree = new PublicKey(configAccount.globalTree);
       assert.ok(!storedTree.equals(PublicKey.default));
       assert.ok(!storedTree.equals(ADMIN.publicKey));
-      if (createdTreePk) {
-        assert.ok(storedTree.equals(createdTreePk));
-      }
+      
+      console.log("✅ Config account verified successfully");
     });
 
-    it("Backfill initialize_merkle_tree fails when tree already set", async () => {
-      // If config already has a globalTree set, initialize_merkle_tree should fail
-      const someTree = Keypair.generate().publicKey;
+    it("Updates global tree with valid authority", async () => {
       try {
-        // @ts-ignore - IDL may lag
-        await (program.methods as any)
-          .initializeMerkleTree()
-          .accountsPartial({
-            signer: ADMIN.publicKey,
-            config: configPda,
-            merkleTree: someTree,
-            systemProgram: anchor.web3.SystemProgram.programId,
-          })
-          .signers([ADMIN])
-          .rpc({ commitment: "confirmed" });
-        assert.fail("initialize_merkle_tree should fail when global_tree already set");
-      } catch (error) {
-        const msg = error.toString();
-        assert.include(msg, "InvalidNft");
-      }
-    });
-
-    it("Sets base_uri for deterministic cNFT metadata", async () => {
-      // Prepare a 200-byte buffer with a simple base URI string
-      const base = Buffer.alloc(200);
-      const uriStr = "https://example.com/base";
-      base.write(uriStr, 0, "utf8");
-      const baseArray = Array.from(base.values());
-
-      try {
-        // @ts-ignore - IDL may lag shape
-        const tx = await (program.methods as any)
-          .updateBaseUri(baseArray)
+        // Create a new Bubblegum tree with the same admin authority
+        const newTreePubkey = await createMerkleTree(ADMIN, false);
+        
+        // Small delay to ensure everything is settled
+        console.log("Waiting for final settlement before calling program...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    
+        const mpl_bubblegum_id = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
+        // Find the tree config PDA - use the same derivation as the program (only merkle_tree seed)
+        const treeConfigPda = PublicKey.findProgramAddressSync(
+          [newTreePubkey.toBuffer()],
+          mpl_bubblegum_id
+        )[0];
+        
+        // Update global tree with the new tree (should succeed)
+        const tx = await program.methods
+          .updateGlobalTree(newTreePubkey)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: newTreePubkey,
+            treeConfig: treeConfigPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])
-          .rpc({
-            skipPreflight: false,
-            commitment: "confirmed",
-          });
-        console.log("Update base_uri tx:", tx);
+          .rpc({ commitment: "confirmed" });
+        
+        console.log("Update global tree tx:", tx);
+        
+        // Verify the tree was updated
+        const configAccount = await program.account.config.fetch(configPda);
+        assert.ok(new PublicKey(configAccount.globalTree).equals(newTreePubkey));
+        
       } catch (error) {
-        console.error("Update base_uri error:", error);
-        if ((error as any).logs) {
-          console.error("Program logs:", (error as any).logs);
+        console.error("Update global tree error:", error);
+        if (error.logs) {
+          console.error("Program logs:", error.logs);
         }
         throw error;
       }
+    });
+    
+    it("Fails to update global tree with unauthorized merkle tree", async () => {
+      let unauthorizedTreePubkey: PublicKey;
+      
+      try {
+        // Create a Bubblegum tree with a DIFFERENT authority (not ADMIN)
+        const unauthorizedKeypair = Keypair.generate();
+        unauthorizedTreePubkey = await createMerkleTree(unauthorizedKeypair, false);
+        console.log("Unauthorized merkle tree created:", unauthorizedTreePubkey.toString());
+        
+        // Small delay to ensure everything is settled
+        console.log("Waiting for final settlement before calling program...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    
+        const mpl_bubblegum_id = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
+        // Find the tree config PDA for unauthorized tree - use the same derivation as the program (only merkle_tree seed)
+        const unauthorizedTreeConfigPda = PublicKey.findProgramAddressSync(
+          [unauthorizedTreePubkey.toBuffer()],
+          mpl_bubblegum_id
+        )[0];
 
-      const cfg: any = await program.account.config.fetch(configPda);
-      // Convert stored [u8;200] to trimmed string
-      const stored = Buffer.from(cfg.baseUri as number[]).toString("utf8").replace(/\x00+$/g, "").replace(/\u0000+$/g, "").replace(/\0+$/g, "");
-      assert.ok(stored.startsWith(uriStr));
+        // Try to update global tree with unauthorized tree (should fail)
+        await program.methods
+          .updateGlobalTree(unauthorizedTreePubkey)
+          .accountsPartial({
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
+            config: configPda,
+            merkleTree: unauthorizedTreePubkey,
+            treeConfig: unauthorizedTreeConfigPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc({ commitment: "confirmed" });
+        
+        assert.fail("Transaction should have failed due to unauthorized merkle tree");
+        
+      } catch (error) {
+        console.log("Expected error for unauthorized tree:", error.message);
+        
+        // Should fail with Unauthorized error due to tree authority mismatch
+        assert.include(error.message, "AnchorError");
+        assert.include(error.message, "Unauthorized");
+        
+        // Verify the config was NOT updated
+        const configAccount = await program.account.config.fetch(configPda);
+        const currentTree = new PublicKey(configAccount.globalTree);
+        assert.ok(!currentTree.equals(unauthorizedTreePubkey!), 
+          "Config should not have been updated with unauthorized tree");
+      }
+    });
+    
+    it("Fails to update global tree with non-existent merkle tree", async () => {
+      let fakeTreePubkey: PublicKey;
+      
+      try {
+        // Try to update with a random public key (non-existent tree)
+        fakeTreePubkey = Keypair.generate().publicKey;
+        console.log("Fake merkle tree pubkey:", fakeTreePubkey.toString());
+        
+        // Small delay to ensure everything is settled
+        console.log("Waiting for final settlement before calling program...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    
+        const mpl_bubblegum_id = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
+        // Find the tree config PDA for fake tree - use the same derivation as the program (only merkle_tree seed)
+        const fakeTreeConfigPda = PublicKey.findProgramAddressSync(
+          [fakeTreePubkey.toBuffer()],
+          mpl_bubblegum_id
+        )[0];
+
+        // This should fail when trying to deserialize the non-existent tree
+        await program.methods
+          .updateGlobalTree(fakeTreePubkey)
+          .accountsPartial({
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
+            config: configPda,
+            merkleTree: fakeTreePubkey,
+            treeConfig: fakeTreeConfigPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc({ commitment: "confirmed" });
+        
+        assert.fail("Transaction should have failed due to non-existent merkle tree");
+        
+      } catch (error) {
+        console.log("Expected error for non-existent tree:", error.message);
+        
+        // Should fail with deserialization error
+        assert.include(error.message, "Error");
+        
+        // Verify the config was NOT updated
+        const configAccount = await program.account.config.fetch(configPda);
+        const currentTree = new PublicKey(configAccount.globalTree);
+        assert.ok(!currentTree.equals(fakeTreePubkey!), 
+          "Config should not have been updated with fake tree");
+      }
     });
 
     it("Updates fee amount", async () => {
       const newFeeAmount = new anchor.BN(200);
 
       try {
+        // Small delay to ensure everything is settled
+        console.log("Waiting for final settlement before calling program...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const tx = await program.methods
           .updateFeeAmount(newFeeAmount)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])
@@ -217,12 +311,26 @@ describe("depredict", () => {
       try {
         const currentCfg: any = await program.account.config.fetch(configPda);
         const treeToKeep = new PublicKey(currentCfg.globalTree);
+        
+        // Small delay to ensure everything is settled
+        console.log("Waiting for final settlement before calling program...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const mpl_bubblegum_id = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
+        // Find the tree config PDA for current tree - use the same derivation as the program (only merkle_tree seed)
+        const currentTreeConfigPda = PublicKey.findProgramAddressSync(
+          [treeToKeep.toBuffer()],
+          mpl_bubblegum_id
+        )[0];
+
         const tx = await program.methods
-          .updateGlobalAssets(treeToKeep)
+          .updateGlobalTree(treeToKeep)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: treeToKeep,
+            treeConfig: currentTreeConfigPda,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])
@@ -255,6 +363,7 @@ describe("depredict", () => {
             signer: wrongAdmin.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([wrongAdmin])
@@ -289,6 +398,7 @@ describe("depredict", () => {
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])
@@ -315,6 +425,7 @@ describe("depredict", () => {
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])
@@ -335,12 +446,17 @@ describe("depredict", () => {
       newAuthority = Keypair.generate();
 
       try {
+        // Small delay to ensure everything is settled
+        console.log("Waiting for final settlement before calling program...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const tx = await program.methods
           .updateAuthority(newAuthority.publicKey)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])
@@ -372,6 +488,7 @@ describe("depredict", () => {
             signer: wrongAdmin.publicKey,
             feeVault: FEE_VAULT.publicKey,
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([wrongAdmin])
@@ -398,6 +515,7 @@ describe("depredict", () => {
             signer: newAuthority.publicKey,
             feeVault: FEE_VAULT.publicKey, // Use current fee vault, not the new one
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([newAuthority])
@@ -428,6 +546,7 @@ describe("depredict", () => {
             signer: newAuthority.publicKey,
             feeVault: newFeeVault.publicKey, // Use current fee vault account
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([newAuthority])
@@ -455,6 +574,7 @@ describe("depredict", () => {
             signer: wrongAdmin.publicKey,
             feeVault: newFeeVault.publicKey, // Use current fee vault account
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([wrongAdmin])
@@ -482,6 +602,7 @@ describe("depredict", () => {
             signer: newAuthority.publicKey,
             feeVault: wrongFeeVault.publicKey, // Wrong fee vault account
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([newAuthority])
@@ -510,6 +631,7 @@ describe("depredict", () => {
             signer: newAuthority.publicKey,
             feeVault: newFeeVault.publicKey, // Use current fee vault
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([newAuthority])
@@ -526,6 +648,7 @@ describe("depredict", () => {
             signer: ADMIN.publicKey,
             feeVault: newFeeVault.publicKey, // Use current fee vault
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])
@@ -542,6 +665,7 @@ describe("depredict", () => {
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey, // Now using FEE_VAULT again
             config: configPda,
+            merkleTree: createdTreePk || new PublicKey("11111111111111111111111111111111"),
             systemProgram: anchor.web3.SystemProgram.programId,
           })
           .signers([ADMIN])

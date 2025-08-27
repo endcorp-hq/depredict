@@ -23,6 +23,6 @@ custom-panic = []
 anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.31.1", features = ["metadata", "associated_token"] }
 switchboard-on-demand = "0.5.1"
-mpl-core = { version ="0.10.1"}
+mpl-core = { version = "0.10.1" }
 mpl-bubblegum = "2.1.1"
 solana-security-txt = "1.1.1"

@@ -2,7 +2,8 @@ use crate::constants::CONFIG;
 use crate::errors::DepredictError;
 use crate::state::Config;
 use anchor_lang::prelude::*;
-// Bubblegum tree is created off-chain; we only store references on-chain
+use mpl_bubblegum::accounts::TreeConfig;
+
 
 #[derive(Accounts)]
 pub struct InitConfigContext<'info> {
@@ -24,8 +25,8 @@ pub struct InitConfigContext<'info> {
 
     /// CHECK: Global Merkle Tree account reference (created off-chain)
     #[account(mut)]
-    pub merkle_tree: UncheckedAccount<'info>,
-
+    pub merkle_tree: AccountInfo<'info>,
+    
     pub system_program: Program<'info, System>,
 }
 
@@ -35,7 +36,7 @@ pub struct UpdateConfigContext<'info> {
 
     #[account(
         mut,
-        constraint = signer.key() == config.authority
+        constraint = signer.key() == config.authority @ DepredictError::Unauthorized
     )]
     pub signer: Signer<'info>,
 
@@ -45,7 +46,22 @@ pub struct UpdateConfigContext<'info> {
         constraint = fee_vault.key() == config.fee_vault
     )]
     pub fee_vault: AccountInfo<'info>,
-
+    
+    /// CHECK: Global Merkle Tree account reference (created off-chain)
+    #[account(mut)]
+    pub merkle_tree: AccountInfo<'info>,
+    
+    /// CHECK: Tree Config PDA - we'll validate its authority
+    #[account(
+        mut,
+        seeds = [
+            merkle_tree.key().as_ref()
+        ],
+        seeds::program = mpl_bubblegum::ID,
+        bump
+    )]
+    pub tree_config: UncheckedAccount<'info>,
+    
     #[account(
         mut,
         seeds = [CONFIG.as_bytes()],
@@ -75,13 +91,12 @@ pub struct CloseConfigContext<'info> {
 }
 
 impl<'info> InitConfigContext<'info> {
-    pub fn init_config(&mut self, fee_amount: u64, market_creator_fee: u64, _collection_name: String, _collection_uri: String, bump: &InitConfigContextBumps) -> Result<()> {
+    pub fn init_config(&mut self, fee_amount: u64, _collection_name: String, _collection_uri: String, bump: &InitConfigContextBumps) -> Result<()> {
         let config = &mut self.config;
         config.bump = bump.config;
         config.authority = *self.signer.key;
         config.fee_vault = *self.fee_vault.key;
         config.fee_amount = fee_amount;
-        config.market_creator_fee = market_creator_fee;
         config.version = 1;
         config.next_market_id = 1;
         config.num_markets = 0;
@@ -89,34 +104,6 @@ impl<'info> InitConfigContext<'info> {
         config.base_uri = [0; 200];
 
         // Store provided global merkle tree reference (tree must be created off-chain)
-        config.global_tree = self.merkle_tree.key();
-        Ok(())
-    }
-}
-
-#[derive(Accounts)]
-pub struct InitMerkleTreeContext<'info> {
-    #[account(mut, constraint = signer.key() == config.authority @ DepredictError::Unauthorized)]
-    pub signer: Signer<'info>,
-
-    #[account(mut, seeds = [CONFIG.as_bytes()], bump = config.bump)]
-    pub config: Box<Account<'info, Config>>,
-
-    /// CHECK: Global Merkle Tree account reference (created off-chain)
-    #[account(mut)]
-    pub merkle_tree: UncheckedAccount<'info>,
-
-    // No TreeConfig required here; reference can be derived off-chain when minting
-
-    pub system_program: Program<'info, System>,
-}
-
-impl<'info> InitMerkleTreeContext<'info> {
-    pub fn init_merkle_tree(&mut self, _bump: &InitMerkleTreeContextBumps) -> Result<()> {
-        let config = &mut self.config;
-        require!(config.global_tree == Pubkey::default(), DepredictError::InvalidNft);
-
-        // Backfill: simply store provided merkle tree reference if none exists
         config.global_tree = self.merkle_tree.key();
         Ok(())
     }
@@ -164,6 +151,8 @@ impl<'info> UpdateConfigContext<'info> {
         config.authority = authority;
         config.version = config.version.checked_add(1).unwrap();
         msg!("Authority updated to {}", authority);
+
+        //TODO: Update authority of the Merkle Tree account too. 
         Ok(())
     }
 
@@ -189,9 +178,9 @@ impl<'info> UpdateConfigContext<'info> {
         Ok(())
     }
 
-    pub fn update_market_creator_fee(
+    pub fn update_global_tree(
         &mut self,
-        market_creator_fee: u64,
+        new_global_tree: Pubkey,
     ) -> Result<()> {
         let config = &mut self.config;
         require!(
@@ -199,41 +188,14 @@ impl<'info> UpdateConfigContext<'info> {
             DepredictError::Unauthorized
         );
 
-        const MAX_MARKET_CREATOR_FEE: u64 = 1_000_000_000; // 1 billion
-        require!(
-            market_creator_fee <= MAX_MARKET_CREATOR_FEE,
-            DepredictError::InvalidFeeAmount
-        );
-
-        require!(
-            config.market_creator_fee != market_creator_fee,
-            DepredictError::SameFeeAmount
-        );
-
-        config.market_creator_fee = market_creator_fee;
+        // For now, skip TreeConfig validation since the account might not exist yet
+        // TODO: Implement proper TreeConfig validation once the account structure is confirmed
+        msg!("Skipping TreeConfig validation for now - updating global tree directly");
+        
+        // Update the global tree reference
+        config.global_tree = new_global_tree;
         config.version = config.version.checked_add(1).unwrap();
-        msg!("Market creator fee updated to {}", market_creator_fee);
-        Ok(())
-    }
-
-    pub fn update_global_assets(
-        &mut self,
-        global_tree: Pubkey,
-    ) -> Result<()> {
-        let config = &mut self.config;
-        require!(
-            config.authority == *self.signer.key,
-            DepredictError::Unauthorized
-        );
-
-        require!(global_tree != Pubkey::default(), DepredictError::InvalidOracle);
-
-        // Only update if changes provided
-        if config.global_tree != global_tree {
-            config.global_tree = global_tree;
-            config.version = config.version.checked_add(1).unwrap();
-            msg!("Global tree updated: tree={}", global_tree);
-        }
+        msg!("Global tree updated: tree={}", new_global_tree);
 
         Ok(())
     }

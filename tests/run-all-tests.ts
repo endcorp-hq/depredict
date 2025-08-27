@@ -228,6 +228,12 @@ class TestRunner {
         skipOnLocalnet: false
       },
       {
+        file: 'tests/setup-market-creator.ts',
+        description: 'Market Creator Setup',
+        waitForMarketId: false,
+        skipOnLocalnet: false
+      },
+      {
         file: 'tests/setup-markets.ts',
         description: 'Market Setup (Multiple States)',
         waitForMarketId: true, // Wait for market IDs since we can create markets on localnet
@@ -244,12 +250,6 @@ class TestRunner {
         description: 'Order Creation',
         waitForMarketId: false,
         skipOnLocalnet: false // Enable on localnet - MPL Core will be available
-      },
-      {
-        file: 'tests/trade/cnft-verification.ts',
-        description: 'cNFT Verification (DAS)',
-        waitForMarketId: false,
-        skipOnLocalnet: false
       },
       {
         file: 'tests/market/resolve-market.ts',

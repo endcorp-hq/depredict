@@ -14,7 +14,8 @@ import {
   LOCAL_MINT, 
   ORACLE_KEY, 
   updateMarketIds,
-  extractErrorCode 
+  extractErrorCode,
+  getMarketCreatorDetails
 } from "./helpers";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
@@ -83,6 +84,8 @@ describe("Market Setup", () => {
 
     try {
       const cfg: any = await program.account.config.fetch(configPda);
+      const marketCreatorDetails = await getMarketCreatorDetails();
+      
       const tx = await program.methods
         .createMarket({
           question,
@@ -101,6 +104,7 @@ describe("Market Setup", () => {
           mint: LOCAL_MINT.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           config: configPda,
+          marketCreator: marketCreatorDetails.marketCreator,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
