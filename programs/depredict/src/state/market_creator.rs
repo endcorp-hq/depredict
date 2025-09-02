@@ -1,19 +1,18 @@
 use anchor_lang::prelude::*;
 
-#[account]
+
 #[derive(InitSpace)]
+#[account]
 pub struct MarketCreator {
     pub bump: u8,
     pub authority: Pubkey,           // The wallet that owns this market creator account
     pub core_collection: Pubkey,     // The MPL Core collection NFT mint address
-    pub collection_authority: Pubkey, // The collection authority that can manage the collection
-    #[max_len(100)]
+    #[max_len(30)]
     pub name: String,                // Display name for the market creator
     pub created_at: i64,            // Timestamp when this market creator was created
     pub num_markets: u64,           // Number of markets created by this creator
-    pub is_active: bool,             // Whether this market creator is active
-    pub version: u64,               // Version for future upgrades
-    pub padding: [u8; 32],         // Padding for future fields
+    pub fee_vault: Pubkey,          // The vault that holds the fees for the market creator
+    pub verified: bool,             // Whether the market creator has been verified with a valid collection
 }
 
 impl Default for MarketCreator {
@@ -22,13 +21,11 @@ impl Default for MarketCreator {
             bump: 0,
             authority: Pubkey::default(),
             core_collection: Pubkey::default(),
-            collection_authority: Pubkey::default(),
             name: String::new(),
             created_at: 0,
             num_markets: 0,
-            is_active: true,
-            version: 1,
-            padding: [0; 32],
+            fee_vault: Pubkey::default(),
+            verified: false,
         }
     }
 }
@@ -38,28 +35,24 @@ impl MarketCreator {
         self.num_markets = self.num_markets.checked_add(1).unwrap();
     }
 
-    pub fn next_version(&mut self) {
-        self.version = self.version.checked_add(1).unwrap();
-    }
-
     pub fn is_authority(&self, authority: &Pubkey) -> bool {
         self.authority == *authority
-    }
-
-    pub fn is_collection_authority(&self, collection_authority: &Pubkey) -> bool {
-        self.collection_authority == *collection_authority
     }
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct CreateMarketCreatorArgs {
     pub name: String,
-    pub core_collection: Pubkey,
-    pub collection_authority: Pubkey,
+    pub fee_vault: Pubkey,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct UpdateMarketCreatorArgs {
     pub name: Option<String>,
-    pub is_active: Option<bool>,
+    pub fee_vault: Option<Pubkey>,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct VerifyMarketCreatorArgs {
+    pub core_collection: Pubkey,
 }

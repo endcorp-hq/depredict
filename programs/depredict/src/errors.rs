@@ -128,4 +128,13 @@ DepredictError {
 
     #[msg("Market creator is inactive")]
     MarketCreatorInactive,
+
+    #[msg("Invalid program")]
+    InvalidProgram,
+
+    #[msg("Invalid tree")]
+    InvalidTree,
+
+    #[msg("Market creator already verified")]
+    AlreadyVerified,
 }

@@ -1,23 +1,14 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey, Keypair } from "@solana/web3.js";
-import {
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
-import { assert } from "chai";
+import { PublicKey} from "@solana/web3.js";
 import { 
   getNetworkConfig, 
   ADMIN, 
-  FEE_VAULT, 
   program, 
   provider, 
   LOCAL_MINT, 
-  ORACLE_KEY, 
   updateMarketIds,
-  extractErrorCode,
-  getMarketCreatorDetails
+  ensureMarketCreatorExists
 } from "./helpers";
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
 describe("Market Setup", () => {
   let configPda: PublicKey;
@@ -78,13 +69,12 @@ describe("Market Setup", () => {
       [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
-    // Per-market positions and collection removed in new flow
 
     const question = Array.from(Buffer.from(questionStr));
 
     try {
       const cfg: any = await program.account.config.fetch(configPda);
-      const marketCreatorDetails = await getMarketCreatorDetails();
+      const marketCreatorDetails = await ensureMarketCreatorExists();
       
       const tx = await program.methods
         .createMarket({
@@ -96,17 +86,13 @@ describe("Market Setup", () => {
           marketType,
           bettingStart,
         })
-        .accountsPartial({
+        .accounts({
           payer: ADMIN.publicKey,
           feeVault: cfg.feeVault,
-          market: marketPda,
           oraclePubkey: oraclePubkey,
-          mint: LOCAL_MINT.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
           config: configPda,
           marketCreator: marketCreatorDetails.marketCreator,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
+          mint: LOCAL_MINT.publicKey,
         })
         .signers([ADMIN])
         .rpc();

@@ -53,7 +53,6 @@ pub struct MarketContext<'info> {
     /// CHECK: Market creator account that will own this market
     #[account(
         constraint = market_creator.authority == payer.key() @ DepredictError::Unauthorized,
-        constraint = market_creator.is_active @ DepredictError::MarketCreatorInactive
     )]
     pub market_creator: Box<Account<'info, MarketCreator>>,
 
@@ -178,8 +177,8 @@ pub struct CloseMarketContext<'info> {
 
 impl<'info> MarketContext<'info> {
     pub fn create_market(&mut self, args: CreateMarketArgs) -> Result<()> {
+        
         let market = &mut self.market;
-        // No per-market positions account; positions are represented as cNFTs
         let config = &mut self.config;
         let market_type = args.market_type;
 
@@ -239,8 +238,6 @@ impl<'info> MarketContext<'info> {
             .num_markets
             .checked_add(1)
             .ok_or(DepredictError::ArithmeticOverflow)?;
-    
-        // No position slots to initialize; positions are minted as cNFTs during trades
     
         market.emit_market_event()?;
         Ok(())

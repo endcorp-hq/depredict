@@ -43,3 +43,4 @@ test-runner-verbose = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run
 test-setup-markets = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/setup-markets.ts"
 test-update-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/update-market.ts"
 test-user-trade = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/user/create-user-trade.ts"
+test-create-merkle-tree = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/create-merkle-tree.ts"

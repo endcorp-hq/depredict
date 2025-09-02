@@ -1,40 +1,13 @@
 use anchor_lang::prelude::*;
-use anchor_lang::system_program::{transfer, Transfer};
-
-use crate::{
-    constants::MARKET_CREATOR,
-    errors::DepredictError,
-    state::{Config, MarketCreator, CreateMarketCreatorArgs, UpdateMarketCreatorArgs},
-};
+use crate::state::{MarketCreator, CreateMarketCreatorArgs, UpdateMarketCreatorArgs, VerifyMarketCreatorArgs};
+use crate::constants::*;
+use crate::errors::*;
 
 #[derive(Accounts)]
 #[instruction(args: CreateMarketCreatorArgs)]
 pub struct CreateMarketCreatorContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
-
-    /// CHECK: fee vault account
-    #[account(
-        mut, 
-        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
-    )]
-    pub fee_vault: AccountInfo<'info>,
-
-    #[account(mut)]
-    pub config: Box<Account<'info, Config>>,
-
-    /// CHECK: Core collection NFT mint account
-    #[account(
-        constraint = core_collection_mint.key() == args.core_collection @ DepredictError::InvalidCollection
-    )]
-    pub core_collection_mint: AccountInfo<'info>,
-
-    /// CHECK: Core collection asset account
-    #[account(
-        mut,
-        constraint = core_collection_asset.key() == args.core_collection @ DepredictError::InvalidCollection
-    )]
-    pub core_collection_asset: AccountInfo<'info>,
 
     #[account(
         init,
@@ -63,37 +36,46 @@ pub struct UpdateMarketCreatorContext<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(args: VerifyMarketCreatorArgs)]
+pub struct VerifyMarketCreatorContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized,
+        constraint = !market_creator.verified @ DepredictError::AlreadyVerified
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>,
+
+    /// CHECK: Core collection NFT mint account - we'll verify it exists
+    #[account(
+        constraint = core_collection.key() == args.core_collection @ DepredictError::InvalidCollection
+    )]
+    pub core_collection: AccountInfo<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
 impl<'info> CreateMarketCreatorContext<'info> {
-    pub fn create_market_creator(&mut self, args: CreateMarketCreatorArgs) -> Result<()> {
+    pub fn create_market_creator(&mut self, args: CreateMarketCreatorArgs, bump: &CreateMarketCreatorContextBumps) -> Result<()> {
         let market_creator = &mut self.market_creator;
+        let auth = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
 
-        // Set market creator data
-        market_creator.bump = 0; // Bump not critical for market creator functionality
-        market_creator.authority = self.signer.key();
-        market_creator.core_collection = args.core_collection;
-        market_creator.collection_authority = args.collection_authority;
-        market_creator.name = args.name;
-        market_creator.created_at = ts;
-        market_creator.num_markets = 0;
-        market_creator.is_active = true;
-        market_creator.version = 1;
+        market_creator.set_inner(MarketCreator {
+            bump: bump.market_creator,
+            authority: auth.key(),
+            core_collection: Pubkey::default(), // Will be set during verification
+            name: args.name,
+            created_at: ts,
+            num_markets: 0,
+            fee_vault: args.fee_vault,
+            verified: false, // Not verified until collection is created
+        });
 
-        // Transfer market creator fee
-        let fee = self.config.market_creator_fee;
-        let transfer_result = transfer(
-            CpiContext::new(self.system_program.to_account_info(), Transfer {
-                from: self.signer.to_account_info(),
-                to: self.fee_vault.to_account_info(),
-            }),
-            fee
-        );
-
-        if let Err(_) = transfer_result {
-            return Err(DepredictError::InsufficientFunds.into());
-        }
-
-        msg!("Market creator created successfully");
+        msg!("Market creator created successfully (unverified)");
         Ok(())
     }
 }
@@ -106,14 +88,32 @@ impl<'info> UpdateMarketCreatorContext<'info> {
         if let Some(name) = args.name {
             market_creator.name = name;
         }
-        
-        if let Some(is_active) = args.is_active {
-            market_creator.is_active = is_active;
+
+        if let Some(fee_vault) = args.fee_vault {
+            market_creator.fee_vault = fee_vault;
         }
 
-        market_creator.next_version();
-
         msg!("Market creator updated successfully");
+        Ok(())
+    }
+}
+
+impl<'info> VerifyMarketCreatorContext<'info> {
+    pub fn verify_market_creator(&mut self, args: VerifyMarketCreatorArgs) -> Result<()> {
+        let market_creator = &mut self.market_creator;
+
+        // Verify the collection account exists and is owned by the correct program
+        let collection_account = self.core_collection.try_borrow_data()?;
+        require!(
+            collection_account.len() > 0,
+            DepredictError::InvalidCollection
+        );
+
+        // Set the collection and mark as verified
+        market_creator.core_collection = args.core_collection;
+        market_creator.verified = true;
+
+        msg!("Market creator verified successfully with collection: {}", args.core_collection);
         Ok(())
     }
 }

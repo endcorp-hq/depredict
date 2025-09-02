@@ -10,7 +10,7 @@ use state::*;
 use instructions::*;
 use errors::*;
 
-declare_id!("7w43ZtEh1vdmiCFkuVMRni3s1gq7DJiu1N5N5AuRu59r");
+declare_id!("6s9hbResitoGVoBEk6e5G6c9RzfvDnVKix7kwW6fUkWe");
 
 #[program]
 pub mod depredict {
@@ -54,7 +54,12 @@ pub mod depredict {
 
     // MARKET CREATOR INSTRUCTIONS
     pub fn create_market_creator(ctx: Context<CreateMarketCreatorContext>, args: CreateMarketCreatorArgs) -> Result<()> {
-        ctx.accounts.create_market_creator(args)?;
+        ctx.accounts.create_market_creator(args, &ctx.bumps)?;
+        Ok(())
+    }
+
+    pub fn verify_market_creator(ctx: Context<VerifyMarketCreatorContext>, args: VerifyMarketCreatorArgs) -> Result<()> {
+        ctx.accounts.verify_market_creator(args)?;
         Ok(())
     }
 
