@@ -2870,6 +2870,7 @@ __metadata:
     "@metaplex-foundation/mpl-core": "npm:^1.4.0"
     "@metaplex-foundation/umi": "npm:^1.2.0"
     "@metaplex-foundation/umi-bundle-defaults": "npm:^1.2.0"
+    "@metaplex-foundation/umi-web3js-adapters": "npm:^1.2.0"
     "@solana/spl-token": "npm:^0.4.13"
     "@switchboard-xyz/common": "npm:^3.4.1"
     "@switchboard-xyz/on-demand": "npm:^2.10.4"
