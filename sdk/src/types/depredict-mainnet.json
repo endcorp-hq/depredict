@@ -1,0 +1,2323 @@
+{
+    "address": "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU",
+    "metadata": {
+      "name": "depredict",
+      "version": "0.5.0",
+      "spec": "0.1.0",
+      "description": "Created with Anchor"
+    },
+    "instructions": [
+      {
+        "name": "close_config",
+        "discriminator": [
+          145,
+          9,
+          72,
+          157,
+          95,
+          125,
+          61,
+          85
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "config",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    99,
+                    111,
+                    110,
+                    102,
+                    105,
+                    103
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "close_market",
+        "discriminator": [
+          88,
+          154,
+          248,
+          186,
+          48,
+          14,
+          123,
+          244
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "fee_vault",
+            "writable": true
+          },
+          {
+            "name": "config",
+            "writable": true
+          },
+          {
+            "name": "fee_vault_mint_ata",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "fee_vault"
+                },
+                {
+                  "kind": "const",
+                  "value": [
+                    6,
+                    221,
+                    246,
+                    225,
+                    215,
+                    101,
+                    161,
+                    147,
+                    217,
+                    203,
+                    225,
+                    70,
+                    206,
+                    235,
+                    121,
+                    172,
+                    28,
+                    180,
+                    133,
+                    237,
+                    95,
+                    91,
+                    55,
+                    145,
+                    58,
+                    140,
+                    245,
+                    133,
+                    126,
+                    255,
+                    0,
+                    169
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "market",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    114,
+                    107,
+                    101,
+                    116
+                  ]
+                },
+                {
+                  "kind": "arg",
+                  "path": "args.market_id"
+                }
+              ]
+            }
+          },
+          {
+            "name": "mint",
+            "writable": true
+          },
+          {
+            "name": "market_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "market"
+                },
+                {
+                  "kind": "const",
+                  "value": [
+                    6,
+                    221,
+                    246,
+                    225,
+                    215,
+                    101,
+                    161,
+                    147,
+                    217,
+                    203,
+                    225,
+                    70,
+                    206,
+                    235,
+                    121,
+                    172,
+                    28,
+                    180,
+                    133,
+                    237,
+                    95,
+                    91,
+                    55,
+                    145,
+                    58,
+                    140,
+                    245,
+                    133,
+                    126,
+                    255,
+                    0,
+                    169
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "market_positions_account",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    111,
+                    115,
+                    105,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "arg",
+                  "path": "args.market_id"
+                }
+              ]
+            }
+          },
+          {
+            "name": "token_program"
+          },
+          {
+            "name": "associated_token_program",
+            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "args",
+            "type": {
+              "defined": {
+                "name": "CloseMarketArgs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "create_market",
+        "discriminator": [
+          103,
+          226,
+          97,
+          235,
+          200,
+          188,
+          251,
+          254
+        ],
+        "accounts": [
+          {
+            "name": "payer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "fee_vault",
+            "writable": true
+          },
+          {
+            "name": "oracle_pubkey",
+            "writable": true
+          },
+          {
+            "name": "config",
+            "writable": true
+          },
+          {
+            "name": "market",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    114,
+                    107,
+                    101,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "config.next_market_id",
+                  "account": "Config"
+                }
+              ]
+            }
+          },
+          {
+            "name": "market_positions_account",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    111,
+                    115,
+                    105,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "config.next_market_id",
+                  "account": "Config"
+                }
+              ]
+            }
+          },
+          {
+            "name": "collection",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    99,
+                    111,
+                    108,
+                    108,
+                    101,
+                    99,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "config.next_market_id",
+                  "account": "Config"
+                }
+              ]
+            }
+          },
+          {
+            "name": "mint",
+            "writable": true
+          },
+          {
+            "name": "market_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "market"
+                },
+                {
+                  "kind": "account",
+                  "path": "token_program"
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "mpl_core_program",
+            "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+          },
+          {
+            "name": "token_program",
+            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          },
+          {
+            "name": "associated_token_program",
+            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "args",
+            "type": {
+              "defined": {
+                "name": "CreateMarketArgs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "create_position",
+        "discriminator": [
+          48,
+          215,
+          197,
+          153,
+          96,
+          203,
+          180,
+          133
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "fee_vault",
+            "writable": true
+          },
+          {
+            "name": "market_positions_account",
+            "writable": true
+          },
+          {
+            "name": "position_nft_account",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    110,
+                    102,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "market_positions_account.market_id",
+                  "account": "PositionAccount"
+                },
+                {
+                  "kind": "account",
+                  "path": "market.next_position_id",
+                  "account": "MarketState"
+                }
+              ]
+            }
+          },
+          {
+            "name": "market",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    114,
+                    107,
+                    101,
+                    116
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "market_positions_account.market_id",
+                  "account": "PositionAccount"
+                }
+              ]
+            }
+          },
+          {
+            "name": "mint",
+            "writable": true
+          },
+          {
+            "name": "user_mint_ata",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "signer"
+                },
+                {
+                  "kind": "account",
+                  "path": "token_program"
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "market_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "market"
+                },
+                {
+                  "kind": "account",
+                  "path": "token_program"
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "config"
+          },
+          {
+            "name": "collection",
+            "writable": true
+          },
+          {
+            "name": "mpl_core_program",
+            "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+          },
+          {
+            "name": "token_program",
+            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          },
+          {
+            "name": "associated_token_program",
+            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "args",
+            "type": {
+              "defined": {
+                "name": "OpenPositionArgs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "create_sub_position_account",
+        "discriminator": [
+          194,
+          196,
+          200,
+          66,
+          242,
+          197,
+          107,
+          188
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "market",
+            "writable": true
+          },
+          {
+            "name": "market_positions_account",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    111,
+                    115,
+                    105,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "market.market_id",
+                  "account": "MarketState"
+                }
+              ]
+            }
+          },
+          {
+            "name": "sub_market_positions",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    112,
+                    111,
+                    115,
+                    105,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "market_positions_account.market_id",
+                  "account": "PositionAccount"
+                },
+                {
+                  "kind": "arg",
+                  "path": "sub_position_key"
+                }
+              ]
+            }
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "sub_position_key",
+            "type": "pubkey"
+          }
+        ]
+      },
+      {
+        "name": "initialize_config",
+        "discriminator": [
+          208,
+          127,
+          21,
+          1,
+          194,
+          190,
+          196,
+          70
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "fee_vault",
+            "writable": true
+          },
+          {
+            "name": "config",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    99,
+                    111,
+                    110,
+                    102,
+                    105,
+                    103
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "fee_amount",
+            "type": "u64"
+          }
+        ]
+      },
+      {
+        "name": "resolve_market",
+        "discriminator": [
+          155,
+          23,
+          80,
+          173,
+          46,
+          74,
+          23,
+          239
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "market",
+            "writable": true
+          },
+          {
+            "name": "oracle_pubkey",
+            "writable": true
+          }
+        ],
+        "args": [
+          {
+            "name": "args",
+            "type": {
+              "defined": {
+                "name": "ResolveMarketArgs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "settle_position",
+        "discriminator": [
+          33,
+          156,
+          74,
+          218,
+          215,
+          42,
+          112,
+          175
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "market",
+            "writable": true
+          },
+          {
+            "name": "market_positions_account",
+            "writable": true
+          },
+          {
+            "name": "mint",
+            "writable": true
+          },
+          {
+            "name": "user_mint_ata",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "signer"
+                },
+                {
+                  "kind": "account",
+                  "path": "token_program"
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "market_vault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "market"
+                },
+                {
+                  "kind": "account",
+                  "path": "token_program"
+                },
+                {
+                  "kind": "account",
+                  "path": "mint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "nft_mint",
+            "writable": true
+          },
+          {
+            "name": "collection",
+            "writable": true
+          },
+          {
+            "name": "mpl_core_program",
+            "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+          },
+          {
+            "name": "token_program",
+            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          },
+          {
+            "name": "associated_token_program",
+            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "update_authority",
+        "discriminator": [
+          32,
+          46,
+          64,
+          28,
+          149,
+          75,
+          243,
+          88
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "fee_vault",
+            "writable": true
+          },
+          {
+            "name": "config",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    99,
+                    111,
+                    110,
+                    102,
+                    105,
+                    103
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      },
+      {
+        "name": "update_fee_amount",
+        "discriminator": [
+          42,
+          132,
+          206,
+          131,
+          241,
+          110,
+          113,
+          96
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "fee_vault",
+            "writable": true
+          },
+          {
+            "name": "config",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    99,
+                    111,
+                    110,
+                    102,
+                    105,
+                    103
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "fee_amount",
+            "type": "u64"
+          }
+        ]
+      },
+      {
+        "name": "update_fee_vault",
+        "discriminator": [
+          186,
+          252,
+          216,
+          197,
+          126,
+          152,
+          213,
+          9
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "fee_vault",
+            "writable": true
+          },
+          {
+            "name": "config",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    99,
+                    111,
+                    110,
+                    102,
+                    105,
+                    103
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          }
+        ]
+      },
+      {
+        "name": "update_market",
+        "discriminator": [
+          153,
+          39,
+          2,
+          197,
+          179,
+          50,
+          199,
+          217
+        ],
+        "accounts": [
+          {
+            "name": "signer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "market",
+            "writable": true
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "args",
+            "type": {
+              "defined": {
+                "name": "UpdateMarketArgs"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "accounts": [
+      {
+        "name": "Config",
+        "discriminator": [
+          155,
+          12,
+          170,
+          224,
+          30,
+          250,
+          204,
+          130
+        ]
+      },
+      {
+        "name": "MarketState",
+        "discriminator": [
+          0,
+          125,
+          123,
+          215,
+          95,
+          96,
+          164,
+          194
+        ]
+      },
+      {
+        "name": "PositionAccount",
+        "discriminator": [
+          60,
+          125,
+          250,
+          193,
+          181,
+          109,
+          238,
+          86
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "MarketEvent",
+        "discriminator": [
+          212,
+          67,
+          145,
+          23,
+          58,
+          104,
+          52,
+          83
+        ]
+      },
+      {
+        "name": "PoolEvent",
+        "discriminator": [
+          76,
+          227,
+          205,
+          183,
+          1,
+          218,
+          164,
+          244
+        ]
+      },
+      {
+        "name": "PositionEvent",
+        "discriminator": [
+          169,
+          63,
+          86,
+          103,
+          243,
+          59,
+          238,
+          111
+        ]
+      },
+      {
+        "name": "PriceEvent",
+        "discriminator": [
+          31,
+          40,
+          141,
+          125,
+          132,
+          253,
+          225,
+          229
+        ]
+      }
+    ],
+    "errors": [
+      {
+        "code": 6000,
+        "name": "Unauthorized",
+        "msg": "Unauthorized Instruction"
+      },
+      {
+        "code": 6001,
+        "name": "ConfigInUse",
+        "msg": "Config account in use, cannot close it"
+      },
+      {
+        "code": 6002,
+        "name": "SameFeeAmount",
+        "msg": "Same fee amount"
+      },
+      {
+        "code": 6003,
+        "name": "InvalidFeeAmount",
+        "msg": "Invalid fee amount"
+      },
+      {
+        "code": 6004,
+        "name": "SameFeeVault",
+        "msg": "Same fee vault"
+      },
+      {
+        "code": 6005,
+        "name": "ArithmeticOverflow",
+        "msg": "Arithmetic overflow"
+      },
+      {
+        "code": 6006,
+        "name": "InsufficientFunds",
+        "msg": "Insufficient funds"
+      },
+      {
+        "code": 6007,
+        "name": "InvalidPrice",
+        "msg": "Invalid price"
+      },
+      {
+        "code": 6008,
+        "name": "NoAvailablePositionSlot",
+        "msg": "No available position slot"
+      },
+      {
+        "code": 6009,
+        "name": "InvalidOracle",
+        "msg": "Invalid oracle"
+      },
+      {
+        "code": 6010,
+        "name": "OracleNotResolved",
+        "msg": "Oracle not resolved"
+      },
+      {
+        "code": 6011,
+        "name": "MarketInactive",
+        "msg": "Market is inactive"
+      },
+      {
+        "code": 6012,
+        "name": "InvalidBettingStart",
+        "msg": "Invalid betting start"
+      },
+      {
+        "code": 6013,
+        "name": "PositionNotFound",
+        "msg": "Position not found"
+      },
+      {
+        "code": 6014,
+        "name": "BettingPeriodNotStarted",
+        "msg": "Betting period not started"
+      },
+      {
+        "code": 6015,
+        "name": "BettingPeriodExceeded",
+        "msg": "Betting period exceeded"
+      },
+      {
+        "code": 6016,
+        "name": "BettingPeriodEnded",
+        "msg": "Betting period ended"
+      },
+      {
+        "code": 6017,
+        "name": "MarketStillActive",
+        "msg": "Market still active"
+      },
+      {
+        "code": 6018,
+        "name": "InsufficientLiquidity",
+        "msg": "Insufficient liquidity"
+      },
+      {
+        "code": 6019,
+        "name": "MarketAlreadyResolved",
+        "msg": "Market already resolved"
+      },
+      {
+        "code": 6020,
+        "name": "ConcurrentTransaction",
+        "msg": "Concurrent transaction"
+      },
+      {
+        "code": 6021,
+        "name": "MarketNotAllowedToPayout",
+        "msg": "Market Not allowed to payout"
+      },
+      {
+        "code": 6022,
+        "name": "UserTradeIsSubUser",
+        "msg": "User trade is sub user"
+      },
+      {
+        "code": 6023,
+        "name": "PrizeNotFound",
+        "msg": "Prize not found"
+      },
+      {
+        "code": 6024,
+        "name": "NoPrizesAvailable",
+        "msg": "No Prize Available"
+      },
+      {
+        "code": 6025,
+        "name": "AlreadyLinked",
+        "msg": "Already linked"
+      },
+      {
+        "code": 6026,
+        "name": "NotLinked",
+        "msg": "Not linked"
+      },
+      {
+        "code": 6027,
+        "name": "InvalidCustomer",
+        "msg": "Invalid customer"
+      },
+      {
+        "code": 6028,
+        "name": "InvalidMint",
+        "msg": "Invalid mint"
+      },
+      {
+        "code": 6029,
+        "name": "InvalidFeeVault",
+        "msg": "Invalid fee vault"
+      },
+      {
+        "code": 6030,
+        "name": "InvalidShares",
+        "msg": "Invalid shares"
+      },
+      {
+        "code": 6031,
+        "name": "UnauthorizedToOrderBook",
+        "msg": "Unauthorized to order book"
+      },
+      {
+        "code": 6032,
+        "name": "OrderIsFullFilled",
+        "msg": "Order is full filled"
+      },
+      {
+        "code": 6033,
+        "name": "Overflow",
+        "msg": "Overflow"
+      },
+      {
+        "code": 6034,
+        "name": "MarketAlreadyAggregated",
+        "msg": "Market already aggregated"
+      },
+      {
+        "code": 6035,
+        "name": "InvalidMarketId",
+        "msg": "Invalid market id"
+      },
+      {
+        "code": 6036,
+        "name": "InvalidCollection",
+        "msg": "Invalid collection"
+      },
+      {
+        "code": 6037,
+        "name": "InvalidCollectionMint",
+        "msg": "Invalid collection mint"
+      },
+      {
+        "code": 6038,
+        "name": "InvalidAuthority",
+        "msg": "Invalid collection authority"
+      },
+      {
+        "code": 6039,
+        "name": "InvalidMplCoreProgram",
+        "msg": "Invalid mpl core program"
+      },
+      {
+        "code": 6040,
+        "name": "InvalidNft",
+        "msg": "Invalid NFT"
+      }
+    ],
+    "types": [
+      {
+        "name": "CloseMarketArgs",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "market_id",
+              "type": "u64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Config",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "bump",
+              "type": "u8"
+            },
+            {
+              "name": "authority",
+              "type": "pubkey"
+            },
+            {
+              "name": "fee_vault",
+              "type": "pubkey"
+            },
+            {
+              "name": "fee_amount",
+              "type": "u64"
+            },
+            {
+              "name": "version",
+              "type": "u64"
+            },
+            {
+              "name": "next_market_id",
+              "type": "u64"
+            },
+            {
+              "name": "num_markets",
+              "type": "u64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "CreateMarketArgs",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "question",
+              "type": {
+                "array": [
+                  "u8",
+                  80
+                ]
+              }
+            },
+            {
+              "name": "market_type",
+              "type": {
+                "defined": {
+                  "name": "MarketType"
+                }
+              }
+            },
+            {
+              "name": "betting_start",
+              "type": {
+                "option": "i64"
+              }
+            },
+            {
+              "name": "market_start",
+              "type": "i64"
+            },
+            {
+              "name": "market_end",
+              "type": "i64"
+            },
+            {
+              "name": "metadata_uri",
+              "type": "string"
+            },
+            {
+              "name": "oracle_type",
+              "type": {
+                "defined": {
+                  "name": "OracleType"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "MarketEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "authority",
+              "type": "pubkey"
+            },
+            {
+              "name": "market_id",
+              "type": "u64"
+            },
+            {
+              "name": "yes_liquidity",
+              "type": "u64"
+            },
+            {
+              "name": "no_liquidity",
+              "type": "u64"
+            },
+            {
+              "name": "volume",
+              "type": "u64"
+            },
+            {
+              "name": "update_ts",
+              "type": "i64"
+            },
+            {
+              "name": "next_position_id",
+              "type": "u64"
+            },
+            {
+              "name": "market_state",
+              "type": {
+                "defined": {
+                  "name": "MarketStates"
+                }
+              }
+            },
+            {
+              "name": "market_start",
+              "type": "i64"
+            },
+            {
+              "name": "market_end",
+              "type": "i64"
+            },
+            {
+              "name": "question",
+              "type": {
+                "array": [
+                  "u8",
+                  80
+                ]
+              }
+            },
+            {
+              "name": "winning_direction",
+              "type": {
+                "defined": {
+                  "name": "WinningDirection"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "MarketState",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "bump",
+              "type": "u8"
+            },
+            {
+              "name": "market_id",
+              "type": "u64"
+            },
+            {
+              "name": "authority",
+              "type": "pubkey"
+            },
+            {
+              "name": "market_type",
+              "type": {
+                "defined": {
+                  "name": "MarketType"
+                }
+              }
+            },
+            {
+              "name": "oracle_type",
+              "type": {
+                "defined": {
+                  "name": "OracleType"
+                }
+              }
+            },
+            {
+              "name": "oracle_pubkey",
+              "type": {
+                "option": "pubkey"
+              }
+            },
+            {
+              "name": "nft_collection",
+              "type": {
+                "option": "pubkey"
+              }
+            },
+            {
+              "name": "mint",
+              "type": {
+                "option": "pubkey"
+              }
+            },
+            {
+              "name": "decimals",
+              "type": "u8"
+            },
+            {
+              "name": "market_vault",
+              "type": {
+                "option": "pubkey"
+              }
+            },
+            {
+              "name": "yes_liquidity",
+              "type": "u64"
+            },
+            {
+              "name": "no_liquidity",
+              "type": "u64"
+            },
+            {
+              "name": "volume",
+              "type": "u64"
+            },
+            {
+              "name": "update_ts",
+              "type": "i64"
+            },
+            {
+              "name": "padding_1",
+              "type": {
+                "array": [
+                  "u8",
+                  7
+                ]
+              }
+            },
+            {
+              "name": "next_position_id",
+              "type": "u64"
+            },
+            {
+              "name": "market_state",
+              "type": {
+                "defined": {
+                  "name": "MarketStates"
+                }
+              }
+            },
+            {
+              "name": "betting_start",
+              "type": "i64"
+            },
+            {
+              "name": "market_start",
+              "type": "i64"
+            },
+            {
+              "name": "market_end",
+              "type": "i64"
+            },
+            {
+              "name": "question",
+              "type": {
+                "array": [
+                  "u8",
+                  80
+                ]
+              }
+            },
+            {
+              "name": "winning_direction",
+              "type": {
+                "defined": {
+                  "name": "WinningDirection"
+                }
+              }
+            },
+            {
+              "name": "version",
+              "type": "u64"
+            },
+            {
+              "name": "padding",
+              "type": {
+                "array": [
+                  "u8",
+                  20
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "MarketStates",
+        "type": {
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "Active"
+            },
+            {
+              "name": "Ended"
+            },
+            {
+              "name": "Resolving"
+            },
+            {
+              "name": "Resolved"
+            }
+          ]
+        }
+      },
+      {
+        "name": "MarketType",
+        "type": {
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "Live"
+            },
+            {
+              "name": "Future"
+            }
+          ]
+        }
+      },
+      {
+        "name": "OpenPositionArgs",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "amount",
+              "type": "u64"
+            },
+            {
+              "name": "direction",
+              "type": {
+                "defined": {
+                  "name": "PositionDirection"
+                }
+              }
+            },
+            {
+              "name": "metadata_uri",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      {
+        "name": "OracleType",
+        "type": {
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "None"
+            },
+            {
+              "name": "Switchboard"
+            }
+          ]
+        }
+      },
+      {
+        "name": "PoolEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "pool_id",
+              "type": "u64"
+            },
+            {
+              "name": "question",
+              "type": {
+                "array": [
+                  "u8",
+                  80
+                ]
+              }
+            },
+            {
+              "name": "authority",
+              "type": "pubkey"
+            },
+            {
+              "name": "markets",
+              "type": {
+                "array": [
+                  "u64",
+                  60
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Position",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "position_id",
+              "type": "u64"
+            },
+            {
+              "name": "market_id",
+              "type": "u64"
+            },
+            {
+              "name": "amount",
+              "type": "u64"
+            },
+            {
+              "name": "direction",
+              "type": {
+                "defined": {
+                  "name": "PositionDirection"
+                }
+              }
+            },
+            {
+              "name": "created_at",
+              "type": "i64"
+            },
+            {
+              "name": "ts",
+              "type": "i64"
+            },
+            {
+              "name": "mint",
+              "type": {
+                "option": "pubkey"
+              }
+            },
+            {
+              "name": "position_status",
+              "type": {
+                "defined": {
+                  "name": "PositionStatus"
+                }
+              }
+            },
+            {
+              "name": "position_nonce",
+              "type": "u32"
+            },
+            {
+              "name": "padding",
+              "type": {
+                "array": [
+                  "u8",
+                  3
+                ]
+              }
+            },
+            {
+              "name": "version",
+              "type": "u64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "PositionAccount",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "bump",
+              "type": "u8"
+            },
+            {
+              "name": "market_id",
+              "type": "u64"
+            },
+            {
+              "name": "authority",
+              "type": "pubkey"
+            },
+            {
+              "name": "version",
+              "type": "u64"
+            },
+            {
+              "name": "positions",
+              "type": {
+                "array": [
+                  {
+                    "defined": {
+                      "name": "Position"
+                    }
+                  },
+                  10
+                ]
+              }
+            },
+            {
+              "name": "nonce",
+              "type": "u32"
+            },
+            {
+              "name": "is_sub_position",
+              "type": "bool"
+            },
+            {
+              "name": "padding",
+              "type": {
+                "array": [
+                  "u8",
+                  10
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "PositionDirection",
+        "type": {
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "Yes"
+            },
+            {
+              "name": "No"
+            }
+          ]
+        }
+      },
+      {
+        "name": "PositionEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "position_id",
+              "type": "u64"
+            },
+            {
+              "name": "mint",
+              "type": {
+                "option": "pubkey"
+              }
+            },
+            {
+              "name": "position_nonce",
+              "type": "u32"
+            },
+            {
+              "name": "market_id",
+              "type": "u64"
+            },
+            {
+              "name": "amount",
+              "type": "u64"
+            },
+            {
+              "name": "direction",
+              "type": {
+                "defined": {
+                  "name": "PositionDirection"
+                }
+              }
+            },
+            {
+              "name": "position_status",
+              "type": {
+                "defined": {
+                  "name": "PositionStatus"
+                }
+              }
+            },
+            {
+              "name": "ts",
+              "type": "i64"
+            },
+            {
+              "name": "created_at",
+              "type": "i64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "PositionStatus",
+        "type": {
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "Init"
+            },
+            {
+              "name": "Open"
+            },
+            {
+              "name": "Closed"
+            },
+            {
+              "name": "Claimed"
+            }
+          ]
+        }
+      },
+      {
+        "name": "PriceEvent",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "market_id",
+              "type": "u64"
+            },
+            {
+              "name": "yes_price",
+              "type": "u64"
+            },
+            {
+              "name": "no_price",
+              "type": "u64"
+            },
+            {
+              "name": "timestamp",
+              "type": "i64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "ResolveMarketArgs",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "oracle_value",
+              "type": {
+                "option": "u32"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "UpdateMarketArgs",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "market_end",
+              "type": {
+                "option": "i64"
+              }
+            },
+            {
+              "name": "market_state",
+              "type": {
+                "option": {
+                  "defined": {
+                    "name": "MarketStates"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "WinningDirection",
+        "type": {
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "None"
+            },
+            {
+              "name": "Yes"
+            },
+            {
+              "name": "No"
+            },
+            {
+              "name": "Draw"
+            }
+          ]
+        }
+      }
+    ]
+  }
