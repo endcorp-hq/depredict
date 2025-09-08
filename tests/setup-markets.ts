@@ -7,7 +7,8 @@ import {
   provider, 
   LOCAL_MINT, 
   updateMarketIds,
-  ensureMarketCreatorExists
+  ensureMarketCreatorExists,
+  getVerifiedMarketCreatorDetails
 } from "./helpers";
 
 describe("Market Setup", () => {
@@ -74,7 +75,7 @@ describe("Market Setup", () => {
 
     try {
       const cfg: any = await program.account.config.fetch(configPda);
-      const marketCreatorDetails = await ensureMarketCreatorExists();
+      const marketCreatorDetails = await getVerifiedMarketCreatorDetails();
       
       const tx = await program.methods
         .createMarket({
@@ -257,6 +258,9 @@ describe("Market Setup", () => {
       // For manual resolution, we need to pass oracle_value: 11 for "Yes" or 10 for "No"
       const mockOracleValue = 11; // Yes/True
 
+      // Get the market creator account for this market
+      const marketCreatorDetails = await getVerifiedMarketCreatorDetails();
+
       const resolveTx = await program.methods
         .resolveMarket({
           oracleValue: mockOracleValue,
@@ -264,6 +268,7 @@ describe("Market Setup", () => {
         .accounts({
           signer: ADMIN.publicKey,
           market: marketPda,
+          marketCreator: marketCreatorDetails.marketCreator,
           oraclePubkey: ADMIN.publicKey, // Use ADMIN for manual resolution
         })
         .signers([ADMIN])

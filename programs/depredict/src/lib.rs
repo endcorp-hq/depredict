@@ -37,8 +37,8 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn update_global_tree(ctx: Context<UpdateConfigContext>, new_global_tree: Pubkey) -> Result<()> {
-        ctx.accounts.update_global_tree(new_global_tree)?;
+    pub fn update_merkle_tree(ctx: Context<UpdateMarketCreatorContext>, new_tree: Pubkey) -> Result<()> {
+        ctx.accounts.update_merkle_tree(new_tree)?;
         Ok(())
     }
 
@@ -97,7 +97,7 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn create_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
+    pub fn open_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
         ctx.accounts.open_position(args)?;
         Ok(())
     }

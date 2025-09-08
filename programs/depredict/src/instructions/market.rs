@@ -109,9 +109,15 @@ pub struct ResolveMarketContext<'info> {
 
     #[account(
         mut,
-        constraint = market.market_creator == signer.key() @ DepredictError::Unauthorized
+        constraint = market.market_creator == market_creator.key() @ DepredictError::InvalidMarketCreator
     )]
     pub market: Box<Account<'info, MarketState>>,
+
+    /// Market creator account that owns this market
+    #[account(
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>,
 
     /// CHECK: oracle is same as the market's oracle pubkey
     #[account(
@@ -275,7 +281,8 @@ impl<'info> ResolveMarketContext<'info> {
 
         let ts = Clock::get()?.unix_timestamp;
 
-        require!(market.market_creator == *signer.key, DepredictError::Unauthorized);
+        // Check if the signer is the authority of the market creator
+        require!(self.market_creator.authority == *signer.key, DepredictError::Unauthorized);
         require!(market.market_state != MarketStates::Resolved, DepredictError::MarketAlreadyResolved);
 
         if oracle_type == OracleType::Switchboard {

@@ -7,15 +7,22 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, FEE_VAULT, program, provider, USER, getCurrentMarketId, getMarketIdByState, ADMIN, LOCAL_MINT, getCurrentUnixTime, getMarketCreatorDetails } from "../helpers";
-
-import { fetchAsset, MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
-import { fetchCollection } from '@metaplex-foundation/mpl-core'
+import { getNetworkConfig, FEE_VAULT, program, provider, USER, getCurrentMarketId, getMarketIdByState, ADMIN, LOCAL_MINT, getCurrentUnixTime, createMarketCreator, getVerifiedMarketCreatorDetails, verifyMarketCreator, ensureAccountBalance } from "../helpers";
+import * as fs from "fs";
+import { getMarketCreatorDetails } from "../helpers";
+// MPL imports for collection and merkle tree creation
+import { createTreeV2 } from "@metaplex-foundation/mpl-bubblegum";
+import {
+  createCollection,
+  mplCore,
+} from '@metaplex-foundation/mpl-core';
+import {
+  generateSigner,
+  signerIdentity,
+  sol,
+  createSignerFromKeypair
+} from '@metaplex-foundation/umi';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
-import { publicKey as umiPublicKey } from '@metaplex-foundation/umi'
-import fs from "fs";
-import { fetchTreeConfigFromSeeds } from '@metaplex-foundation/mpl-bubblegum'
-
 // Bubblegum + MPL program IDs
 const BUBBLEGUM_PROGRAM_ID = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
 const MPL_CORE_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
@@ -26,18 +33,92 @@ describe("depredict", () => {
 
   let usdcMint: PublicKey;
   let userTokenAccount: PublicKey;
-  let marketVault: PublicKey; 
+  let marketVault: PublicKey;
+  let testMarketCreator: PublicKey;
+  let testCoreCollection: PublicKey;
+  let testMerkleTree: PublicKey;
+  let testAdmin: Keypair; 
 
   // Load local wallet from ~/.config/solana/id.json
   const localKeypair = Keypair.fromSecretKey(
     Buffer.from(JSON.parse(fs.readFileSync(`${process.env.HOME}/.config/solana/id.json`, "utf-8")))
   );
 
+  // Helper function to create MPL Core collection
+  async function createTestCollection(): Promise<PublicKey> {
+    const umi = createUmi(provider.connection.rpcEndpoint)
+      .use(mplCore());
+
+    const signer = generateSigner(umi);
+    umi.use(signerIdentity(signer));
+
+    console.log('Airdropping 1 SOL to identity for collection creation');
+    await umi.rpc.airdrop(umi.identity.publicKey, sol(1));
+
+    const metadataUri = 'https://example.com/test-collection-metadata.json';
+    const collection = generateSigner(umi);
+
+    console.log('Creating Test Collection...');
+    const tx = await createCollection(umi, {
+      collection,
+      name: 'Test Collection for Order Creation',
+      uri: metadataUri,
+    }).sendAndConfirm(umi);
+
+    console.log("✅ Test Collection created successfully");
+    console.log("   Collection address:", collection.publicKey);
+    console.log("   Transaction signature:", tx.signature);
+
+    return new PublicKey(collection.publicKey);
+  }
+
+  // Helper function to create merkle tree
+  async function createTestMerkleTree(authority: Keypair, isPublic: boolean = false): Promise<PublicKey> {
+    const umi = createUmi((provider.connection as any).rpcEndpoint || "http://127.0.0.1:8899");
+    const umiAuthorityKp = umi.eddsa.createKeypairFromSecretKey(authority.secretKey);
+    umi.use(signerIdentity(createSignerFromKeypair(umi, umiAuthorityKp)));
+    
+    const merkleTree = generateSigner(umi);
+    const builder = await createTreeV2(umi, {
+      merkleTree,
+      maxDepth: 16,
+      maxBufferSize: 64,
+      public: isPublic,
+    });
+    await builder.sendAndConfirm(umi);
+    
+    const treePubkey = new PublicKey(merkleTree.publicKey.toString());
+    console.log(`Merkle tree created with authority ${authority.publicKey.toString()}:`, treePubkey.toString());
+    
+    // Wait for the account to be fully propagated on-chain
+    console.log("Waiting for merkle tree account to be fully propagated...");
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    return treePubkey;
+  }
+
   before(async () => {
     // Get network configuration
     const { isDevnet } = await getNetworkConfig();
     console.log(`Running tests on ${isDevnet ? "devnet" : "localnet"}`);
     console.log("USER:", USER.publicKey.toString());
+
+    // Use the existing market creator setup
+    console.log("Using existing market creator setup...");
+    
+    // Get the existing market creator
+    const marketCreatorDetails = await getVerifiedMarketCreatorDetails();
+    testMarketCreator = marketCreatorDetails.marketCreator;
+    testCoreCollection = marketCreatorDetails.coreCollection;
+    
+    // Create a new test merkle tree with ADMIN as authority for this test
+    console.log("Creating test merkle tree...");
+    testMerkleTree = await createTestMerkleTree(ADMIN, false);
+    
+    console.log("✅ Test market creator setup complete");
+    console.log("   Market Creator:", testMarketCreator.toString());
+    console.log("   Core Collection:", testCoreCollection.toString());
+    console.log("   Merkle Tree:", testMerkleTree.toString());
 
     // Ensure USER has enough SOL for rent and fees by transferring from local wallet if needed
     const userBalance = await provider.connection.getBalance(USER.publicKey);
@@ -87,7 +168,7 @@ describe("depredict", () => {
     console.log("Local wallet balance:", finalLocalBalance / LAMPORTS_PER_SOL, "SOL");
     
     // Fund MPL Core program account if needed (for localnet)
-    const mplCoreProgramId = new PublicKey(MPL_CORE_PROGRAM_ID.toString());
+    const mplCoreProgramId = new PublicKey(MPL_CORE_ID.toString());
     const mplCoreBalance = await provider.connection.getBalance(mplCoreProgramId);
     console.log("MPL Core program balance:", mplCoreBalance / LAMPORTS_PER_SOL, "SOL");
     
@@ -111,39 +192,30 @@ describe("depredict", () => {
       console.log("MPL Core program new balance:", newMplCoreBalance / LAMPORTS_PER_SOL, "SOL");
     }
 
-    // Defensive check: Create user's USDC token account
-    try {
-      userTokenAccount = (
-        await getOrCreateAssociatedTokenAccount(
-          provider.connection,
-          USER, // Payer
-          usdcMint,
-          USER.publicKey
-        )
-      ).address;
-      console.log(`User USDC ATA: ${userTokenAccount.toString()}`);
+    // Create user's USDC token account
+    console.log("Creating user USDC token account...");
+    userTokenAccount = (
+      await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        USER, // Payer
+        usdcMint,
+        USER.publicKey
+      )
+    ).address;
+    console.log(`User USDC ATA: ${userTokenAccount.toString()}`);
 
-      // Mint USDC to USER's ATA if needed
-      const userUsdcBalance = await provider.connection.getTokenAccountBalance(userTokenAccount);
-      const minUsdc = 1_000_000_000; // 1,000 USDC (6 decimals)
-      if (Number(userUsdcBalance.value.amount) < minUsdc) {
-        console.log(`Minting 1,000 USDC to USER (current balance: ${userUsdcBalance.value.amount})...`);
-        await mintTo(
-          provider.connection,
-          ADMIN, // payer
-          usdcMint,
-          userTokenAccount,
-          ADMIN.publicKey, // mint authority (ADMIN, not LOCAL_MINT)
-          minUsdc
-        );
-        console.log("Minted 1,000 USDC to USER's ATA");
-      } else {
-        console.log(`User already has sufficient USDC: ${userUsdcBalance.value.amount}`);
-      }
-    } catch (e) {
-      console.error("Failed to get or create user USDC ATA:", e);
-      throw e;
-    }
+    // Mint USDC to USER's ATA
+    const minUsdc = 1_000_000_000; // 1,000 USDC (6 decimals)
+    console.log(`Minting 1,000 USDC to USER...`);
+    await mintTo(
+      provider.connection,
+      ADMIN, // payer
+      usdcMint,
+      userTokenAccount,
+      ADMIN.publicKey, // mint authority (ADMIN, not LOCAL_MINT)
+      minUsdc
+    );
+    console.log("Minted 1,000 USDC to USER's ATA");
 
     if (isDevnet) {
       console.log("Please ensure you have USDC in your wallet from the faucet");
@@ -173,15 +245,10 @@ describe("depredict", () => {
         // Check if market is still open for betting
         const currentTime = await getCurrentUnixTime();
         if (currentTime && marketAccount.marketEnd.toNumber() < currentTime) {
-          console.log("Market is closed for betting, skipping order creation");
-          console.log("Market end time:", marketAccount.marketEnd.toNumber());
-          console.log("Current time:", currentTime);
+
           return; // Skip this test if market is closed
         }
       } catch (error) {
-        console.log("Market does not exist or cannot be fetched:", error.message);
-        console.log("Market PDA:", marketPda.toString());
-        console.log("This is expected if no market was successfully created in previous tests");
         return; // Skip this test if market doesn't exist
       }
 
@@ -191,17 +258,16 @@ describe("depredict", () => {
         program.programId
       );
 
-      // New flow uses paged PDAs inside program; no per-market PositionAccount PDA
-
       // Get the market account again for position ID and vault
       const marketAccount = await program.account.marketState.fetch(marketPda);
       const marketVault = marketAccount.marketVault;
-      // NFT seeds are internal; cNFTs are compressed. Skip Core fetches in this test.
 
+      // Use the test market creator created in before hook
+      console.log("Market Creator:", testMarketCreator.toString());
+      console.log("Core Collection:", testCoreCollection.toString());
+      console.log("Merkle Tree:", testMerkleTree.toString());
       console.log("Market USDC Vault:", marketVault.toString());
 
-      // Collection is now global in Config; no per-market collection PDA.
-      
       // Final check: Ensure USER has sufficient SOL for NFT creation
       const userSolBalance = await provider.connection.getBalance(USER.publicKey);
       console.log("USER SOL balance before position creation:", userSolBalance / LAMPORTS_PER_SOL, "SOL");
@@ -217,45 +283,49 @@ describe("depredict", () => {
       const amount = new anchor.BN(3*10**6); // 3 USDC (6 decimals)
       const direction = { yes: {} }; // Betting on "Yes"
 
-      try {
-        const { tx, error } = await tryCreatePositionTx({
-          user: USER,
-          amount,
-          direction,
-          mint: usdcMint,
-          userTokenAccount,
-          marketPda,
-          marketVault: marketVault,
-          configPda,
-          metadataUri: "https://arweave.net/position-metadata",
-        });
-        if (error) {
-          console.error("Order creation failed:", error);
-          assert.fail("Order creation failed: " + error.toString());
-        }
-        console.log("Order creation transaction signature:", tx);
-
-        // Fetch the market account to verify the order was created
-        const updatedMarketAccount = await program.account.marketState.fetch(marketPda);
-        console.log("Market Account after order:", updatedMarketAccount);
-
-        // Verify the market volume increased
-        assert.ok(updatedMarketAccount.volume.gt(new anchor.BN(0)), "Market volume should be greater than 0");
-
-        // Verify the yes liquidity increased (since we placed a "Yes" order)
-        // assert.ok(updatedMarketAccount.yesLiquidity.gt(new anchor.BN(0)), "Yes liquidity should be greater than 0");
-
-      } catch (error) {
-        console.error("Error creating order:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
-        }
-        throw error;
-      }
+       const tx = await program.methods
+         .openPosition({
+           amount,
+           direction,
+           metadataUri: "https://arweave.net/position-metadata",
+           pageIndex: 0,
+         })
+         .accountsPartial({
+           signer: USER.publicKey,
+           feeVault: FEE_VAULT.publicKey,
+           market: marketPda,
+           mint: usdcMint,
+           userMintAta: userTokenAccount,
+           marketVault: marketVault,
+           config: configPda,
+           marketCreator: testMarketCreator,
+           merkleTree: testMerkleTree,
+           treeConfig: PublicKey.findProgramAddressSync(
+             [testMerkleTree.toBuffer()],
+             BUBBLEGUM_PROGRAM_ID
+           )[0],
+           collection: testCoreCollection,
+           bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+           mplCoreProgram: MPL_CORE_ID,
+           logWrapperProgram: MPL_NOOP_ID,
+           compressionProgram: ACCOUNT_COMPRESSION_ID,
+           tokenProgram: TOKEN_PROGRAM_ID,
+           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+           systemProgram: SystemProgram.programId,
+         })
+         .signers([USER])
+         .rpc();
 
 
-      // Skip MPL Core asset checks in cNFT flow
 
+      console.log("Order creation transaction signature:", tx);
+
+      // Fetch the market account to verify the order was created
+      const updatedMarketAccount = await program.account.marketState.fetch(marketPda);
+      console.log("Market Account after order:", updatedMarketAccount);
+
+      // Verify the market volume increased
+      assert.ok(updatedMarketAccount.volume.gt(new anchor.BN(0)), "Market volume should be greater than 0");
     });
 
     // --- Negative Test Cases for Business Logic ---
@@ -281,8 +351,6 @@ describe("depredict", () => {
       const question = Array.from(Buffer.from("Resolved market test?"));
 
       // Create manual-resolution market
-      const marketCreatorDetails = await getMarketCreatorDetails();
-      
       await program.methods
         .createMarket({
           question,
@@ -296,12 +364,12 @@ describe("depredict", () => {
         .accountsPartial({
           payer: ADMIN.publicKey,
           feeVault: cfgAccount.feeVault,
-          market: marketPda,
           oraclePubkey: ADMIN.publicKey,
-          mint: usdcMint,
-          tokenProgram: TOKEN_PROGRAM_ID,
           config: configPda,
-          marketCreator: marketCreatorDetails.marketCreator,
+          marketCreator: testMarketCreator,
+          mint: usdcMint,
+          marketVault: marketPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
@@ -311,7 +379,12 @@ describe("depredict", () => {
       // Resolve the market manually (11 = Yes)
       await program.methods
         .resolveMarket({ oracleValue: 11 })
-        .accounts({ signer: ADMIN.publicKey, market: marketPda, oraclePubkey: ADMIN.publicKey })
+        .accounts({ 
+          signer: ADMIN.publicKey, 
+          market: marketPda, 
+          marketCreator: testMarketCreator,
+          oraclePubkey: ADMIN.publicKey 
+        })
         .signers([ADMIN])
         .rpc();
 
@@ -326,6 +399,9 @@ describe("depredict", () => {
         configPda,
         metadataUri: "https://arweave.net/position-metadata",
         expectError: "MarketAlreadyResolved",
+        marketCreator: testMarketCreator,
+        coreCollection: testCoreCollection,
+        merkleTree: testMerkleTree,
       });
       assert.isNotNull(error, "Should fail with MarketAlreadyResolved");
       assert.include(error.toString(), "MarketAlreadyResolved");
@@ -357,7 +433,9 @@ describe("depredict", () => {
         amount: new anchor.BN(1_000_000),
         direction: { yes: {} },
         metadataUri: "https://arweave.net/position-metadata",
-        // ...other required params (mock or reuse from above)
+        marketCreator: testMarketCreator,
+        coreCollection: testCoreCollection,
+        merkleTree: testMerkleTree,
         expectError: "InsufficientFunds"
       });
       assert.isNotNull(error, "Should fail with InsufficientFunds");
@@ -400,7 +478,9 @@ describe("depredict", () => {
         amount: new anchor.BN(1_000_000),
         direction: { yes: {} },
         metadataUri: "https://arweave.net/position-metadata",
-        // ...other required params (mock or reuse from above)
+        marketCreator: testMarketCreator,
+        coreCollection: testCoreCollection,
+        merkleTree: testMerkleTree,
         expectError: "InsufficientFunds"
       });
       assert.isNotNull(error, "Should fail with InsufficientFunds");
@@ -418,16 +498,6 @@ describe("depredict", () => {
         [Buffer.from("market"), closedMarketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
-      const [positionAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("position"), closedMarketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
-      // Get the market account to get the next position ID
-      const closedMarketAccount = await program.account.marketState.fetch(marketPda);
-      const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("nft"), closedMarketId.toArrayLike(Buffer, "le", 8), closedMarketAccount.nextPositionId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
       
       // Fetch the market account to get the collection pubkey and vault
       let marketAccount;
@@ -442,7 +512,6 @@ describe("depredict", () => {
       }
       
       const marketVault = marketAccount.marketVault;
-      const collectionPubkey = marketAccount.nftCollection;
       const [configPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("config")],
         program.programId
@@ -458,6 +527,9 @@ describe("depredict", () => {
         marketVault: marketVault,
         configPda,
         metadataUri: "https://arweave.net/position-metadata",
+        marketCreator: testMarketCreator,
+        coreCollection: testCoreCollection,
+        merkleTree: testMerkleTree,
         expectError: "BettingPeriodEnded"
       });
       
@@ -476,16 +548,6 @@ describe("depredict", () => {
         [Buffer.from("market"), resolvedMarketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
-      const [positionAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("position"), resolvedMarketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
-      // Get the market account to get the next position ID
-      const resolvedMarketAccount = await program.account.marketState.fetch(marketPda);
-      const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("nft"), resolvedMarketId.toArrayLike(Buffer, "le", 8), resolvedMarketAccount.nextPositionId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
       
       // Fetch the market account to get the collection pubkey and vault
       let marketAccount;
@@ -501,7 +563,6 @@ describe("depredict", () => {
       }
       
       const marketVault = marketAccount.marketVault;
-      const collectionPubkey = marketAccount.nftCollection;
       const [configPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("config")],
         program.programId
@@ -517,6 +578,9 @@ describe("depredict", () => {
         marketVault: marketVault,
         configPda,
         metadataUri: "https://arweave.net/position-metadata",
+        marketCreator: testMarketCreator,
+        coreCollection: testCoreCollection,
+        merkleTree: testMerkleTree,
         expectError: "MarketAlreadyResolved"
       });
       
@@ -543,10 +607,6 @@ describe("depredict", () => {
         [Buffer.from("market"), manualMarketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
-      const [positionAccountPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("position"), manualMarketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
       
       // Fetch the market account to get the collection pubkey and next position ID
       let marketAccount;
@@ -562,16 +622,6 @@ describe("depredict", () => {
       }
       
       const marketVault = marketAccount.marketVault;
-      const [positionNftAccountPda] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("nft"), 
-          manualMarketId.toArrayLike(Buffer, "le", 8), 
-          marketAccount.nextPositionId.toArrayLike(Buffer, "le", 8)
-        ],
-        program.programId
-      );
-      
-      const collectionPubkey = marketAccount.nftCollection;
       const [configPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("config")],
         program.programId
@@ -587,6 +637,9 @@ describe("depredict", () => {
         marketVault: marketVault,
         configPda,
         metadataUri: "https://arweave.net/position-metadata",
+        marketCreator: testMarketCreator,
+        coreCollection: testCoreCollection,
+        merkleTree: testMerkleTree,
       });
       
       if (error) {
@@ -602,7 +655,7 @@ describe("depredict", () => {
           console.error("2. MPL Core program account insufficient SOL (localnet issue)");
           
           const userBalance = await provider.connection.getBalance(USER.publicKey);
-          const mplCoreBalance = await provider.connection.getBalance(new PublicKey(MPL_CORE_PROGRAM_ID.toString()));
+          const mplCoreBalance = await provider.connection.getBalance(new PublicKey(MPL_CORE_ID.toString()));
           
           console.error("USER account SOL balance:", userBalance / LAMPORTS_PER_SOL, "SOL");
           console.error("MPL Core program SOL balance:", mplCoreBalance / LAMPORTS_PER_SOL, "SOL");
@@ -618,7 +671,7 @@ describe("depredict", () => {
             const recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
             const transferIx = SystemProgram.transfer({
               fromPubkey: localKeypair.publicKey,
-              toPubkey: new PublicKey(MPL_CORE_PROGRAM_ID.toString()),
+              toPubkey: new PublicKey(MPL_CORE_ID.toString()),
               lamports: additionalFunding,
             });
             const transaction = new anchor.web3.Transaction().add(transferIx);
@@ -640,6 +693,9 @@ describe("depredict", () => {
               marketVault: marketVault,
               configPda,
               metadataUri: "https://arweave.net/position-metadata",
+              marketCreator: testMarketCreator,
+              coreCollection: testCoreCollection,
+              merkleTree: testMerkleTree,
             });
             
             if (retryResult.error) {
@@ -695,6 +751,9 @@ type TryCreatePositionParams = {
   metadataUri?: string,
   expectError?: string | null,
   mplCoreProgram?: PublicKey,
+  marketCreator?: PublicKey,
+  coreCollection?: PublicKey,
+  merkleTree?: PublicKey,
 };
 
 async function tryCreatePositionTx({
@@ -708,30 +767,28 @@ async function tryCreatePositionTx({
   configPda,
   metadataUri = "https://arweave.net/position-metadata",
   expectError = null,
-  mplCoreProgram = new PublicKey(MPL_CORE_PROGRAM_ID.toString()),
+  mplCoreProgram = new PublicKey(MPL_CORE_ID.toString()),
+  marketCreator,
+  coreCollection,
+  merkleTree,
 }: TryCreatePositionParams) {
   try {
-    // Fetch global tree from config for Bubblegum mint
+    // Use the provided market creator details
+    const collection = coreCollection;
+    const merkleTreeToUse = merkleTree;
+
+    // Get fee vault from config
     const [cfgPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId);
     const cfg: any = await program.account.config.fetch(cfgPda);
-    const merkleTree = new PublicKey(cfg.globalTree as any);
-    
-    // Get market creator details for the collection
-    const marketCreatorDetails = await getMarketCreatorDetails();
-    const collection = marketCreatorDetails.coreCollection;
 
-    // Derive treeConfig via Umi
-    let treeConfig;
-    try {
-      const umi = createUmi((provider.connection as any).rpcEndpoint || "http://127.0.0.1:8899");
-      treeConfig = await fetchTreeConfigFromSeeds(umi, { merkleTree: umiPublicKey(merkleTree.toBase58()) });
-    } catch (e) {
-      // Use a dummy tree config for testing if Umi fails
-      treeConfig = { publicKey: { toString: () => "11111111111111111111111111111111" } };
-    }
+    // Derive treeConfig PDA
+    const [treeConfigPda] = PublicKey.findProgramAddressSync(
+      [merkleTreeToUse.toBuffer()],
+      BUBBLEGUM_PROGRAM_ID
+    );
 
     const tx = await program.methods
-      .createPosition({
+      .openPosition({
         amount,
         direction,
         metadataUri,
@@ -746,10 +803,9 @@ async function tryCreatePositionTx({
         marketVault: marketVault,
         // Bubblegum/cNFT related accounts
         config: configPda,
-        marketCreator: marketCreatorDetails.marketCreator,
-        collectionAuthority: marketCreatorDetails.collectionAuthority,
-        merkleTree,
-        treeConfig: new PublicKey(treeConfig.publicKey.toString()),
+        marketCreator: marketCreator,
+        merkleTree: merkleTreeToUse,
+        treeConfig: treeConfigPda,
         collection,
         bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
         mplCoreProgram: MPL_CORE_ID,
@@ -759,7 +815,7 @@ async function tryCreatePositionTx({
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .signers([user, ADMIN]) // Include ADMIN as signer since they are the collection authority
+        .signers([user])
       .rpc();
     return { tx, error: null };
   } catch (error) {

@@ -7,6 +7,7 @@ pub struct MarketCreator {
     pub bump: u8,
     pub authority: Pubkey,           // The wallet that owns this market creator account
     pub core_collection: Pubkey,     // The MPL Core collection NFT mint address
+    pub merkle_tree: Pubkey,         // The global tree address
     #[max_len(30)]
     pub name: String,                // Display name for the market creator
     pub created_at: i64,            // Timestamp when this market creator was created
@@ -21,6 +22,7 @@ impl Default for MarketCreator {
             bump: 0,
             authority: Pubkey::default(),
             core_collection: Pubkey::default(),
+            merkle_tree: Pubkey::default(),
             name: String::new(),
             created_at: 0,
             num_markets: 0,
@@ -55,4 +57,5 @@ pub struct UpdateMarketCreatorArgs {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct VerifyMarketCreatorArgs {
     pub core_collection: Pubkey,
+    pub merkle_tree: Pubkey,
 }

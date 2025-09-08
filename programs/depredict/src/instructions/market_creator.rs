@@ -33,6 +33,21 @@ pub struct UpdateMarketCreatorContext<'info> {
     )]
     pub market_creator: Box<Account<'info, MarketCreator>>,
 
+    /// CHECK: Global Merkle Tree account reference (created off-chain)
+    #[account(mut)]
+    pub merkle_tree: AccountInfo<'info>,
+    
+    /// CHECK: Tree Config PDA - we'll validate its authority
+    #[account(
+        mut,
+        seeds = [
+            merkle_tree.key().as_ref()
+        ],
+        seeds::program = mpl_bubblegum::ID,
+        bump
+    )]
+    pub tree_config: UncheckedAccount<'info>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -55,6 +70,12 @@ pub struct VerifyMarketCreatorContext<'info> {
     )]
     pub core_collection: AccountInfo<'info>,
 
+    /// CHECK: Merkle Tree account - we'll verify it exists
+    #[account(
+        constraint = merkle_tree.key() == args.merkle_tree @ DepredictError::InvalidTree
+    )]
+    pub merkle_tree: AccountInfo<'info>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -68,11 +89,12 @@ impl<'info> CreateMarketCreatorContext<'info> {
             bump: bump.market_creator,
             authority: auth.key(),
             core_collection: Pubkey::default(), // Will be set during verification
+            merkle_tree: Pubkey::default(), // Will be set during verification
             name: args.name,
             created_at: ts,
             num_markets: 0,
             fee_vault: args.fee_vault,
-            verified: false, // Not verified until collection is created
+            verified: false, // Not verified until collection and merkle tree are created
         });
 
         msg!("Market creator created successfully (unverified)");
@@ -96,6 +118,58 @@ impl<'info> UpdateMarketCreatorContext<'info> {
         msg!("Market creator updated successfully");
         Ok(())
     }
+    // 
+    pub fn update_merkle_tree(
+        &mut self,
+        new_tree: Pubkey,
+    ) -> Result<()> {
+        let market_creator = &mut self.market_creator;
+        require!(
+            market_creator.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+
+        // Check if tree_config account exists and has data
+        let tree_config_data = self.tree_config.data.borrow();
+        
+        if tree_config_data.len() == 0 {
+            msg!("TreeConfig account is empty or doesn't exist yet");
+        } else {
+            msg!("TreeConfig account exists with {} bytes", tree_config_data.len());
+            
+            // Extract tree_creator directly from the TreeConfig account data
+            // TreeConfig structure: [discriminator: 8 bytes][tree_creator: 32 bytes][...]
+            if tree_config_data.len() >= 40 { // 8 + 32 = 40 bytes minimum
+                let tree_creator_bytes = &tree_config_data[8..40]; // Skip 8 bytes, read 32 bytes
+                
+                match Pubkey::try_from_slice(tree_creator_bytes) {
+                    Ok(tree_creator) => {                        
+                        // Validate tree authority matches our program's authority
+                        require!(
+                            tree_creator == market_creator.authority,
+                            DepredictError::Unauthorized
+                        );
+                        
+                        msg!("✅ TreeConfig authority validation passed");
+                        // Update the merkle tree reference
+                        market_creator.merkle_tree = new_tree;
+                        msg!("Merkle tree updated: tree={}", new_tree);
+                        return Ok(());
+                    },
+                    Err(e) => {
+                        msg!("Failed to deserialize tree_creator Pubkey: {:?}", e);
+                        return Err(DepredictError::Unauthorized.into());
+                    }
+                }
+            } else {
+                msg!("TreeConfig data is too short to contain tree_creator");
+                return Err(DepredictError::Unauthorized.into());
+            }
+        }
+        return Err(DepredictError::Unauthorized.into());
+    }
+
+
 }
 
 impl<'info> VerifyMarketCreatorContext<'info> {
@@ -109,8 +183,24 @@ impl<'info> VerifyMarketCreatorContext<'info> {
             DepredictError::InvalidCollection
         );
 
+        // add check for merkle tree account exists and is owned by the correct program
+        // let merkle_tree_account = self.merkle_tree.try_borrow_data()?;
+        // require!(
+        //     merkle_tree_account.len() > 0,
+        //     DepredictError::InvalidTree
+        // );
+        // require!(
+        //     merkle_tree_account.len() == 32,
+        //     DepredictError::InvalidTree
+        // );
+        // require!(
+        //     merkle_tree_account[0] == 0,
+        //     DepredictError::InvalidTree
+        // );
+
         // Set the collection and mark as verified
         market_creator.core_collection = args.core_collection;
+        market_creator.merkle_tree = args.merkle_tree;
         market_creator.verified = true;
 
         msg!("Market creator verified successfully with collection: {}", args.core_collection);

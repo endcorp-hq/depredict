@@ -137,4 +137,7 @@ DepredictError {
 
     #[msg("Market creator already verified")]
     AlreadyVerified,
+
+    #[msg("Invalid market creator")]
+    InvalidMarketCreator,
 }

@@ -5,22 +5,25 @@ use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
 use std::str::FromStr;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
-use crate::constants::{MARKET, POSITION_PAGE, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID};
+use crate::constants::{MARKET, POSITION_PAGE, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID, MARKET_CREATOR};
 use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, ConfirmPositionArgs, ClaimPositionArgs, PositionDirection, PositionStatus, PositionPage, POSITION_PAGE_ENTRIES, MarketCreator};
 use crate::{
     errors::DepredictError,
     state::{ MarketState, WinningDirection },
 };
-use mpl_bubblegum::ID as BUBBLEGUM_ID;
-use mpl_bubblegum::instructions::MintV2CpiBuilder;
-use mpl_bubblegum::types::MetadataArgsV2;
-use mpl_core::ID as MPL_CORE_ID;
+
+use mpl_bubblegum::{
+    instructions::MintV2CpiBuilder,
+    programs::MPL_BUBBLEGUM_ID,
+    types::MetadataArgsV2
+};
+use mpl_core::programs::MPL_CORE_ID;
 
 #[derive(Accounts)]
 #[instruction(args: OpenPositionArgs)]
 pub struct PositionContext<'info> {
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub user: Signer<'info>,
 
     /// CHECK: multisig fee vault account
     #[account(
@@ -32,7 +35,7 @@ pub struct PositionContext<'info> {
     // Paged positions account for this market and page index
     #[account(
         init_if_needed,
-        payer = signer,
+        payer = user,
         space = 8 + PositionPage::INIT_SPACE,
         seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
         bump
@@ -59,9 +62,9 @@ pub struct PositionContext<'info> {
 
     #[account(
         init_if_needed,
-        payer = signer,
+        payer = user,
         associated_token::mint = mint,
-        associated_token::authority = signer,
+        associated_token::authority = user,
         associated_token::token_program = token_program
     )]
     pub user_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -76,25 +79,25 @@ pub struct PositionContext<'info> {
 
     pub config: Box<Account<'info, Config>>,
 
-    /// CHECK: global merkle tree account; must match config.global_tree
-    #[account(mut, constraint = merkle_tree.key() == config.global_tree @ DepredictError::InvalidOracle)]
+    /// CHECK: merkle tree account
+    #[account(mut, constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
     pub merkle_tree: AccountInfo<'info>,
+
+    /// CHECK: collection account
+    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
+    pub collection: AccountInfo<'info>,
 
     /// CHECK: TreeConfig PDA for the merkle tree
     #[account(mut)]
     pub tree_config: AccountInfo<'info>,
 
-    /// CHECK: Core collection asset account; must match market creator's collection
-    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
-    pub collection: AccountInfo<'info>,
-
-    /// CHECK: Bubblegum program
-    #[account(address = BUBBLEGUM_ID)]
-    pub bubblegum_program: AccountInfo<'info>,
-
     /// CHECK: MPL Core program
     #[account(address = MPL_CORE_ID)]
     pub mpl_core_program: AccountInfo<'info>,
+
+    /// CHECK: Bubblegum program
+    #[account(address = MPL_BUBBLEGUM_ID)]
+    pub bubblegum_program: AccountInfo<'info>,
 
     /// CHECK: Log wrapper (mpl-noop)
     #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
@@ -150,14 +153,13 @@ pub struct PayoutNftContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: cNFT verification accounts will be added when Bubblegum CPI is integrated
-    #[account(mut)]
-    pub merkle_tree: AccountInfo<'info>,
-
-    /// CHECK: Core program
+    /// CHECK: MPL Core program
     #[account(address = MPL_CORE_ID)]
     pub mpl_core_program: AccountInfo<'info>,
-
+    
+    /// CHECK: Bubblegum program
+    #[account(address = MPL_BUBBLEGUM_ID)]
+    pub bubblegum_program: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -253,7 +255,7 @@ impl<'info> PositionContext<'info> {
                 from: self.user_mint_ata.to_account_info(),
                 mint: self.mint.to_account_info(),
                 to: self.market_vault.to_account_info(),
-                authority: self.signer.to_account_info(),
+                authority: self.user.to_account_info(),
             }),
             net_amount,
             self.mint.decimals
@@ -265,7 +267,7 @@ impl<'info> PositionContext<'info> {
     
         let transfer_result = transfer(
             CpiContext::new(self.system_program.to_account_info(), Transfer {
-                from: self.signer.to_account_info(),
+                from: self.user.to_account_info(),
                 to: self.fee_vault.to_account_info(),
             }),
             fee
@@ -302,28 +304,39 @@ impl<'info> PositionContext<'info> {
                 creators: vec![],
             };
 
+            let market_creator = &self.market_creator.to_account_info();
+
             let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
             // Bind AccountInfo temporaries to extend lifetimes for the builder
-            let payer_ai = self.signer.to_account_info();
-            let leaf_owner_ai = self.signer.to_account_info();
-            let system_ai = self.system_program.to_account_info();
-            let market_creator_ai = self.market_creator.to_account_info();
+            let payer = self.user.to_account_info();
+            let leaf_owner = self.user.to_account_info();
+            let system = self.system_program.to_account_info();
+            
+            // Create the seeds and bump for the market creator PDA
+            let market_creator_seeds = &[
+                MARKET_CREATOR.as_bytes(),
+                &self.market_creator.authority.to_bytes(),
+                &[self.market_creator.bump]
+            ];
+            let market_creator_signer_seeds: &[&[&[u8]]] = &[&market_creator_seeds[..]];
+            
             builder
                 .tree_config(&self.tree_config)
-                .payer(&payer_ai)
-                .tree_creator_or_delegate(None)
-                .collection_authority(Some(&market_creator_ai))
-                .leaf_owner(&leaf_owner_ai)
+                .payer(&payer)
+                .tree_creator_or_delegate(Some(market_creator))
+                .collection_authority(Some(market_creator))
+                .leaf_owner(&leaf_owner)
                 .leaf_delegate(None)
                 .merkle_tree(&self.merkle_tree)
                 .core_collection(Some(&self.collection))
-                .mpl_core_cpi_signer(Some(&market_creator_ai))
                 .log_wrapper(&self.log_wrapper_program)
                 .compression_program(&self.compression_program)
                 .mpl_core_program(&self.mpl_core_program)
-                .system_program(&system_ai)
+                .system_program(&system)
                 .metadata(metadata);
-            builder.invoke()?;
+            
+            // Use invoke_signed to provide the seeds for the market creator PDA
+            builder.invoke_signed(market_creator_signer_seeds)?;
         } else {
             return Err(DepredictError::InvalidNft.into());
         }
@@ -357,8 +370,7 @@ impl<'info> PayoutNftContext<'info> {
         // Must be Open (and confirmed by having a non-zero leaf_index)
         require!(entry.status == PositionStatus::Open, DepredictError::PositionNotFound);
         require!(entry.leaf_index == args.leaf_index && entry.leaf_index != 0, DepredictError::InvalidNft);
-        // Merkle tree provided must match config
-        require!(self.merkle_tree.key() == self.config.global_tree, DepredictError::InvalidOracle);
+
         // TODO: Verify Merkle inclusion of leaf using args.leaf_index and provided proof accounts
         let position_amount = entry.amount;
         let position_direction = entry.direction;

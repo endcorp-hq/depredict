@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import { ADMIN, getCurrentMarketId, getMarketIdByState, program, provider, ORACLE_KEY } from "../helpers";
+import { ADMIN, getMarketIdByState, program, ORACLE_KEY, getMarketCreatorDetails } from "../helpers";
 import {
   PullFeed,
   getDefaultDevnetQueue,
@@ -13,7 +13,7 @@ import fs from "fs";
 describe("Market Resolution", () => {
   let oracleValue: number | null = null;
 
-  // todo: fix this test
+  // todo: fix this test - suppressed due to CrossbarClient type mismatch
   xit("Pulls oracle data", async () => {
     const oracleOwner = Keypair.fromSecretKey(
       new Uint8Array(
@@ -134,6 +134,9 @@ describe("Market Resolution", () => {
     // 11 = Yes/True, 10 = No/False
     const mockOracleValue = 11; // Yes/True
 
+    // Get the market creator account for this market
+    const marketCreatorDetails = await getMarketCreatorDetails();
+
     try {
       const tx = await program.methods
         .resolveMarket({
@@ -142,6 +145,7 @@ describe("Market Resolution", () => {
         .accounts({
           signer: ADMIN.publicKey,
           market: marketPda,
+          marketCreator: marketCreatorDetails.marketCreator,
           oraclePubkey: ADMIN.publicKey, // Use ADMIN for manual resolution
         })
         .signers([ADMIN])
