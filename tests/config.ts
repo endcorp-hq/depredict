@@ -11,15 +11,10 @@ describe("depredict", () => {
   );
 
   before(async () => {
-    console.log("Admin public key:", ADMIN.publicKey.toString());
-    console.log("Fee vault public key:", FEE_VAULT.publicKey.toString());
-    console.log("Config PDA:", configPda.toString());
 
     // Ensure admin has enough SOL
     await ensureAccountBalance(ADMIN.publicKey);
     
-    // Initialize config account for all tests
-    console.log("Initializing config account for all tests...");
     try {
       // Check if config already exists
       await program.account.config.fetch(configPda);
@@ -27,35 +22,24 @@ describe("depredict", () => {
     } catch (error) {
       console.log("Creating new config account...");
       
-
-
-      const collectionName = "DEPREDICT";
-      const collectionUri = "https://example.com/depredict-collection.json";
-
       // Small delay to ensure everything is settled
-      console.log("Waiting for final settlement before calling program...");
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // @ts-ignore - IDL types will update after build
-      const tx = await (program.methods as any)
-        .initializeConfig(new anchor.BN(100), collectionName, collectionUri)
+      const tx = await (program.methods)
+        .initializeConfig(new anchor.BN(100))
         .accountsPartial({
           signer: ADMIN.publicKey,
           feeVault: FEE_VAULT.publicKey,
           config: configPda,
-          // @ts-ignore - new accounts added in program, types update after build
-          collection: PublicKey.findProgramAddressSync([Buffer.from("collection"), Buffer.from("global")], program.programId)[0],
-          // @ts-ignore - constant not present in older IDL
-          mplCoreProgram: new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"),
           systemProgram: anchor.web3.SystemProgram.programId,
         } as any)
         .signers([ADMIN])
         .rpc({
-          skipPreflight: false,
+          skipPreflight: true,
           commitment: "confirmed",
-          preflightCommitment: "confirmed",
         });
-      console.log("✅ Config initialization tx:", tx);
+      // console.log("✅ Config initialization tx:", tx);
     }
   });
 
@@ -69,17 +53,39 @@ describe("depredict", () => {
       assert.ok(configAccount.authority.equals(ADMIN.publicKey));
       assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
       assert.ok(configAccount.feeAmount.eq(new anchor.BN(100)));
-      
-      
-      console.log("✅ Config account verified successfully");
+      // console.log("✅ Config account verified successfully");
+    });
+
+    it("Fails to update fee amount with same value", async () => {
+      const sameFee = new anchor.BN(100); // Same as current
+
+      try {
+        await program.methods
+          .updateFeeAmount(sameFee)
+          .accountsPartial({
+            signer: ADMIN.publicKey,
+            feeVault: FEE_VAULT.publicKey,
+            config: configPda,
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc({
+            skipPreflight: true,
+            commitment: "confirmed",
+          });
+        
+        assert.fail("Transaction should have failed due to same fee amount");
+      } catch (error) {
+        assert.include(error.message, "SameFeeAmount");
+      }
     });
 
     it("Updates fee amount", async () => {
-      const newFeeAmount = new anchor.BN(20);
+      const newFeeAmount = new anchor.BN(200);
 
       try {
         // Small delay to ensure everything is settled
-        console.log("Waiting for final settlement before calling program...");
+        // console.log("Waiting for final settlement before calling program...");
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         const tx = await program.methods
@@ -92,20 +98,16 @@ describe("depredict", () => {
           })
           .signers([ADMIN])
           .rpc({
-            skipPreflight: false,
+            skipPreflight: true,
             commitment: "confirmed",
           });
-        console.log("Update fee amount tx:", tx);
+        // console.log("Update fee amount tx:", tx);
       } catch (error) {
-        console.error("Update fee amount error:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
-        }
         throw error;
       }
-
       const configAccount = await program.account.config.fetch(configPda);
       assert.ok(configAccount.feeAmount.eq(newFeeAmount));
+    
     });
 
     it("Fails to update fee amount with wrong authority", async () => {
@@ -131,56 +133,10 @@ describe("depredict", () => {
         assert.fail("Transaction should have failed due to unauthorized access");
       } catch (error) {
         console.log("Error message:", error.message);
-        
-        // Handle blockhash errors gracefully
-        if (error.message.includes("Blockhash not found")) {
-          console.log("Blockhash expired, this is expected on devnet. Test passed.");
-          return;
-        }
-        
-        // The error can be various types:
-        // 1. AnchorError with "Unauthorized" - program logic rejected it
-        // 2. Simulation failure with "debit an account but found no record of a prior credit" - account setup issue
-        // 3. General simulation failure
-        if (error.message.includes("AnchorError")) {
-          assert.include(error.message, "Unauthorized");
-        } else if (error.message.includes("debit an account but found no record of a prior credit")) {
-          // This is a valid failure - the wrong authority account doesn't have the right setup
-          console.log("Transaction failed due to account setup issue (expected for wrong authority)");
-        } else if (error.message.includes("failed") || error.message.includes("Failed")) {
-          // General simulation failure
-          console.log("Transaction failed during simulation (expected for wrong authority)");
-        } else {
-          // Any other error is also acceptable as long as the transaction didn't succeed
-          console.log("Transaction failed with unexpected error (acceptable as long as it failed)");
-        }
+        assert.include(error.message, "Unauthorized");
       }
     });
 
-    it("Fails to update fee amount with same value", async () => {
-      const currentFeeAmount = new anchor.BN(20); // Same as current
-
-      try {
-        await program.methods
-          .updateFeeAmount(currentFeeAmount)
-          .accountsPartial({
-            signer: ADMIN.publicKey,
-            feeVault: FEE_VAULT.publicKey,
-            config: configPda,
-            systemProgram: anchor.web3.SystemProgram.programId,
-          })
-          .signers([ADMIN])
-          .rpc({
-            skipPreflight: false,
-            commitment: "confirmed",
-          });
-        
-        assert.fail("Transaction should have failed due to same fee amount");
-      } catch (error) {
-        console.log("Error message:", error.message);
-        assert.include(error.message, "SameFeeAmount");
-      }
-    });
 
     it("Fails to update fee amount with invalid amount (too high)", async () => {
       const invalidFeeAmount = new anchor.BN(1_000_000_001); // Over 1 billion limit
@@ -202,8 +158,6 @@ describe("depredict", () => {
         
         assert.fail("Transaction should have failed due to invalid fee amount");
       } catch (error) {
-        console.log("Error message:", error.message);
-        assert.include(error.message, "AnchorError");
         assert.include(error.message, "InvalidFeeAmount");
       }
     });
@@ -212,8 +166,6 @@ describe("depredict", () => {
       newAuthority = Keypair.generate();
 
       try {
-        // Small delay to ensure everything is settled
-        console.log("Waiting for final settlement before calling program...");
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         const tx = await program.methods
@@ -229,12 +181,8 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Update authority tx:", tx);
+        // console.log("Update authority tx:", tx);
       } catch (error) {
-        console.error("Update authority error:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
-        }
         throw error;
       }
 
@@ -263,23 +211,7 @@ describe("depredict", () => {
         
         assert.fail("Transaction should have failed due to unauthorized access");
       } catch (error) {
-        console.log("Error message:", error.message);
-        // The error can be various types:
-        // 1. AnchorError with "Unauthorized" - program logic rejected it
-        // 2. Simulation failure with "debit an account but found no record of a prior credit" - account setup issue
-        // 3. General simulation failure
-        if (error.message.includes("AnchorError")) {
-          assert.include(error.message, "Unauthorized");
-        } else if (error.message.includes("debit an account but found no record of a prior credit")) {
-          // This is a valid failure - the wrong authority account doesn't have the right setup
-          console.log("Transaction failed due to account setup issue (expected for wrong authority)");
-        } else if (error.message.includes("failed") || error.message.includes("Failed")) {
-          // General simulation failure
-          console.log("Transaction failed during simulation (expected for wrong authority)");
-        } else {
-          // Any other error is also acceptable as long as the transaction didn't succeed
-          console.log("Transaction failed with unexpected error (acceptable as long as it failed)");
-        }
+        assert.include(error.message, "Unauthorized");
       }
     });
 
@@ -431,7 +363,7 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Reset authority tx:", authorityTx);
+        // console.log("Reset authority tx:", authorityTx);
 
         // Reset fee vault back to FEE_VAULT
         const feeVaultTx = await program.methods
@@ -447,7 +379,7 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Reset fee vault tx:", feeVaultTx);
+        // console.log("Reset fee vault tx:", feeVaultTx);
 
         // Reset fee amount back to initial
         const feeAmountTx = await program.methods
@@ -463,17 +395,8 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Reset fee amount tx:", feeAmountTx);
+        // console.log("Reset fee amount tx:", feeAmountTx);
       } catch (error) {
-        console.error("Reset config error:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
-        }
-        // Handle network errors gracefully
-        if (error.message.includes("Blockhash not found")) {
-          console.log("Network error during cleanup - skipping final assertions");
-          return;
-        }
         throw error;
       }
 
@@ -481,6 +404,7 @@ describe("depredict", () => {
       assert.ok(configAccount.authority.equals(ADMIN.publicKey));
       assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
       assert.ok(configAccount.feeAmount.eq(initialFeeAmount));
+      console.log("✅ Config account reset to initial state");
     });
   });
 });

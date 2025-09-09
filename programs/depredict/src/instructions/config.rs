@@ -70,7 +70,7 @@ pub struct CloseConfigContext<'info> {
 }
 
 impl<'info> InitConfigContext<'info> {
-    pub fn init_config(&mut self, fee_amount: u64, _collection_name: String, _collection_uri: String, bump: &InitConfigContextBumps) -> Result<()> {
+    pub fn init_config(&mut self, fee_amount: u64, bump: &InitConfigContextBumps) -> Result<()> {
         let config = &mut self.config;
         config.bump = bump.config;
         config.authority = *self.signer.key;

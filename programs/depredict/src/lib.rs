@@ -17,8 +17,8 @@ pub mod depredict {
     use super::*;
 
     // CONFIG INSTRUCTIONS
-    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64, collection_name: String, collection_uri: String) -> Result<()> {
-        ctx.accounts.init_config(fee_amount, collection_name, collection_uri, &ctx.bumps)?;
+    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64) -> Result<()> {
+        ctx.accounts.init_config(fee_amount, &ctx.bumps)?;
         Ok(())
     }
 
