@@ -4,14 +4,7 @@ import { assert } from "chai";
 import * as fs from "fs";
 // mpl
 import {
-  createCollection,
-  mplCore,
-} from '@metaplex-foundation/mpl-core';
-import {
   createSignerFromKeypair,
-  generateSigner,
-  signerIdentity,
-  sol,
 } from '@metaplex-foundation/umi';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 
@@ -26,7 +19,6 @@ import { ADMIN,
 } from "../helpers";
 import {createCoreCollection, createMerkleTree} from "../mpl_functions";
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters";
-
 
 describe("Market Creator Two-Step Process", () => {
   let marketCreatorPda: PublicKey;

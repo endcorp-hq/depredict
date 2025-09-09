@@ -28,9 +28,9 @@ pub struct PositionContext<'info> {
     /// CHECK: multisig fee vault account
     #[account(
         mut, 
-        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
+        constraint = market_fee_vault.key() == market_creator.fee_vault @ DepredictError::InvalidFeeVault
     )]
-    pub fee_vault: AccountInfo<'info>,
+    pub market_fee_vault: AccountInfo<'info>,
 
     // Paged positions account for this market and page index
     #[account(
@@ -229,7 +229,6 @@ impl<'info> PositionContext<'info> {
         
         // Determine free slot within page
         let position_index = (position_page.count as usize).min(POSITION_PAGE_ENTRIES - 1);
-    
             
         msg!("Position Index {:?}", position_index);
 
@@ -238,7 +237,6 @@ impl<'info> PositionContext<'info> {
         position_page.entries[position_index].direction = args.direction;
         position_page.entries[position_index].status = PositionStatus::Open;
         position_page.count = position_page.count.saturating_add(1);
-    
         market.volume = market.volume.checked_add(net_amount).unwrap();
 
         match args.direction {
@@ -268,7 +266,7 @@ impl<'info> PositionContext<'info> {
         let transfer_result = transfer(
             CpiContext::new(self.system_program.to_account_info(), Transfer {
                 from: self.user.to_account_info(),
-                to: self.fee_vault.to_account_info(),
+                to: self.market_fee_vault.to_account_info(),
             }),
             fee
         );
@@ -326,9 +324,10 @@ impl<'info> PositionContext<'info> {
                 .tree_creator_or_delegate(Some(market_creator))
                 .collection_authority(Some(market_creator))
                 .leaf_owner(&leaf_owner)
-                .leaf_delegate(None)
+                .leaf_delegate(Some(&payer))
                 .merkle_tree(&self.merkle_tree)
                 .core_collection(Some(&self.collection))
+                .mpl_core_cpi_signer(Some(market_creator))
                 .log_wrapper(&self.log_wrapper_program)
                 .compression_program(&self.compression_program)
                 .mpl_core_program(&self.mpl_core_program)

@@ -65,7 +65,7 @@ async function createMerkleTree(authority: Keypair): Promise<PublicKey> {
     maxDepth: 16,
     canopyDepth: 8,
     maxBufferSize: 64,
-    public: false,
+    public: true,
   });
   await builder.sendAndConfirm(umi);
   

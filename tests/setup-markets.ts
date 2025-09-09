@@ -7,8 +7,6 @@ import {
   provider, 
   LOCAL_MINT, 
   updateMarketIds,
-  ensureMarketCreatorExists,
-  getVerifiedMarketCreatorDetails
 } from "./helpers";
 
 describe("Market Setup", () => {
@@ -75,7 +73,14 @@ describe("Market Setup", () => {
 
     try {
       const cfg: any = await program.account.config.fetch(configPda);
-      const marketCreatorDetails = await getVerifiedMarketCreatorDetails();
+      let MARKET_CREATOR = "market_creator";
+      // market creator pda
+      const seeds = [Buffer.from(MARKET_CREATOR), ADMIN.publicKey.toBytes()];
+      const [marketCreatorpda, bump] = await PublicKey.findProgramAddressSync(
+        seeds,
+        // owned by solana program id
+        program.programId
+      );
       
       const tx = await program.methods
         .createMarket({
@@ -92,7 +97,7 @@ describe("Market Setup", () => {
           feeVault: cfg.feeVault,
           oraclePubkey: oraclePubkey,
           config: configPda,
-          marketCreator: marketCreatorDetails.marketCreator,
+          marketCreator: marketCreatorpda,
           mint: LOCAL_MINT.publicKey,
         })
         .signers([ADMIN])
@@ -258,8 +263,22 @@ describe("Market Setup", () => {
       // For manual resolution, we need to pass oracle_value: 11 for "Yes" or 10 for "No"
       const mockOracleValue = 11; // Yes/True
 
-      // Get the market creator account for this market
-      const marketCreatorDetails = await getVerifiedMarketCreatorDetails();
+      // Use the existing market creator setup
+      let MARKET_CREATOR = "market_creator";
+      // market creator pda
+      const seeds = [Buffer.from(MARKET_CREATOR), ADMIN.publicKey.toBytes()];
+      const [marketCreatorpda, bump] = await PublicKey.findProgramAddressSync(
+        seeds,
+        // owned by solana program id
+        program.programId
+      );
+
+      console.log(`Market Creator PDA: ${marketCreatorpda}`);
+      console.log(`Market Creator Bump: ${bump}`);
+
+      //load marketcreator account details
+      let marketCreatorAccount = await program.account.marketCreator.fetch(marketCreatorpda);
+      console.log(`Market Creator Account: ${marketCreatorAccount}`);
 
       const resolveTx = await program.methods
         .resolveMarket({
@@ -268,7 +287,7 @@ describe("Market Setup", () => {
         .accounts({
           signer: ADMIN.publicKey,
           market: marketPda,
-          marketCreator: marketCreatorDetails.marketCreator,
+          marketCreator: marketCreatorpda,
           oraclePubkey: ADMIN.publicKey, // Use ADMIN for manual resolution
         })
         .signers([ADMIN])
