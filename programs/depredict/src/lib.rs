@@ -113,8 +113,8 @@ pub mod depredict {
         let page = &mut ctx.accounts.position_page;
         let slot_index = args.slot_index as usize;
         require!(slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
-        page.entries[slot_index].leaf_index = args.leaf_index;
-        page.entries[slot_index].status = PositionStatus::Open; // stays Open but now confirmed by having leaf_index
+        page.entries[slot_index].asset_id = args.asset_id;
+        page.entries[slot_index].status = PositionStatus::Open; // stays Open but now confirmed by having asset_id
         Ok(())
     }
 }

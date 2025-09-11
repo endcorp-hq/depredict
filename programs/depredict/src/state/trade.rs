@@ -61,14 +61,14 @@ pub struct OpenPositionArgs {
 pub struct ConfirmPositionArgs {
     pub page_index: u32,
     pub slot_index: u16,
-    pub leaf_index: u64,
+    pub asset_id: Pubkey,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClaimPositionArgs {
     pub page_index: u32,
     pub slot_index: u16,
-    pub leaf_index: u64,
+    pub asset_id: Pubkey,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -161,7 +161,7 @@ pub struct PositionPage {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, InitSpace, PartialEq, Eq, Debug)]
 pub struct PositionEntryLite {
-    pub leaf_index: u64,
+    pub asset_id: Pubkey,
     pub amount: u64,
     pub direction: PositionDirection,
     pub status: PositionStatus,

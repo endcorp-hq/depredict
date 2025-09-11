@@ -51,7 +51,7 @@ async function createCoreCollection(authority: Signer): Promise<KeypairSigner> {
     ],
   }).sendAndConfirm(umi);
 
-  console.log("tx_create", tx_create);
+  // console.log("tx_create", tx_create);
 
     // we must use the marketCreator PDA as the authority to create the collection
     // market creator pda
@@ -72,7 +72,7 @@ async function createCoreCollection(authority: Signer): Promise<KeypairSigner> {
       },
     }).sendAndConfirm(umi)
 
-    console.log("tx_update", tx_update);
+    //console.log("tx_update", tx_update);
 
 
 return collection;

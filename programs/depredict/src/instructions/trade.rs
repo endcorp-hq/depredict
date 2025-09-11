@@ -17,7 +17,13 @@ use mpl_bubblegum::{
     programs::MPL_BUBBLEGUM_ID,
     types::{MetadataArgsV2, TokenStandard}
 };
-use mpl_core::programs::{MPL_CORE_ID, };
+use mpl_core::programs::{MPL_CORE_ID };
+use borsh::BorshDeserialize;
+use mpl_bubblegum::accounts::TreeConfig;
+
+
+
+
 
 #[derive(Accounts)]
 #[instruction(args: OpenPositionArgs)]
@@ -287,8 +293,7 @@ impl<'info> PositionContext<'info> {
     
         market.emit_market_event()?;
 
-        let do_bubblegum = self.merkle_tree.lamports() > 0;
-        if do_bubblegum {
+
             // Build uri = {base_uri}/{marketId}/{positionId}.json from fixed bytes
             let base_uri = std::str::from_utf8(&self.config.base_uri).unwrap_or("").trim_matches(char::from(0));
             let uri = format!("{}/{}/{}.json", base_uri, market.market_id, next_position_id);
@@ -312,6 +317,7 @@ impl<'info> PositionContext<'info> {
             let leaf_owner = self.user.to_account_info();
             let system = self.system_program.to_account_info();
             
+
             // Create the seeds and bump for the market creator PDA
             let market_creator_seeds = &[
                 MARKET_CREATOR.as_bytes(),
@@ -339,13 +345,26 @@ impl<'info> PositionContext<'info> {
             
             // Use invoke_signed to provide the seeds for the market creator PDA
             builder.invoke_signed(market_creator_signer_seeds)?;
+
+            let mut tree_config_data: &[u8] = &self.tree_config.try_borrow_data()?;
+            let tree_account = TreeConfig::deserialize(&mut tree_config_data)?;
+            msg!("tree_account {:?}", tree_account);
+            let leaf_index = tree_account.num_minted - 1;
+            msg!("leaf_index {:?}", leaf_index);
+
+            let (asset_id, _bump) = Pubkey::find_program_address(
+                &[
+                    b"asset",
+                    self.merkle_tree.key().as_ref(),
+                    &leaf_index.to_le_bytes(),
+                ],
+                &MPL_BUBBLEGUM_ID,
+            );
             
-            
-            msg!("Position created; awaiting confirmation by market authority.");
-        } else {
-            return Err(DepredictError::InvalidNft.into());
-        }
-        Ok(())
+            msg!("Position created; Assset ID {:?}", asset_id);
+
+            position_page.entries[position_index].asset_id = asset_id;
+     Ok(())
     }
 }
 
@@ -373,7 +392,7 @@ impl<'info> PayoutNftContext<'info> {
         let entry = position_page.entries[slot_index];
         // Must be Open (and confirmed by having a non-zero leaf_index)
         require!(entry.status == PositionStatus::Open, DepredictError::PositionNotFound);
-        require!(entry.leaf_index == args.leaf_index && entry.leaf_index != 0, DepredictError::InvalidNft);
+        require!(entry.asset_id == args.asset_id && entry.asset_id != Pubkey::default(), DepredictError::InvalidNft);
 
         // TODO: Verify Merkle inclusion of leaf using args.leaf_index and provided proof accounts
         let position_amount = entry.amount;
