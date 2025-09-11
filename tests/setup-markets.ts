@@ -102,27 +102,9 @@ describe("Market Setup", () => {
         })
         .signers([ADMIN])
         .rpc();
-
-      console.log(`✅ Created ${description} market:`, marketId.toString());
-      console.log("Transaction:", tx);
-      console.log(`   Market Start: ${marketStart.toNumber()}`);
-      console.log(`   Market End: ${marketEnd.toNumber()}`);
-      console.log(`   Betting Start: ${bettingStart.toNumber()}`);
       
       return { marketId, marketPda, tx };
     } catch (error) {
-      console.error(`❌ Failed to create ${description} market:`, error);
-      if (error.logs) {
-        console.error("Program logs:", error.logs);
-      }
-      
-      // On localnet, MPL Core should now be available
-      if (isLocalnet && (error.toString().includes("Unsupported program id") || error.toString().includes("MPL"))) {
-        console.log(`❌ MPL Core error on localnet for ${description} market`);
-        console.log(`   Make sure to run ./tests/setup-localnet.sh to load MPL Core`);
-        console.log(`   Error: ${error.toString()}`);
-      }
-      
       throw error;
     }
   }
@@ -133,8 +115,6 @@ describe("Market Setup", () => {
     }
 
     const currentTime = await getCurrentUnixTime();
-
-    console.log("Current time:", currentTime);
 
     // Create a market that's currently active for betting
     // For an active market: current time should be between betting_start and market_end
@@ -223,9 +203,6 @@ describe("Market Setup", () => {
   });
 
   it("Creates resolved market", async function() {
-    if (isLocalnet) {
-      console.log("Creating resolved market on localnet (MPL Core may fail but market logic will be tested)");
-    }
 
     const currentTime = await getCurrentUnixTime();
 
@@ -273,13 +250,6 @@ describe("Market Setup", () => {
         program.programId
       );
 
-      console.log(`Market Creator PDA: ${marketCreatorpda}`);
-      console.log(`Market Creator Bump: ${bump}`);
-
-      //load marketcreator account details
-      let marketCreatorAccount = await program.account.marketCreator.fetch(marketCreatorpda);
-      console.log(`Market Creator Account: ${marketCreatorAccount}`);
-
       const resolveTx = await program.methods
         .resolveMarket({
           oracleValue: mockOracleValue,
@@ -294,41 +264,17 @@ describe("Market Setup", () => {
         .rpc();
 
       console.log("✅ Resolved market:", result.marketId.toString());
-      console.log("Resolution transaction:", resolveTx);
     } catch (error) {
-      console.error("❌ Failed to resolve market:", error);
-      if (error.logs) {
-        console.error("Program logs:", error.logs);
-      }
+      
       // For now, we'll still track this as a resolved market
       // In a real scenario, you'd want to ensure resolution succeeds
       console.log("⚠️  Market created but resolution failed - will test against unresolved market");
       
-      // Check if the market was actually resolved by fetching it
-      try {
-        const [marketPda] = PublicKey.findProgramAddressSync(
-          [Buffer.from("market"), result.marketId.toArrayLike(Buffer, "le", 8)],
-          program.programId
-        );
-        const marketAccount = await program.account.marketState.fetch(marketPda);
-        console.log("Market state after resolution attempt:", marketAccount.marketState);
-        console.log("Winning direction:", marketAccount.winningDirection);
-        
-        if (marketAccount.winningDirection.toString() !== "None") {
-          console.log("✅ Market was actually resolved successfully!");
-        } else {
-          console.log("❌ Market was not resolved - winning direction is still None");
-        }
-      } catch (fetchError) {
-        console.error("Could not fetch market account:", fetchError);
-      }
+
     }
   });
 
   it("Updates market-id.json with all created markets", async function() {
-    if (isLocalnet) {
-      console.log("Updating market IDs on localnet");
-    }
 
     // Update the file with any markets that were created (even if partially failed)
     if (Object.keys(createdMarkets).length > 0) {

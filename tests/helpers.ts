@@ -322,19 +322,18 @@ export async function ensureMarketCreatorExists(): Promise<{
  * @returns {Promise<{marketCreator: PublicKey}>} Market creator details
  */
 export async function createMarketCreator(name: string, feeVault: PublicKey): Promise<{
-  marketCreator: PublicKey;
+  marketCreator: any;
 }> {
   // Create the market creator account PDA
   const [marketCreatorPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
     program.programId
   );
-
   try {
     // Check if already exists
-    await program.account.marketCreator.fetch(marketCreatorPda);
-    console.log("✅ Market creator already exists:", marketCreatorPda.toString());
-    return { marketCreator: marketCreatorPda };
+    let marketCreator = await program.account.marketCreator.fetch(marketCreatorPda);
+    console.log("✅ Market creator already exists:", marketCreator);
+    return { marketCreator };
   } catch (error) {
     // Create the market creator account
     console.log("Creating market creator account...");
@@ -433,35 +432,3 @@ export async function getCollectionDetails(): Promise<{
   };
 }
 
-/**
- * Loads market creator details from the JSON file created by the market creator test
- * @returns {Promise<{marketCreator: PublicKey; coreCollection: PublicKey; verified: boolean}>} Market creator details
- */
-export async function getVerifiedMarketCreatorDetails(): Promise<{
-  marketCreator: PublicKey;
-  coreCollection: PublicKey;
-  verified: boolean;
-}> {
-  try {
-    // Try to load from the JSON file first
-    const jsonPath = path.join(process.cwd(), "market-creator.json");
-    if (fs.existsSync(jsonPath)) {
-      const data = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
-      console.log("✅ Loaded market creator details from JSON file");
-      console.log("   Market Creator:", data.marketCreator);
-      console.log("   Core Collection:", data.coreCollection);
-      console.log("   Verified:", data.verified);
-      
-      return {
-        marketCreator: new PublicKey(data.marketCreator),
-        coreCollection: new PublicKey(data.coreCollection),
-        verified: data.verified
-      };
-    }
-  } catch (error) {
-    console.log("⚠️  Could not load from JSON file, falling back to on-chain data:", error.message);
-  }
-  
-  // Fallback to on-chain data if JSON file doesn't exist or is invalid
-  return await getMarketCreatorDetails();
-}

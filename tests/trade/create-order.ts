@@ -14,6 +14,13 @@ const BUBBLEGUM_PROGRAM_ID = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK7
 const MPL_CORE_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
 const MPL_NOOP_ID = new PublicKey("mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3");
 const ACCOUNT_COMPRESSION_ID = new PublicKey("mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW");
+import { publicKey } from '@metaplex-foundation/umi'
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+import { dasApi } from '@metaplex-foundation/digital-asset-standard-api'
+import { das }  from '@metaplex-foundation/mpl-core-das';
+import { fetchCollectionV1 } from '@metaplex-foundation/mpl-core'
+
+    
 
 describe("depredict", () => { 
 
@@ -75,6 +82,7 @@ describe("depredict", () => {
 
   describe("Trade", () => {
     it("Creates an order in an existing market", async function () {
+
       // Get the current market ID
       const marketId = await getCurrentMarketId();
       console.log("Using market ID:", marketId.toString());
@@ -99,19 +107,28 @@ describe("depredict", () => {
     let MARKET_CREATOR = "market_creator";
     // market creator pda
     const seeds = [Buffer.from(MARKET_CREATOR), ADMIN.publicKey.toBytes()];
-    const [marketCreatorpda, bump] = await PublicKey.findProgramAddressSync(
+    const [marketCreatorpda, bump] = PublicKey.findProgramAddressSync(
       seeds,
-      // owned by solana program id
       program.programId
     );
 
     console.log(`Market Creator PDA: ${marketCreatorpda}`);
     console.log(`Market Creator Bump: ${bump}`);
 
+
     //load marketcreator account details
     let marketCreatorAccount = await program.account.marketCreator.fetch(marketCreatorpda);
-    console.log(`Market Creator Account: ${marketCreatorAccount}`);
+    console.log(`Market Creator Account: ${marketCreatorAccount.coreCollection}`);
 
+    const umi = createUmi(provider.connection.rpcEndpoint).use(dasApi())
+    const collectionId = publicKey(marketCreatorAccount.coreCollection.toString())
+
+const collection = await fetchCollectionV1(umi, collectionId)
+
+console.log(collection)
+      
+
+    
       // Check if the market exists before proceeding
       try {
         const marketAccount = await program.account.marketState.fetch(marketPda);
@@ -143,7 +160,7 @@ describe("depredict", () => {
         console.error("Minimum required: 1.5 SOL");
         throw new Error("Insufficient SOL in USER account for NFT creation");
       }
-      
+      let mplCoreCpiSigner = new PublicKey("CbNY3JiXdXNE9tPNEk1aRZVEkWdj2v7kfJLNQwZZgpXk")
       // Create order parameters
       const amount = new anchor.BN(3*10**6); // 3 USDC (6 decimals)
       const direction = { yes: {} }; // Betting on "Yes"
@@ -164,6 +181,7 @@ describe("depredict", () => {
            marketVault: marketVault,
            config: configPda,
            marketCreator: marketCreatorpda,
+           mplCoreCpiSigner: mplCoreCpiSigner,
            merkleTree: marketCreatorAccount.merkleTree,
            treeConfig: PublicKey.findProgramAddressSync(
              [marketCreatorAccount.merkleTree.toBuffer()],

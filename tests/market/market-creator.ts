@@ -9,7 +9,8 @@ import {
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 
 // helpers
-import { ADMIN, 
+import { 
+  ADMIN, 
   FEE_VAULT, 
   program, 
   provider, 
@@ -34,6 +35,7 @@ describe("Market Creator Two-Step Process", () => {
     const result = await createMarketCreator(name, FEE_VAULT.publicKey);
     
     marketCreatorPda = result.marketCreator;
+    console.log("Market Creator PDA:", marketCreatorPda.toString());
     
     // Verify the account was created but not verified
     const marketCreatorAccount = await program.account.marketCreator.fetch(marketCreatorPda);
@@ -63,12 +65,8 @@ describe("Market Creator Two-Step Process", () => {
       assert.equal(marketCreatorAccount.verified, true);
       assert.ok(marketCreatorAccount.coreCollection.equals(coreCollection));
       
-      console.log("✅ Market creator verified successfully");
+      // console.log("✅ Market creator verified successfully");
     } catch (error) {
-      console.log("Expected error (dummy collection doesn't exist):", error.message);
-      
-      // This is expected since we're using a dummy collection
-      // In a real test, you would create a valid MPL Core collection first
       assert.include(error.message, "Error");
     }
 
