@@ -5,6 +5,7 @@ import { createTreeV2 } from "@metaplex-foundation/mpl-bubblegum";
 import {
   createCollection,
   mplCore,
+  updateCollection,
 } from '@metaplex-foundation/mpl-core';
 import {
   generateSigner,
@@ -12,13 +13,16 @@ import {
   sol,
   createSignerFromKeypair,
   type KeypairSigner,
-  Signer
+  Signer,
+  Pda
 } from '@metaplex-foundation/umi';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 
 // helpers
 import { 
   provider, 
+  program,
+  ADMIN
 } from "./helpers";
 
 async function createCoreCollection(authority: Signer): Promise<KeypairSigner> {
@@ -35,7 +39,7 @@ async function createCoreCollection(authority: Signer): Promise<KeypairSigner> {
   // create a collection
   const collection = generateSigner(umi);
 
-  const tx = await createCollection(umi, {
+  const tx_create = await createCollection(umi, {
     collection,
     name: 'Test Collection',
     uri: metadataUri,
@@ -47,10 +51,32 @@ async function createCoreCollection(authority: Signer): Promise<KeypairSigner> {
     ],
   }).sendAndConfirm(umi);
 
+  console.log("tx_create", tx_create);
+
+    // we must use the marketCreator PDA as the authority to create the collection
+    // market creator pda
+    const seeds = [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()];
+    const [marketCreatorpda, bump] = PublicKey.findProgramAddressSync(
+      seeds,
+      program.programId
+    );
+
+
+    const tx_update = await updateCollection(umi, {
+      collection: collection.publicKey,
+      authority: authority,
+      payer: authority,
+      newUpdateAuthority: {
+        publicKey: marketCreatorpda,
+        bump: bump,
+      },
+    }).sendAndConfirm(umi)
+
+    console.log("tx_update", tx_update);
+
+
 return collection;
 }
-
-
 
 async function createMerkleTree(authority: Keypair): Promise<PublicKey> {
   

@@ -15,9 +15,9 @@ use crate::{
 use mpl_bubblegum::{
     instructions::MintV2CpiBuilder,
     programs::MPL_BUBBLEGUM_ID,
-    types::MetadataArgsV2
+    types::{MetadataArgsV2, TokenStandard}
 };
-use mpl_core::programs::MPL_CORE_ID;
+use mpl_core::programs::{MPL_CORE_ID, };
 
 #[derive(Accounts)]
 #[instruction(args: OpenPositionArgs)]
@@ -90,6 +90,10 @@ pub struct PositionContext<'info> {
     /// CHECK: TreeConfig PDA for the merkle tree
     #[account(mut)]
     pub tree_config: AccountInfo<'info>,
+
+    /// CHECK: MPL Core CPI signer
+    #[account(mut)]
+    pub mpl_core_cpi_signer: AccountInfo<'info>,
 
     /// CHECK: MPL Core program
     #[account(address = MPL_CORE_ID)]
@@ -185,10 +189,9 @@ pub struct ConfirmPositionContext<'info> {
     pub position_page: Box<Account<'info, PositionPage>>,
 }
 
-
-
 impl<'info> PositionContext<'info> {
     pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<()> {
+
         let next_position_id = self.market.next_position_id; // Store before increment
         let market = &mut self.market;
         let market_type = market.market_type;
@@ -202,11 +205,12 @@ impl<'info> PositionContext<'info> {
         } 
 
         require!(market.market_end > ts, DepredictError::BettingPeriodEnded);
+
         require!(
             market.winning_direction == WinningDirection::None,
             DepredictError::MarketAlreadyResolved
         );
-    
+
         // this ensures multiple orders are not created at the same time
         require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
     
@@ -216,12 +220,14 @@ impl<'info> PositionContext<'info> {
             PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
             PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
         };
+
         msg!("current liquidity {:?}", current_liquidity);
         msg!("otherside current liquidity {:?}", otherside_current_liquidity);
         msg!("Net Amount {:?}", net_amount);
     
         let new_directional_liquidity = current_liquidity.checked_add(net_amount).unwrap();
         msg!("new directional liquidity {:?}", new_directional_liquidity);
+
         let markets_liquidity = new_directional_liquidity
             .checked_add(otherside_current_liquidity)
             .unwrap();
@@ -296,16 +302,12 @@ impl<'info> PositionContext<'info> {
                 seller_fee_basis_points: 0,
                 primary_sale_happened: false,
                 is_mutable: false,
-                // For Core collections, Bubblegum expects token_standard to be None
-                token_standard: None,
+                token_standard: Some(TokenStandard::NonFungible),
                 collection: Some(self.market_creator.core_collection),
                 creators: vec![],
             };
 
             let market_creator = &self.market_creator.to_account_info();
-
-            let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
-            // Bind AccountInfo temporaries to extend lifetimes for the builder
             let payer = self.user.to_account_info();
             let leaf_owner = self.user.to_account_info();
             let system = self.system_program.to_account_info();
@@ -317,7 +319,8 @@ impl<'info> PositionContext<'info> {
                 &[self.market_creator.bump]
             ];
             let market_creator_signer_seeds: &[&[&[u8]]] = &[&market_creator_seeds[..]];
-            
+
+            let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
             builder
                 .tree_config(&self.tree_config)
                 .payer(&payer)
@@ -327,7 +330,7 @@ impl<'info> PositionContext<'info> {
                 .leaf_delegate(Some(&payer))
                 .merkle_tree(&self.merkle_tree)
                 .core_collection(Some(&self.collection))
-                .mpl_core_cpi_signer(Some(market_creator))
+                .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
                 .log_wrapper(&self.log_wrapper_program)
                 .compression_program(&self.compression_program)
                 .mpl_core_program(&self.mpl_core_program)
@@ -336,10 +339,12 @@ impl<'info> PositionContext<'info> {
             
             // Use invoke_signed to provide the seeds for the market creator PDA
             builder.invoke_signed(market_creator_signer_seeds)?;
+            
+            
+            msg!("Position created; awaiting confirmation by market authority.");
         } else {
             return Err(DepredictError::InvalidNft.into());
         }
-        msg!("Position created; awaiting confirmation by market authority.");
         Ok(())
     }
 }

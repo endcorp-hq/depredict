@@ -20,6 +20,7 @@ import {
 } from "../helpers";
 import {createCoreCollection, createMerkleTree} from "../mpl_functions";
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters";
+import { updateCollection } from "@metaplex-foundation/mpl-core";
 
 describe("Market Creator Two-Step Process", () => {
   let marketCreatorPda: PublicKey;
@@ -54,6 +55,7 @@ describe("Market Creator Two-Step Process", () => {
 
     const collection = await createCoreCollection(signer);
     coreCollection = new PublicKey(collection.publicKey);
+
     
     try {
       const merkleTree = await createMerkleTree(ADMIN);
