@@ -91,11 +91,6 @@ pub mod depredict {
 
     // POSITION INSTRUCTIONS
 
-    pub fn create_sub_position_account(ctx: Context<SubPositionContext>, sub_position_key: Pubkey) -> Result<()> {
-        ctx.accounts.create_sub_position_account(sub_position_key, &ctx.bumps)?;
-        Ok(())
-    }
-
     pub fn open_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
         ctx.accounts.open_position(args)?;
         Ok(())

@@ -7,20 +7,25 @@ import {
   mintTo,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, program, provider, USER, getCurrentMarketId, getMarketIdByState, ADMIN, LOCAL_MINT, getCurrentUnixTime, ensureAccountBalance, } from "../helpers";
+import { 
+  program, 
+  provider, 
+  USER, 
+  ADMIN, 
+  LOCAL_MINT, 
+  BUBBLEGUM_PROGRAM_ID, 
+  MPL_CORE_ID, 
+  MPL_NOOP_ID, 
+  ACCOUNT_COMPRESSION_ID
+} from "../constants";
+import { getCurrentMarketId, getMarketIdByState, getCurrentUnixTime, ensureAccountBalance } from "../helpers";
+
 import * as fs from "fs";
-// Bubblegum + MPL program IDs
-const BUBBLEGUM_PROGRAM_ID = new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
-const MPL_CORE_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
-const MPL_NOOP_ID = new PublicKey("mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3");
-const ACCOUNT_COMPRESSION_ID = new PublicKey("mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW");
 import { publicKey } from '@metaplex-foundation/umi'
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 import { dasApi } from '@metaplex-foundation/digital-asset-standard-api'
 import { das }  from '@metaplex-foundation/mpl-core-das';
 import { fetchCollectionV1 } from '@metaplex-foundation/mpl-core'
-
-    
 
 describe("depredict", () => { 
 
@@ -179,7 +184,6 @@ console.log(collection)
            mint: usdcMint,
            userMintAta: userTokenAccount,
            marketVault: marketVault,
-           config: configPda,
            marketCreator: marketCreatorpda,
            mplCoreCpiSigner: mplCoreCpiSigner,
            merkleTree: marketCreatorAccount.merkleTree,
