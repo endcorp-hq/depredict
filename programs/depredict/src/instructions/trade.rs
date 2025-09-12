@@ -1,6 +1,7 @@
-use anchor_lang::prelude::*;
-use anchor_lang::system_program::{ transfer, Transfer };
-
+// anchor includes
+use anchor_lang::{
+    prelude::*
+};
 use anchor_spl::{ 
     associated_token::AssociatedToken, 
     token_interface::{ 
@@ -12,37 +13,32 @@ use anchor_spl::{
         transfer_checked
     } 
 };
-use std::str::FromStr;
-use switchboard_on_demand::prelude::rust_decimal::Decimal;
-use crate::constants::{MARKET, POSITION_PAGE, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID, MARKET_CREATOR};
-use crate::state::{
-    Config, 
-    MarketStates, 
-    MarketType, 
-    OpenPositionArgs,
-    ClosePositionArgs, 
-    PositionDirection, 
-    PositionStatus, 
-    PositionPage, 
-    MarketCreator,
-    POSITION_PAGE_ENTRIES
-};
+
+// crate includes
 use crate::{
-    errors::DepredictError,
-    state::{ MarketState, WinningDirection },
+    constants::{
+        BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE
+    }, errors::DepredictError, state::{
+        ClosePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES
+    }
 };
 
+
+// metaplex includes
 use mpl_bubblegum::{
     instructions::MintV2CpiBuilder,
     programs::MPL_BUBBLEGUM_ID,
-    types::{MetadataArgsV2, TokenStandard}
+    types::{MetadataArgsV2, TokenStandard},
+    accounts::TreeConfig
 };
-use mpl_core::programs::{MPL_CORE_ID };
+use mpl_core::programs::{
+    MPL_CORE_ID
+};
+
+//misc includes
 use borsh::BorshDeserialize;
-use mpl_bubblegum::accounts::TreeConfig;
-
-
-
+use std::str::FromStr;
+use switchboard_on_demand::prelude::rust_decimal::Decimal;
 
 
 #[derive(Accounts)]
@@ -102,8 +98,6 @@ pub struct PositionContext<'info> {
         associated_token::token_program = token_program
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    pub config: Box<Account<'info, Config>>,
 
     /// CHECK: merkle tree account
     #[account(mut, constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
