@@ -1,14 +1,3 @@
-// Unified market creation tests for both localnet and devnet
-// 
-// This file handles market creation testing across both networks:
-// - Localnet: Tests basic validation and manual resolution (MPL Core limitations apply)
-// - Devnet: Full testing including oracle-based markets and NFT creation
-// 
-// The tests automatically adapt based on the network configuration:
-// - Manual resolution markets work on both networks
-// - Oracle-based markets only work on devnet (skipped on localnet)
-// - Error expectations differ between networks due to program availability
-
 import * as anchor from "@coral-xyz/anchor";  
 import { PublicKey, Keypair } from "@solana/web3.js";
 import {
@@ -16,7 +5,8 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode, getCurrentUnixTime, getMarketCreatorDetails } from "../helpers";
+import { ADMIN, FEE_VAULT, program, LOCAL_MINT, ORACLE_KEY } from "../constants";
+import { getNetworkConfig, extractErrorCode, getCurrentUnixTime, getMarketCreatorDetails } from "../helpers";
 
 
 // At the top of your file:

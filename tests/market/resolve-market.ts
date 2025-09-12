@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import { ADMIN, getMarketIdByState, program, ORACLE_KEY, getMarketCreatorDetails } from "../helpers";
+import { ADMIN, program, ORACLE_KEY } from "../constants";
+import { getMarketIdByState, getMarketCreatorDetails } from "../helpers";
 import {
   PullFeed,
   getDefaultDevnetQueue,

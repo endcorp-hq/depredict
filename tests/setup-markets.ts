@@ -2,12 +2,14 @@ import * as anchor from "@coral-xyz/anchor";
 import { PublicKey} from "@solana/web3.js";
 import { 
   getNetworkConfig, 
+  updateMarketIds,
+} from "./helpers";
+import {
   ADMIN, 
   program, 
   provider, 
   LOCAL_MINT, 
-  updateMarketIds,
-} from "./helpers";
+} from "./constants";
 
 describe("Market Setup", () => {
   let configPda: PublicKey;

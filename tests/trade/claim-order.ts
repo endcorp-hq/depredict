@@ -1,15 +1,13 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, SystemProgram } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getCurrentMarketId, METAPLEX_ID, program, provider, USER, LOCAL_MINT } from "../helpers";
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { fetchAsset } from '@metaplex-foundation/mpl-core';
+import { program, provider, USER, LOCAL_MINT, BUBBLEGUM_PROGRAM_ID, MPL_CORE_ID, MPL_NOOP_ID, ACCOUNT_COMPRESSION_ID } from "../constants";
+import { getCurrentMarketId } from "../helpers";
 
 describe("depredict", () => {
 
@@ -21,16 +19,12 @@ describe("depredict", () => {
 
   console.log("User:", user.publicKey.toString());
 
-  describe("NFT Payout", () => {
+  describe("Claim Order", () => {
 
-
-
-
-    
     it("Checks market resolution and processes payout (gated)", async function () {
       // Get the current market ID
       const marketId = await getCurrentMarketId();
-      console.log("Using market ID for NFT payout:", marketId.toString());
+      console.log("Using market ID for Claim Order:", marketId.toString());
 
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
@@ -57,6 +51,7 @@ describe("depredict", () => {
         );
       // Get the initial market state
       let marketAccountBefore;
+
       try {
         marketAccountBefore = await program.account.marketState.fetch(
           marketPda
@@ -102,27 +97,50 @@ describe("depredict", () => {
       const winningDirection = Object.keys(marketAccount.winningDirection)[0];
       console.log("Winning Direction:", winningDirection);
 
-      // Gated: this flow requires Bubblegum proofs and ConfirmPosition.
-      // For now, skip until proofs wired and page entry confirmed.
-      this.skip();
-      return;
+
 
       // Log balances before payout
       const userUsdcBalanceBefore = await provider.connection.getTokenAccountBalance(userUsdcAta);
       console.log("User USDC balance before payout:", userUsdcBalanceBefore.value.uiAmount);
 
-      // Additional debug info
-      console.log("\n=== Additional Debug Info ===");
-      console.log("Market PDA Authority:", marketPda.toString());
-      console.log("Market Vault Authority:", marketPda.toString());
-      console.log("User Public Key:", user.publicKey.toString());
-      console.log("NFT Mint:", position.mint.toString());
-      console.log("Token Program ID:", TOKEN_PROGRAM_ID.toString());
-      console.log("Associated Token Program ID:", ASSOCIATED_TOKEN_PROGRAM_ID.toString());
-      console.log("Token Metadata Program ID:", METAPLEX_ID.toString());
+      // use DAS API to load the asset: assetId
+      // const assetId = await dasApi.fetchAsset(assetId);
+      let assetId;
+
 
       try {
         console.log("\n=== Executing Payout Transaction ===");
+
+        const tx = await program.methods
+         .settlePosition({
+          pageIndex: 0,
+          slotIndex: 0,
+          assetId: assetId,
+         })
+         .accountsPartial({
+           claimer: USER.publicKey,
+           market: marketPda,
+           mint: usdcMint,
+           claimerMintAta: userUsdcAta,
+           marketVault: marketVault,
+           marketCreator: marketAccount.marketCreator,
+           mplCoreCpiSigner: mplCoreCpiSigner,
+           merkleTree: marketAccount.merkleTree,
+           treeConfig: PublicKey.findProgramAddressSync(
+             [marketAccount.merkleTree.toBuffer()],
+             BUBBLEGUM_PROGRAM_ID
+           )[0],
+           collection: marketCreatorAccount.coreCollection,
+           bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+           mplCoreProgram: MPL_CORE_ID,
+           logWrapperProgram: MPL_NOOP_ID,
+           compressionProgram: ACCOUNT_COMPRESSION_ID,
+           tokenProgram: TOKEN_PROGRAM_ID,
+           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+           systemProgram: SystemProgram.programId,
+         })
+         .signers([USER])
+         .rpc();
         
         // Update the program call
         // New claim ix requires Merkle proof and ConfirmPosition args; pending wiring.

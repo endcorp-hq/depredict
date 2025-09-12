@@ -10,17 +10,13 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 
 // helpers
 import { 
-  ADMIN, 
-  FEE_VAULT, 
-  program, 
-  provider, 
   ensureAccountBalance, 
   createMarketCreator, 
   verifyMarketCreator,
 } from "../helpers";
+import { ADMIN, FEE_VAULT, program, provider } from "../constants";
 import {createCoreCollection, createMerkleTree} from "../mpl_functions";
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters";
-import { updateCollection } from "@metaplex-foundation/mpl-core";
 
 describe("Market Creator Two-Step Process", () => {
   let marketCreatorPda: PublicKey;

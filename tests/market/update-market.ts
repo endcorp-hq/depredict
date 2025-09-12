@@ -1,7 +1,8 @@
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, program, getCurrentMarketId } from "../helpers";
+import { getNetworkConfig, getCurrentMarketId } from "../helpers";
+import { ADMIN, program } from "../constants";
 
 describe("depredict", () => {
 

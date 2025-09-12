@@ -1,7 +1,9 @@
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, Keypair } from "@solana/web3.js";
 import { assert } from "chai";
-import { ADMIN, FEE_VAULT, program, ensureAccountBalance } from "./helpers";
+import { ADMIN, FEE_VAULT, program } from "./constants";
+import { ensureAccountBalance } from "./helpers";
+
 
 
 describe("depredict", () => {

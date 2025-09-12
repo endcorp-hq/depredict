@@ -18,12 +18,13 @@ import {
 } from '@metaplex-foundation/umi';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 
-// helpers
+// constants
 import { 
   provider, 
   program,
   ADMIN
-} from "./helpers";
+} from "./constants";
+
 
 async function createCoreCollection(authority: Signer): Promise<KeypairSigner> {
   const umi = createUmi(provider.connection.rpcEndpoint)

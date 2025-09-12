@@ -8,7 +8,8 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
 } from "@solana/spl-token";
-import { ADMIN, FEE_VAULT, getUsdcMint, getCurrentMarketId } from "../helpers";
+import { ADMIN, FEE_VAULT } from "../constants";
+import { getUsdcMint, getCurrentMarketId } from "../helpers";
 
 describe("depredict", () => {
   const provider = anchor.AnchorProvider.env();

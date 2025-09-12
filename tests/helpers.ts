@@ -1,51 +1,9 @@
-import { PublicKey, Keypair, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as fs from "fs";
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { Depredict } from "../target/types/depredict";
 import * as path from "path";
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
-
-// Load the local mint keypair that we'll use for testing
-const LOCAL_MINT = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
-);
-
-// Oracle Key
-const ORACLE_KEY = new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL");
-
-const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
-// Set default environment variables if not already set
-if (!process.env.ANCHOR_PROVIDER_URL) {
-  process.env.ANCHOR_PROVIDER_URL = "http://127.0.0.1:8899";
-  console.log("Set ANCHOR_PROVIDER_URL to localnet:", process.env.ANCHOR_PROVIDER_URL);
-}
-
-if (!process.env.ANCHOR_WALLET) {
-  process.env.ANCHOR_WALLET = require('os').homedir() + "/.config/solana/id.json";
-  console.log("Set ANCHOR_WALLET to:", process.env.ANCHOR_WALLET);
-}
-
-// Initialize provider and program
-const provider = anchor.AnchorProvider.env();
-anchor.setProvider(provider);
-
-const program = anchor.workspace.Depredict as Program<Depredict>;
-
-// Load keypairs
-const ADMIN = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/keypair.json", "utf-8")))
-);
-const FEE_VAULT = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/fee-vault.json", "utf-8")))
-);
-
-const USER = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
-);
-
-// Export provider, program, and keypairs for use in tests
-export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT, ORACLE_KEY };
+import { provider } from "./constants";
+import { LOCAL_MINT, ADMIN, program } from "./constants";
 
 /**
  * Gets the current market ID for testing

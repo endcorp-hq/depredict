@@ -2,12 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PublicKey } from '@solana/web3.js';
-import { assert } from 'chai';
-
-// Import helpers only when needed to avoid top-level import issues
-let program: any;
-let getNetworkConfig: any;
-let getCurrentMarketId: any;
+import { program } from './constants';
 
 interface TestResult {
   name: string;
@@ -93,18 +88,7 @@ class TestRunner {
   }
 
   private async getCurrentMarketId(): Promise<string> {
-    try {
-      if (!program) {
-        // Use dynamic import for ES modules
-        try {
-          const helpers = await import('./helpers');
-          program = helpers.program;
-        } catch (importError) {
-          console.log("Could not import helpers, skipping market ID check");
-          return "1"; // Default fallback
-        }
-      }
-      
+    try {      
       const [configPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("config")],
         program.programId
@@ -178,8 +162,8 @@ class TestRunner {
         required: false
       },
       {
-        file: 'tests/trade/payout-nft.ts',
-        description: 'NFT Payout',
+        file: 'tests/trade/claim-order.ts',
+        description: 'Claim Order',
         required: false
       }
     ];

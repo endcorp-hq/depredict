@@ -2,7 +2,8 @@ import { Keypair, Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.j
 import { createMint, getMint } from "@solana/spl-token";
 import * as fs from "fs";
 import { assert } from "chai";
-import { provider, ADMIN, ensureAccountBalance } from "./helpers";
+import { provider, ADMIN } from "./constants";
+import { ensureAccountBalance } from "./helpers";
 
 describe("USDC Mint Setup", () => {
   let mintKeypair: Keypair;
