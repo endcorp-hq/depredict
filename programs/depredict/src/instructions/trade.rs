@@ -140,12 +140,16 @@ pub struct PositionContext<'info> {
 #[instruction(args: ClosePositionArgs)]
 pub struct PayoutContext<'info> {
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub claimer: Signer<'info>,
 
     #[account(mut)]
     pub market: Box<Account<'info, MarketState>>,
 
-    pub config: Box<Account<'info, Config>>,
+    /// CHECK: ensure the passed market creator matches the market's configured market_creator
+    #[account(
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
 
     #[account(
         mut,
@@ -162,12 +166,12 @@ pub struct PayoutContext<'info> {
 
     #[account(
         init_if_needed,
-        payer = signer,
+        payer = claimer,
         associated_token::mint = mint,
-        associated_token::authority = signer,
+        associated_token::authority = claimer,
         associated_token::token_program = token_program
     )]
-    pub user_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub claimer_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -377,12 +381,28 @@ impl<'info> PayoutContext<'info> {
         // TODO: Verify Merkle inclusion of leaf using args.leaf_index and provided proof accounts
         let asset_id = args.asset_id;
 
-        // Get position amount and direction
-        let slot_index: usize = args.slot_index as usize;
-        let position_amount = position_page.entries[slot_index].amount;
-        let position_direction = position_page.entries[slot_index].direction;
+        // Auth: signer must be the claimer or the market creator authority
+        let signer_key = self.claimer.key();
+        let claimer_key = self.claimer.key();
+        let is_market_creator = signer_key == self.market_creator.authority;
+        require!(signer_key == claimer_key || is_market_creator, DepredictError::Unauthorized);
+        // Market creator cannot redirect payout to themselves
+        require!(claimer_key != self.market_creator.authority, DepredictError::Unauthorized);
 
-        require!(asset_id == position_page.entries[slot_index].asset_id, DepredictError::InvalidNft);
+        // Determine the slot index: use provided value or search by asset_id
+        let effective_slot_index: usize = if let Some(idx) = args.slot_index { 
+            let idx_usize = idx as usize; 
+            require!(idx_usize < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
+            require!(position_page.entries[idx_usize].asset_id == asset_id, DepredictError::InvalidNft);
+            idx_usize
+        } else {
+            let mut found: Option<usize> = None;
+            for i in 0..POSITION_PAGE_ENTRIES { 
+                if position_page.entries[i].status == PositionStatus::Open && position_page.entries[i].asset_id == asset_id { found = Some(i); break; }
+            }
+            require!(found.is_some(), DepredictError::PositionNotFound);
+            found.unwrap()
+        };
         // Check market is resolved
         require!(
             market.winning_direction != WinningDirection::None,
