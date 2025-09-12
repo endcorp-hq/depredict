@@ -58,25 +58,10 @@ pub struct OpenPositionArgs {
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct ConfirmPositionArgs {
+pub struct ClosePositionArgs {
     pub page_index: u32,
     pub slot_index: u16,
     pub asset_id: Pubkey,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct ClaimPositionArgs {
-    pub page_index: u32,
-    pub slot_index: u16,
-    pub asset_id: Pubkey,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct PayoutNftArgs {
-    pub position_id: u64,
-    pub market_id: u64,
-    pub amount: u64,
-    pub direction: PositionDirection,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]

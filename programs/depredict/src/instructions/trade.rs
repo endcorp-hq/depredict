@@ -1,12 +1,32 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{ transfer, Transfer };
-use anchor_spl::token::{Token, TransferChecked, transfer_checked};
 
-use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
+use anchor_spl::{ 
+    associated_token::AssociatedToken, 
+    token_interface::{ 
+        Mint, TokenAccount 
+    },
+    token::{
+        Token, 
+        TransferChecked, 
+        transfer_checked
+    } 
+};
 use std::str::FromStr;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
 use crate::constants::{MARKET, POSITION_PAGE, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID, MARKET_CREATOR};
-use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, ConfirmPositionArgs, ClaimPositionArgs, PositionDirection, PositionStatus, PositionPage, POSITION_PAGE_ENTRIES, MarketCreator};
+use crate::state::{
+    Config, 
+    MarketStates, 
+    MarketType, 
+    OpenPositionArgs,
+    ClosePositionArgs, 
+    PositionDirection, 
+    PositionStatus, 
+    PositionPage, 
+    MarketCreator,
+    POSITION_PAGE_ENTRIES
+};
 use crate::{
     errors::DepredictError,
     state::{ MarketState, WinningDirection },
@@ -123,8 +143,8 @@ pub struct PositionContext<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(args: ClaimPositionArgs)]
-pub struct PayoutNftContext<'info> {
+#[instruction(args: ClosePositionArgs)]
+pub struct PayoutContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
@@ -176,24 +196,6 @@ pub struct PayoutNftContext<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-#[instruction(args: ConfirmPositionArgs)]
-pub struct ConfirmPositionContext<'info> {
-    #[account(mut)]
-    pub signer: Signer<'info>,
-
-    #[account(mut,
-        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
-        bump
-    )]
-    pub market: Box<Account<'info, MarketState>>,
-
-    #[account(mut,
-        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
-        bump
-    )]
-    pub position_page: Box<Account<'info, PositionPage>>,
-}
 
 impl<'info> PositionContext<'info> {
     pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<()> {
@@ -369,8 +371,8 @@ impl<'info> PositionContext<'info> {
 }
 
 
-impl<'info> PayoutNftContext<'info> {
-    pub fn payout_position(&mut self, args: ClaimPositionArgs) -> Result<()> {
+impl<'info> PayoutContext<'info> {
+    pub fn payout_position(&mut self, args: ClosePositionArgs) -> Result<()> {
 
         let market = &mut self.market;
         let position_page = &mut self.position_page;
@@ -378,7 +380,15 @@ impl<'info> PayoutNftContext<'info> {
         let _payer = &self.signer.to_account_info();
         let _system_program = &self.system_program.to_account_info();
         let _mpl_core_program = &self.mpl_core_program.to_account_info();
+        // TODO: Verify Merkle inclusion of leaf using args.leaf_index and provided proof accounts
+        let asset_id = args.asset_id;
 
+        // Get position amount and direction
+        let slot_index: usize = args.slot_index as usize;
+        let position_amount = position_page.entries[slot_index].amount;
+        let position_direction = position_page.entries[slot_index].direction;
+
+        require!(asset_id == position_page.entries[slot_index].asset_id, DepredictError::InvalidNft);
         // Check market is resolved
         require!(
             market.winning_direction != WinningDirection::None,
@@ -386,17 +396,11 @@ impl<'info> PayoutNftContext<'info> {
         );
         require!(market.market_state == MarketStates::Resolved, DepredictError::MarketNotAllowedToPayout);
 
-        // Verify position entry is confirmed
-        let slot_index: usize = args.slot_index as usize;
         require!(slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
         let entry = position_page.entries[slot_index];
         // Must be Open (and confirmed by having a non-zero leaf_index)
         require!(entry.status == PositionStatus::Open, DepredictError::PositionNotFound);
         require!(entry.asset_id == args.asset_id && entry.asset_id != Pubkey::default(), DepredictError::InvalidNft);
-
-        // TODO: Verify Merkle inclusion of leaf using args.leaf_index and provided proof accounts
-        let position_amount = entry.amount;
-        let position_direction = entry.direction;
 
         // Check if position won
         let is_winner = match (position_direction, market.winning_direction) {
@@ -404,7 +408,6 @@ impl<'info> PayoutNftContext<'info> {
             (PositionDirection::No, WinningDirection::No) => true,
             _ => false,
         };
-
 
         let mut payout = 0;
         if is_winner {

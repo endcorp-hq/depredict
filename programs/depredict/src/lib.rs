@@ -8,7 +8,6 @@ mod events;
 
 use state::*;
 use instructions::*;
-use errors::*;
 
 declare_id!("6s9hbResitoGVoBEk6e5G6c9RzfvDnVKix7kwW6fUkWe");
 
@@ -102,19 +101,8 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn settle_position(ctx: Context<PayoutNftContext>, args: ClaimPositionArgs) -> Result<()> {
+    pub fn settle_position(ctx: Context<PayoutContext>, args: ClosePositionArgs) -> Result<()> {
         ctx.accounts.payout_position(args)?;
-        Ok(())
-    }
-
-    pub fn confirm_position(ctx: Context<ConfirmPositionContext>, args: ConfirmPositionArgs) -> Result<()> {
-        // Only market authority can confirm
-        require!(ctx.accounts.market.market_creator == *ctx.accounts.signer.key, DepredictError::Unauthorized);
-        let page = &mut ctx.accounts.position_page;
-        let slot_index = args.slot_index as usize;
-        require!(slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
-        page.entries[slot_index].asset_id = args.asset_id;
-        page.entries[slot_index].status = PositionStatus::Open; // stays Open but now confirmed by having asset_id
         Ok(())
     }
 }
