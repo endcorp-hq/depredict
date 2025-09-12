@@ -1,10 +1,10 @@
 pub const CONFIG: &str = "config";
 pub const MARKET: &str = "market";
-pub const POSITION: &str = "position";
 pub const POSITION_PAGE: &str = "pos_page";
 pub const MARKET_CREATOR: &str = "market_creator";
 pub const MPL_NOOP_ID: &str = "mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3";
 pub const MPL_ACCOUNT_COMPRESSION_ID: &str = "mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW";
+pub const BASE_URI: &str = "s3://depredict-metadata/";
 // pub const TREE: &str = "tree";
 // pub const TREE_NAMESPACE_GLOBAL: &str = "global";
 // pub const DEFAULT_TREE_MAX_DEPTH: u32 = 16; // 65,536 leaves
