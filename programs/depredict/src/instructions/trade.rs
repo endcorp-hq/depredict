@@ -192,14 +192,31 @@ pub struct PayoutContext<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+        /// CHECK: TreeConfig PDA for the merkle tree
+        #[account(mut)]
+        pub tree_config: AccountInfo<'info>,
+    
+        /// CHECK: MPL Core CPI signer
+        #[account(mut)]
+        pub mpl_core_cpi_signer: AccountInfo<'info>,
+    
+    
+        /// CHECK: Log wrapper (mpl-noop)
+        #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
+        pub log_wrapper_program: AccountInfo<'info>,
+    
+        /// CHECK: Account compression program (mpl-account-compression)
+        #[account(address = Pubkey::from_str(MPL_ACCOUNT_COMPRESSION_ID).unwrap())]
+        pub compression_program: AccountInfo<'info>,
 }
 
 
 impl<'info> PositionContext<'info> {
     pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<()> {
 
-        let next_position_id = self.market.next_position_id; // Store before increment
         let market = &mut self.market;
+        let next_position_id = market.next_position_id(); // increment and fetch
         let market_type = market.market_type;
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
@@ -239,16 +256,28 @@ impl<'info> PositionContext<'info> {
             .unwrap();
         msg!("markets liquidity {:?}", markets_liquidity);
         
-        // Determine free slot within page
-        let position_index = (position_page.count as usize).min(POSITION_PAGE_ENTRIES - 1);
-            
-        msg!("Position Index {:?}", position_index);
+        // Helper to find target page and free slot
+        let target_page: &mut PositionPage = position_page;
+        target_page.market_id = market.market_id;
+        target_page.page_index = args.page_index;
 
-        // Update compact entry; leaf_index will be set during confirmation
-        position_page.entries[position_index].amount = net_amount;
-        position_page.entries[position_index].direction = args.direction;
-        position_page.entries[position_index].status = PositionStatus::Open;
-        position_page.count = position_page.count.saturating_add(1);
+        let mut position_index: Option<usize> = None;
+        for i in 0..POSITION_PAGE_ENTRIES {
+            if target_page.entries[i].status != PositionStatus::Open { position_index = Some(i); break; }
+        }
+
+        require!(position_index.is_some(), DepredictError::NoAvailablePositionSlot);
+        let position_index = position_index.unwrap();
+        msg!("Position Index {:?} (page {:?})", position_index, target_page.page_index);
+
+        // Update entry; leaf_index will be set after minting
+        let was_init = target_page.entries[position_index].status == PositionStatus::Init;
+        target_page.entries[position_index].amount = net_amount;
+        target_page.entries[position_index].direction = args.direction;
+        target_page.entries[position_index].status = PositionStatus::Open;
+        target_page.entries[position_index].position_id = next_position_id;
+        target_page.entries[position_index].created_at = ts;
+        if was_init { target_page.count = target_page.count.saturating_add(1); }
         market.volume = market.volume.checked_add(net_amount).unwrap();
 
         match args.direction {
@@ -272,31 +301,29 @@ impl<'info> PositionContext<'info> {
         )?;
     
         // Emit minimal event via existing structure if needed (optional)
+        // TODO: Fix fee structure. Need to transfer fees form users to market creator, then on market resolution + payout, transfer fees from market creator to depredict protocol. Users get paid, then market makers, then protocol. 
+        // let fee = self.config.fee_amount;
     
-        let fee = self.config.fee_amount;
+        // let transfer_result = transfer(
+        //     CpiContext::new(self.system_program.to_account_info(), Transfer {
+        //         from: self.user.to_account_info(),
+        //         to: self.market_fee_vault.to_account_info(),
+        //     }),
+        //     fee
+        // );
     
-        let transfer_result = transfer(
-            CpiContext::new(self.system_program.to_account_info(), Transfer {
-                from: self.user.to_account_info(),
-                to: self.market_fee_vault.to_account_info(),
-            }),
-            fee
-        );
+        // if let Err(_) = transfer_result {
+        //     return Err(DepredictError::InsufficientFunds.into());
+        // }
     
-        if let Err(_) = transfer_result {
-            return Err(DepredictError::InsufficientFunds.into());
-        }
+        // require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
     
-        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
+        // market.update_ts = ts;
     
-        market.update_ts = ts;
-    
-        market.emit_market_event()?;
-
+        // market.emit_market_event()?;
 
             // Build uri = {base_uri}/{marketId}/{positionId}.json from fixed bytes
-            let base_uri = std::str::from_utf8(&self.config.base_uri).unwrap_or("").trim_matches(char::from(0));
-            let uri = format!("{}/{}/{}.json", base_uri, market.market_id, next_position_id);
+            let uri = format!("{}/{}/{}.json", BASE_URI, market.market_id, next_position_id);
             let name = format!("DEPREDICT-{}-{}", market.market_id, next_position_id);
 
             // Build MetadataArgsV2 with required fields for mpl-bubblegum 2.1.1
@@ -360,10 +387,11 @@ impl<'info> PositionContext<'info> {
                 ],
                 &MPL_BUBBLEGUM_ID,
             );
-            
+            // TODO: Consider emitting a dedicated PositionClaimed event with asset_id,
             msg!("Position created; Assset ID {:?}", asset_id);
 
-            position_page.entries[position_index].asset_id = asset_id;
+            target_page.entries[position_index].asset_id = asset_id;
+            target_page.entries[position_index].leaf_index = leaf_index as u64;
      Ok(())
     }
 }
@@ -375,10 +403,7 @@ impl<'info> PayoutContext<'info> {
         let market = &mut self.market;
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
-        let _payer = &self.signer.to_account_info();
-        let _system_program = &self.system_program.to_account_info();
-        let _mpl_core_program = &self.mpl_core_program.to_account_info();
-        // TODO: Verify Merkle inclusion of leaf using args.leaf_index and provided proof accounts
+        // TODO: Verify Merkle inclusion of leaf using proof accounts once wired
         let asset_id = args.asset_id;
 
         // Auth: signer must be the claimer or the market creator authority
@@ -410,19 +435,25 @@ impl<'info> PayoutContext<'info> {
         );
         require!(market.market_state == MarketStates::Resolved, DepredictError::MarketNotAllowedToPayout);
 
-        require!(slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
-        let entry = position_page.entries[slot_index];
-        // Must be Open (and confirmed by having a non-zero leaf_index)
-        require!(entry.status == PositionStatus::Open, DepredictError::PositionNotFound);
-        require!(entry.asset_id == args.asset_id && entry.asset_id != Pubkey::default(), DepredictError::InvalidNft);
+        require!(effective_slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
+        // Must be Open
+        require!(position_page.entries[effective_slot_index].status == PositionStatus::Open, DepredictError::PositionNotFound);
+        require!(position_page.entries[effective_slot_index].asset_id == args.asset_id && position_page.entries[effective_slot_index].asset_id != Pubkey::default(), DepredictError::InvalidNft);
+
+        // TODO: Verify compressed asset leaf belongs to `claimer` via Bubblegum proof CPI.
+        //       - Add leaf proof accounts (root, index, hash path) to context
+        //       - CPI to Bubblegum verify leaf and extract owner
+        //       - require!(extracted_owner == claimer_key, DepredictError::InvalidNft)
 
         // Check if position won
+        let position_direction = position_page.entries[effective_slot_index].direction;
         let is_winner = match (position_direction, market.winning_direction) {
             (PositionDirection::Yes, WinningDirection::Yes) |
             (PositionDirection::No, WinningDirection::No) => true,
             _ => false,
         };
 
+        let position_amount = position_page.entries[effective_slot_index].amount;
         let mut payout = 0;
         if is_winner {
 
@@ -461,7 +492,7 @@ impl<'info> PayoutContext<'info> {
             let market_signer: &[&[&[u8]]] = &[&[MARKET.as_bytes(), &market.market_id.to_le_bytes(), &[market.bump]]];
             msg!("Using signer seeds: {:?}", market_signer);
             msg!("Market vault amount before transfer: {}", self.market_vault.amount);
-            msg!("User ATA amount before transfer: {}", self.user_mint_ata.amount);
+            msg!("User ATA amount before transfer: {}", self.claimer_mint_ata.amount);
 
             transfer_checked(
                 CpiContext::new_with_signer(
@@ -469,7 +500,7 @@ impl<'info> PayoutContext<'info> {
                     TransferChecked {
                         from: self.market_vault.to_account_info(),
                         mint: self.mint.to_account_info(),
-                        to: self.user_mint_ata.to_account_info(),
+                        to: self.claimer_mint_ata.to_account_info(),
                         authority: market.to_account_info(),
                     },
                     market_signer
@@ -479,11 +510,11 @@ impl<'info> PayoutContext<'info> {
             )?;
         }
 
-        // Update position status
-        position_page.entries[slot_index].status = PositionStatus::Closed;
+        position_page.entries[effective_slot_index].status = PositionStatus::Claimed;
 
         require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
         market.update_ts = ts;
+        // TODO: Emit a specific payout/settlement event rather than the full market event. Probs redesign all events to be more specific.
         market.emit_market_event()?;
 
         msg!("Payout completed successfully");
