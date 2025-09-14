@@ -191,7 +191,7 @@ pub struct CloseMarketContext<'info> {
 }
 
 impl<'info> MarketContext<'info> {
-    pub fn create_market(&mut self, args: CreateMarketArgs) -> Result<()> {
+    pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &MarketContextBumps) -> Result<()> {
         
         let market = &mut self.market;
         let config = &mut self.config;
@@ -224,7 +224,8 @@ impl<'info> MarketContext<'info> {
             },
         };
 
-        let market_bump = 0; // Bump not critical for market functionality
+        // Store the actual PDA bump so signer seeds work for CPIs (e.g., payouts)
+        let market_bump = bumps.market;
         
         market.set_inner(MarketState {
             bump: market_bump,

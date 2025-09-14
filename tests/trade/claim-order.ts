@@ -1,188 +1,453 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { program, provider, USER, LOCAL_MINT, BUBBLEGUM_PROGRAM_ID, MPL_CORE_ID, MPL_NOOP_ID, ACCOUNT_COMPRESSION_ID } from "../constants";
-import { getCurrentMarketId } from "../helpers";
+import {
+  program,
+  provider,
+  USER,
+  ADMIN,
+  LOCAL_MINT,
+  BUBBLEGUM_PROGRAM_ID,
+  MPL_CORE_ID,
+  MPL_NOOP_ID,
+  ACCOUNT_COMPRESSION_ID,
+} from "../constants";
+import { getCurrentMarketId, ensureAccountBalance } from "../helpers";
+
+const MPL_CORE_CPI_SIGNER = new PublicKey("CbNY3JiXdXNE9tPNEk1aRZVEkWdj2v7kfJLNQwZZgpXk");
+
+function toBigInt(n: anchor.BN | number): bigint {
+  return BigInt(anchor.BN.isBN(n) ? (n as anchor.BN).toString() : Math.trunc(n));
+}
+
+function computeExpectedPayout(positionAmount: bigint, winningLiquidity: bigint, othersideLiquidity: bigint): bigint {
+  if (winningLiquidity === BigInt(0)) return BigInt(0);
+  const shareOfOtherside = (othersideLiquidity * positionAmount) / winningLiquidity;
+  return positionAmount + shareOfOtherside;
+}
+
+async function waitOneSecond() { await new Promise((r) => setTimeout(r, 1100)); }
 
 describe("depredict", () => {
-
-  const user = USER;
   const usdcMint = LOCAL_MINT.publicKey;
 
+  let marketPda: PublicKey;
+  let marketIdBn: anchor.BN;
+  let positionPagePda: PublicKey;
 
+  let yesSlotIndex: number | null = null;
+  let noSlotIndex: number | null = null;
+  let yesAssetId: PublicKey | null = null;
+  let noAssetId: PublicKey | null = null;
 
+  let marketCreatorPda: PublicKey;
+  let marketCreatorAccount: any;
 
-  console.log("User:", user.publicKey.toString());
+  async function loadMarketCreator() {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
+      program.programId
+    );
+    marketCreatorPda = pda;
+    marketCreatorAccount = await program.account.marketCreator.fetch(pda);
+  }
+
+  function deriveMarketPda(marketId: anchor.BN): PublicKey {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    )[0];
+  }
+
+  function derivePositionPagePda(marketId: anchor.BN, pageIndex: number): PublicKey {
+    const pageIndexBuf = Buffer.from(new Uint16Array([pageIndex]).buffer);
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+      program.programId
+    )[0];
+  }
+
+  async function ensurePageExists(pageIndex = 0) {
+    const info = await provider.connection.getAccountInfo(positionPagePda);
+    if (!info) {
+      await program.methods
+        .ensurePositionPage({ pageIndex })
+        .accountsPartial({
+          payer: ADMIN.publicKey,
+          market: marketPda,
+          marketCreator: marketCreatorPda,
+          positionPage: positionPagePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([ADMIN])
+        .rpc();
+    }
+  }
+
+  async function openPosition({
+    direction,
+    amount,
+    pageIndex = 0,
+  }: {
+    direction: { yes: {} } | { no: {} };
+    amount: anchor.BN;
+    pageIndex?: number;
+  }): Promise<{ slotIndex: number; assetId: PublicKey }> {
+    const marketAccountBefore = await program.account.marketState.fetch(marketPda);
+    const marketVault = marketAccountBefore.marketVault as PublicKey;
+
+    const treeConfig = PublicKey.findProgramAddressSync(
+      [marketCreatorAccount.merkleTree.toBuffer()],
+      BUBBLEGUM_PROGRAM_ID
+    )[0];
+
+    await program.methods
+      .openPosition({ amount, direction, metadataUri: "https://arweave.net/position", pageIndex })
+      .accountsPartial({
+        user: USER.publicKey,
+        marketFeeVault: marketCreatorAccount.feeVault,
+        positionPage: positionPagePda,
+        market: marketPda,
+        marketCreator: marketCreatorPda,
+        mint: usdcMint,
+        userMintAta: getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID),
+        marketVault,
+        merkleTree: marketCreatorAccount.merkleTree,
+        collection: marketCreatorAccount.coreCollection,
+        treeConfig,
+        mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+        bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+        mplCoreProgram: MPL_CORE_ID,
+        logWrapperProgram: MPL_NOOP_ID,
+        compressionProgram: ACCOUNT_COMPRESSION_ID,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([USER])
+      .rpc();
+
+    const page = await program.account.positionPage.fetch(positionPagePda);
+    for (let i = 0; i < page.entries.length; i++) {
+      const entry = page.entries[i];
+      if (Object.keys(entry.status)[0] === "open" && entry.assetId && entry.assetId.toString() !== PublicKey.default.toString()) {
+        if (Object.keys(entry.direction)[0] === Object.keys(direction)[0] && entry.amount.gt(new anchor.BN(0))) {
+          return { slotIndex: i, assetId: entry.assetId as PublicKey };
+        }
+      }
+    }
+    throw new Error("Could not locate newly created position entry");
+  }
+
+  before(async () => {
+    await ensureAccountBalance(USER.publicKey, 2_000_000_000);
+    await ensureAccountBalance(ADMIN.publicKey, 2_000_000_000);
+
+    await loadMarketCreator();
+
+    marketIdBn = await getCurrentMarketId();
+    marketPda = deriveMarketPda(marketIdBn);
+    positionPagePda = derivePositionPagePda(marketIdBn, 0);
+
+    await ensurePageExists(0);
+
+    const yes = await openPosition({ direction: { yes: {} }, amount: new anchor.BN(1_000_000), pageIndex: 0 });
+    yesSlotIndex = yes.slotIndex;
+    yesAssetId = yes.assetId;
+
+    const no = await openPosition({ direction: { no: {} }, amount: new anchor.BN(2_000_000), pageIndex: 0 });
+    noSlotIndex = no.slotIndex;
+    noAssetId = no.assetId;
+  });
 
   describe("Claim Order", () => {
-
-    it("Checks market resolution and processes payout (gated)", async function () {
-      // Get the current market ID
-      const marketId = await getCurrentMarketId();
-      console.log("Using market ID for Claim Order:", marketId.toString());
-
-      // Get the market PDA
-      const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
-        // Get the market vault - should be owned by market PDA
-        const marketVault = getAssociatedTokenAddressSync(
-          usdcMint,
-          marketPda,
-          true, // allowOwnerOffCurve since marketPda is a PDA
-          TOKEN_PROGRAM_ID
-        );
-
-        console.log("Market Vault:", marketVault.toString());
-
-        // Get user's USDC token account (payout goes to NFT owner)
-        // Let the program create this if needed
-        const userUsdcAta = getAssociatedTokenAddressSync(
-          usdcMint,
-          user.publicKey,
-          false,
-          TOKEN_PROGRAM_ID
-        );
-      // Get the initial market state
-      let marketAccountBefore;
+    it("fails before market is resolved", async () => {
+      const claimerMintAta = getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID);
+      const marketAccount = await program.account.marketState.fetch(marketPda);
+      const userBalBefore = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
 
       try {
-        marketAccountBefore = await program.account.marketState.fetch(
-          marketPda
-        );
-        console.log("Market found for NFT payout:", marketAccountBefore.marketId.toString());
-      } catch (error) {
-        if (error.message.includes("Account does not exist")) {
-          console.log("Market does not exist, skipping NFT payout test");
-          return;
-        }
-        throw error;
+        await program.methods
+          .settlePosition({
+            pageIndex: 0,
+            slotIndex: yesSlotIndex as number,
+            assetId: yesAssetId as PublicKey,
+          })
+          .accountsPartial({
+            claimer: USER.publicKey,
+            market: marketPda,
+            marketCreator: marketCreatorPda,
+            positionPage: positionPagePda,
+            mint: usdcMint,
+            claimerMintAta,
+            marketVault: marketAccount.marketVault as PublicKey,
+            mplCoreProgram: MPL_CORE_ID,
+            bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            treeConfig: PublicKey.findProgramAddressSync(
+              [marketCreatorAccount.merkleTree.toBuffer()],
+              BUBBLEGUM_PROGRAM_ID
+            )[0],
+            mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+            logWrapperProgram: MPL_NOOP_ID,
+            compressionProgram: ACCOUNT_COMPRESSION_ID,
+          })
+          .signers([USER])
+          .rpc();
+        assert.fail("Expected failure before market resolution");
+      } catch (e: any) {
+        const s = e.toString ? e.toString() : "";
+        assert.include(s, "MarketStillActive");
       }
 
-      console.log("Market USDC VAULT:", marketAccountBefore.marketVault.toString());
-
-      // New flow uses paged PDAs and cNFTs; legacy PositionAccount removed
-
-      // Fetch market state to check resolution
-      let marketAccount;
-      try {
-        marketAccount = await program.account.marketState.fetch(marketPda);
-      } catch (error) {
-        if (error.message.includes("Account does not exist")) {
-          console.log("Market does not exist, skipping NFT payout test");
-          return;
-        }
-        throw error;
+      const userBalAfter = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
+      if (userBalBefore && userBalAfter) {
+        assert.equal(userBalAfter.value.amount, userBalBefore.value.amount);
       }
-      console.log("\n=== Market Resolution Status ===");
-      console.log("Market State:", marketAccount.marketState);
-      console.log("Winning Direction:", marketAccount.winningDirection);
+    });
 
-      const collection = marketAccount.nftCollection;
-      
-      // Check if market is resolved
-      if (Object.keys(marketAccount.marketState)[0] !== "resolved") {
-        console.log("Market is not resolved yet, skipping NFT payout test");
-        console.log("Market state:", marketAccount.marketState);
-        return;
-      }
+    it("resolves market to YES (winner = YES)", async () => {
+      await program.methods
+        .resolveMarket({ oracleValue: 11 })
+        .accounts({
+          signer: ADMIN.publicKey,
+          market: marketPda,
+          marketCreator: marketCreatorPda,
+          oraclePubkey: ADMIN.publicKey,
+        })
+        .signers([ADMIN])
+        .rpc();
 
-      // Get the winning direction
-      const winningDirection = Object.keys(marketAccount.winningDirection)[0];
-      console.log("Winning Direction:", winningDirection);
+      const m = await program.account.marketState.fetch(marketPda);
+      assert.equal(Object.keys(m.marketState)[0], "resolved");
+      assert.equal(Object.keys(m.winningDirection)[0], "yes");
+      await waitOneSecond();
+    });
 
+    it("claims winning YES position and receives correct payout", async () => {
+      const pageBefore: any = await program.account.positionPage.fetch(positionPagePda);
+      const entryBefore = pageBefore.entries[yesSlotIndex as number];
+      assert.equal(Object.keys(entryBefore.status)[0], "open");
 
+      const marketBefore: any = await program.account.marketState.fetch(marketPda);
+      const winningLiquidity = toBigInt(marketBefore.yesLiquidity);
+      const otherLiquidity = toBigInt(marketBefore.noLiquidity);
+      const positionAmount = toBigInt(entryBefore.amount);
+      const expectedPayout = computeExpectedPayout(positionAmount, winningLiquidity, otherLiquidity);
 
-      // Log balances before payout
-      const userUsdcBalanceBefore = await provider.connection.getTokenAccountBalance(userUsdcAta);
-      console.log("User USDC balance before payout:", userUsdcBalanceBefore.value.uiAmount);
+      const claimerMintAta = getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID);
+      const userBalBefore = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
+      const vaultBalBefore = await provider.connection.getTokenAccountBalance(marketBefore.marketVault as PublicKey);
 
-      // use DAS API to load the asset: assetId
-      // const assetId = await dasApi.fetchAsset(assetId);
-      let assetId;
-
-
-      try {
-        console.log("\n=== Executing Payout Transaction ===");
-
-        const tx = await program.methods
-         .settlePosition({
+      await waitOneSecond();
+      await program.methods
+        .settlePosition({
           pageIndex: 0,
-          slotIndex: 0,
-          assetId: assetId,
-         })
-         .accountsPartial({
-           claimer: USER.publicKey,
-           market: marketPda,
-           mint: usdcMint,
-           claimerMintAta: userUsdcAta,
-           marketVault: marketVault,
-           marketCreator: marketAccount.marketCreator,
-           mplCoreCpiSigner: mplCoreCpiSigner,
-           merkleTree: marketAccount.merkleTree,
-           treeConfig: PublicKey.findProgramAddressSync(
-             [marketAccount.merkleTree.toBuffer()],
-             BUBBLEGUM_PROGRAM_ID
-           )[0],
-           collection: marketCreatorAccount.coreCollection,
-           bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
-           mplCoreProgram: MPL_CORE_ID,
-           logWrapperProgram: MPL_NOOP_ID,
-           compressionProgram: ACCOUNT_COMPRESSION_ID,
-           tokenProgram: TOKEN_PROGRAM_ID,
-           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-           systemProgram: SystemProgram.programId,
-         })
-         .signers([USER])
-         .rpc();
-        
-        // Update the program call
-        // New claim ix requires Merkle proof and ConfirmPosition args; pending wiring.
-        // Test gated above.
+          slotIndex: yesSlotIndex as number,
+          assetId: yesAssetId as PublicKey,
+        })
+        .accountsPartial({
+          claimer: USER.publicKey,
+          market: marketPda,
+          marketCreator: marketCreatorPda,
+          positionPage: positionPagePda,
+          mint: usdcMint,
+          claimerMintAta,
+          marketVault: marketBefore.marketVault as PublicKey,
+          mplCoreProgram: MPL_CORE_ID,
+          bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          treeConfig: PublicKey.findProgramAddressSync(
+            [marketCreatorAccount.merkleTree.toBuffer()],
+            BUBBLEGUM_PROGRAM_ID
+          )[0],
+          mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+          logWrapperProgram: MPL_NOOP_ID,
+          compressionProgram: ACCOUNT_COMPRESSION_ID,
+        })
+        .signers([USER])
+        .rpc();
 
-        // Status checks moved to PositionPage entries once enabled
+      const pageAfter: any = await program.account.positionPage.fetch(positionPagePda);
+      const entryAfter = pageAfter.entries[yesSlotIndex as number];
+      assert.equal(Object.keys(entryAfter.status)[0], "claimed");
 
-        // Check USDC balance change
-        const userUsdcBalanceAfter = await provider.connection.getTokenAccountBalance(userUsdcAta);
-        console.log("User USDC balance after payout:", userUsdcBalanceAfter.value.uiAmount);
-        console.log("USDC balance change:", 
-          userUsdcBalanceAfter.value.uiAmount! - userUsdcBalanceBefore.value.uiAmount!
-        );
+      const userBalAfter = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
+      const vaultBalAfter = await provider.connection.getTokenAccountBalance(marketBefore.marketVault as PublicKey);
 
+      if (userBalBefore && userBalAfter) {
+        const delta = BigInt(userBalAfter.value.amount) - BigInt(userBalBefore.value.amount);
+        assert.equal(delta.toString(), expectedPayout.toString());
+      }
+      if (vaultBalBefore && vaultBalAfter) {
+        const vaultDelta = BigInt(vaultBalBefore.value.amount) - BigInt(vaultBalAfter.value.amount);
+        assert.isTrue(vaultDelta >= BigInt(0));
+        assert.equal(vaultDelta.toString(), expectedPayout.toString());
+      }
+    });
 
+    it("claims losing NO position and receives zero", async () => {
+      const pageBefore: any = await program.account.positionPage.fetch(positionPagePda);
+      const entryBefore = pageBefore.entries[noSlotIndex as number];
+      assert.equal(Object.keys(entryBefore.status)[0], "open");
 
-        console.log("NFT Asset Owner:", asset.owner.toString());
-        console.log("User Public Key:", user.publicKey.toString());
-        console.log("Are they equal?", asset.owner.toString() === user.publicKey.toString() ? "YES" : "NO");
+      const claimerMintAta = getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID);
+      const userBalBefore = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
+      const marketState: any = await program.account.marketState.fetch(marketPda);
 
-        // Assert ownership
-        assert.equal(
-          asset.owner.toString(),
-          user.publicKey.toString(),
-          "User must own the NFT asset to claim payout"
-        );
+      await waitOneSecond();
+      await program.methods
+        .settlePosition({
+          pageIndex: 0,
+          slotIndex: noSlotIndex as number,
+          assetId: noAssetId as PublicKey,
+        })
+        .accountsPartial({
+          claimer: USER.publicKey,
+          market: marketPda,
+          marketCreator: marketCreatorPda,
+          positionPage: positionPagePda,
+          mint: usdcMint,
+          claimerMintAta,
+          marketVault: marketState.marketVault as PublicKey,
+          mplCoreProgram: MPL_CORE_ID,
+          bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          treeConfig: PublicKey.findProgramAddressSync(
+            [marketCreatorAccount.merkleTree.toBuffer()],
+            BUBBLEGUM_PROGRAM_ID
+          )[0],
+          mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+          logWrapperProgram: MPL_NOOP_ID,
+          compressionProgram: ACCOUNT_COMPRESSION_ID,
+        })
+        .signers([USER])
+        .rpc();
 
-      } catch (error) {
-        console.error("\n=== Error Details ===");
-        console.error("Error processing payout for position", position.positionId.toString(), ":", error);
-        if (error.logs) {
-          console.error("\nProgram Logs:");
-          error.logs.forEach((log: string, index: number) => {
-            console.error(`${index + 1}. ${log}`);
-          });
-        }
-        if (error.stack) {
-          console.error("\nStack Trace:", error.stack);
-        }
-        throw error;
+      const pageAfter: any = await program.account.positionPage.fetch(positionPagePda);
+      const entryAfter = pageAfter.entries[noSlotIndex as number];
+      assert.equal(Object.keys(entryAfter.status)[0], "claimed");
+
+      const userBalAfter = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
+      if (userBalBefore && userBalAfter) {
+        const delta = BigInt(userBalAfter.value.amount) - BigInt(userBalBefore.value.amount);
+        assert.equal(delta.toString(), BigInt(0).toString());
+      }
+    });
+
+    it("prevents double-claiming the same position", async () => {
+      try {
+        await waitOneSecond();
+        await program.methods
+          .settlePosition({ pageIndex: 0, slotIndex: yesSlotIndex as number, assetId: yesAssetId as PublicKey })
+          .accountsPartial({
+            claimer: USER.publicKey,
+            market: marketPda,
+            marketCreator: marketCreatorPda,
+            positionPage: positionPagePda,
+            mint: usdcMint,
+            claimerMintAta: getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID),
+            marketVault: (await program.account.marketState.fetch(marketPda)).marketVault as PublicKey,
+            mplCoreProgram: MPL_CORE_ID,
+            bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            treeConfig: PublicKey.findProgramAddressSync(
+              [marketCreatorAccount.merkleTree.toBuffer()],
+              BUBBLEGUM_PROGRAM_ID
+            )[0],
+            mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+            logWrapperProgram: MPL_NOOP_ID,
+            compressionProgram: ACCOUNT_COMPRESSION_ID,
+          })
+          .signers([USER])
+          .rpc();
+        assert.fail("Expected double-claim to fail");
+      } catch (e: any) {
+        const s = e.toString ? e.toString() : "";
+        assert.match(s, /PositionNotFound|InvalidNft|ConcurrentTransaction/);
+      }
+    });
+
+    it("fails with wrong assetId (InvalidNft)", async () => {
+      const wrongAsset = Keypair.generate().publicKey;
+      try {
+        await program.methods
+          .settlePosition({ pageIndex: 0, slotIndex: noSlotIndex as number, assetId: wrongAsset })
+          .accountsPartial({
+            claimer: USER.publicKey,
+            market: marketPda,
+            marketCreator: marketCreatorPda,
+            positionPage: positionPagePda,
+            mint: usdcMint,
+            claimerMintAta: getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID),
+            marketVault: (await program.account.marketState.fetch(marketPda)).marketVault as PublicKey,
+            mplCoreProgram: MPL_CORE_ID,
+            bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            treeConfig: PublicKey.findProgramAddressSync(
+              [marketCreatorAccount.merkleTree.toBuffer()],
+              BUBBLEGUM_PROGRAM_ID
+            )[0],
+            mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+            logWrapperProgram: MPL_NOOP_ID,
+            compressionProgram: ACCOUNT_COMPRESSION_ID,
+          })
+          .signers([USER])
+          .rpc();
+        assert.fail("Expected InvalidNft error");
+      } catch (e: any) {
+        const s = e.toString ? e.toString() : "";
+        assert.include(s, "InvalidNft");
+      }
+    });
+
+    it("rejects when claimer is market creator authority (Unauthorized)", async () => {
+      try {
+        await program.methods
+          .settlePosition({ pageIndex: 0, slotIndex: noSlotIndex as number, assetId: noAssetId as PublicKey })
+          .accountsPartial({
+            claimer: ADMIN.publicKey,
+            market: marketPda,
+            marketCreator: marketCreatorPda,
+            positionPage: positionPagePda,
+            mint: usdcMint,
+            claimerMintAta: getAssociatedTokenAddressSync(usdcMint, ADMIN.publicKey, false, TOKEN_PROGRAM_ID),
+            marketVault: (await program.account.marketState.fetch(marketPda)).marketVault as PublicKey,
+            mplCoreProgram: MPL_CORE_ID,
+            bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            treeConfig: PublicKey.findProgramAddressSync(
+              [marketCreatorAccount.merkleTree.toBuffer()],
+              BUBBLEGUM_PROGRAM_ID
+            )[0],
+            mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+            logWrapperProgram: MPL_NOOP_ID,
+            compressionProgram: ACCOUNT_COMPRESSION_ID,
+          })
+          .signers([ADMIN])
+          .rpc();
+        assert.fail("Expected Unauthorized for market creator as claimer");
+      } catch (e: any) {
+        const s = e.toString ? e.toString() : "";
+        assert.include(s, "Unauthorized");
       }
     });
   });
-
 });

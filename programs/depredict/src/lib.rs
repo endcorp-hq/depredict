@@ -70,7 +70,7 @@ pub mod depredict {
     // MARKET INSTRUCTIONS
 
     pub fn create_market(ctx: Context<MarketContext>, args: CreateMarketArgs) -> Result<()> {
-        ctx.accounts.create_market(args)?;
+        ctx.accounts.create_market(args, &ctx.bumps)?;
         Ok(())
     }
 
