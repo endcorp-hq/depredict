@@ -5,6 +5,7 @@ import IDL from './types/depredict.json'  // tsup will handle this
 import Trade from './trade.js'
 import Config from './config.js'
 import Position from './position.js'
+import MarketCreator from './marketCreator.js'
 
 // Re-export all types
 export * from './types/trade.js'
@@ -19,6 +20,7 @@ export default class DepredictClient {
   trade: Trade
   config: Config
   position: Position
+  marketCreator: MarketCreator
   ADMIN_KEY: PublicKey
   FEE_VAULT: PublicKey
   
@@ -27,6 +29,7 @@ export default class DepredictClient {
     this.trade = new Trade(this.program, adminKey, feeVault)
     this.position = new Position(this.program)
     this.config = new Config(this.program, adminKey, feeVault)
+    this.marketCreator = new MarketCreator(this.program, adminKey)
     this.ADMIN_KEY = adminKey
     this.FEE_VAULT = feeVault
   }

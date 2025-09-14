@@ -167,7 +167,8 @@ export default class Trade {
 
     // Derive position page 0 and market creator PDAs
     const positionPage0PDA = getPositionPagePDA(this.program.programId, marketId, 0);
-    const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, this.ADMIN_KEY);
+    // Market creator PDA is derived from the payer (authority)
+    const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, payer);
 
     const bettingStart =
       marketType == MarketType.LIVE

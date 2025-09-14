@@ -2,6 +2,7 @@ import { Program, BN, web3 } from "@coral-xyz/anchor";
 import { Depredict } from "./types/depredict.js";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { getConfigPDA } from "./utils/pda/index.js";
+import { encodeString } from "./utils/helpers.js";
 
 export default class Config {
   ADMIN_KEY: PublicKey;
@@ -98,6 +99,27 @@ export default class Config {
     // sendVersionedTransaction(this.program, ixs, payer);
   }
 
+  /**
+   * Update base URI (fixed 200 bytes)
+   */
+  async updateBaseUri(baseUri: string) {
+    const configPDA = getConfigPDA(this.program.programId);
+    const ixs: TransactionInstruction[] = [];
+    const baseUriBytes = encodeString(baseUri, 200);
+    ixs.push(
+      await this.program.methods
+        .updateBaseUri(baseUriBytes)
+        .accountsPartial({
+          signer: this.ADMIN_KEY,
+          feeVault: this.FEE_VAULT,
+          config: configPDA,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .instruction()
+    );
+    return ixs;
+  }
+
     /**
    * Update the authority for the config account
    *
@@ -107,12 +129,12 @@ export default class Config {
     ) {
       const configPDA = getConfigPDA(this.program.programId);
       const ixs: TransactionInstruction[] = [];
-      const currentAuthority = this.ADMIN_KEY;
-             ixs.push(
+      ixs.push(
          await this.program.methods
            .updateAuthority(newAuthority)
            .accountsPartial({
              signer: this.ADMIN_KEY,
+             feeVault: this.FEE_VAULT,
              config: configPDA,
              systemProgram: web3.SystemProgram.programId,
            })
