@@ -17,7 +17,7 @@ use anchor_spl::{
 // crate includes
 use crate::{
     constants::{
-        BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE
+        BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE, MAX_CREATOR_POSITIONS, POSITIONS_PER_PAGE
     }, errors::DepredictError, state::{
         ClosePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES
     }
@@ -39,6 +39,68 @@ use mpl_core::programs::{
 use borsh::BorshDeserialize;
 use std::str::FromStr;
 use switchboard_on_demand::prelude::rust_decimal::Decimal;
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct EnsurePageArgs {
+    pub page_index: u16,
+}
+
+#[derive(Accounts)]
+#[instruction(args: EnsurePageArgs)]
+pub struct EnsurePositionPageContext<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut,
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market: Box<Account<'info, MarketState>>, 
+
+    /// CHECK: must match market.market_creator
+    #[account(constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator)]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
+
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 8 + PositionPage::INIT_SPACE,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
+        bump
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
+
+    pub system_program: Program<'info, System>,
+}
+
+impl<'info> EnsurePositionPageContext<'info> {
+    pub fn ensure(&mut self, args: EnsurePageArgs) -> Result<()> {
+        // Enforce creator-wide page budget: pages_allocated + 1 <= MAX_CREATOR_POSITIONS / POSITIONS_PER_PAGE
+        let max_pages = MAX_CREATOR_POSITIONS
+            .checked_div(POSITIONS_PER_PAGE)
+            .ok_or(DepredictError::ArithmeticOverflow)?;
+        require!((self.market_creator.pages_allocated as u32) < max_pages, DepredictError::Overflow);
+
+        // When init_if_needed triggers, Anchor allocates space and zeros the account.
+        // Populate minimal header fields so downstream code can rely on them.
+        self.position_page.market_id = self.market.market_id;
+        self.position_page.page_index = args.page_index;
+        // Accounted as one page allocation for the creator if this was a new init; best-effort detect via count==0 and market_id/page_index zero check
+        // In Anchor, we cannot directly know if init_if_needed ran, so we increment conservatively if header is zeroed.
+        if self.position_page.count == 0 {
+            self.market.pages_allocated = self
+                .market
+                .pages_allocated
+                .checked_add(1)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+            self.market_creator.pages_allocated = self
+                .market_creator
+                .pages_allocated
+                .checked_add(1)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+        }
+        Ok(())
+    }
+}
 
 
 #[derive(Accounts)]
@@ -54,11 +116,9 @@ pub struct PositionContext<'info> {
     )]
     pub market_fee_vault: AccountInfo<'info>,
 
-    // Paged positions account for this market and page index
+    // Paged positions account for this market and page index (must exist; pre-created by market creator)
     #[account(
-        init_if_needed,
-        payer = user,
-        space = 8 + PositionPage::INIT_SPACE,
+        mut,
         seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
         bump
     )]
@@ -69,6 +129,7 @@ pub struct PositionContext<'info> {
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
+
 
     /// CHECK: Market creator account that owns this market
     #[account(
@@ -193,22 +254,22 @@ pub struct PayoutContext<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 
-        /// CHECK: TreeConfig PDA for the merkle tree
-        #[account(mut)]
-        pub tree_config: AccountInfo<'info>,
-    
-        /// CHECK: MPL Core CPI signer
-        #[account(mut)]
-        pub mpl_core_cpi_signer: AccountInfo<'info>,
-    
-    
-        /// CHECK: Log wrapper (mpl-noop)
-        #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
-        pub log_wrapper_program: AccountInfo<'info>,
-    
-        /// CHECK: Account compression program (mpl-account-compression)
-        #[account(address = Pubkey::from_str(MPL_ACCOUNT_COMPRESSION_ID).unwrap())]
-        pub compression_program: AccountInfo<'info>,
+    /// CHECK: TreeConfig PDA for the merkle tree
+    #[account(mut)]
+    pub tree_config: AccountInfo<'info>,
+
+    /// CHECK: MPL Core CPI signer
+    #[account(mut)]
+    pub mpl_core_cpi_signer: AccountInfo<'info>,
+
+
+    /// CHECK: Log wrapper (mpl-noop)
+    #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
+    pub log_wrapper_program: AccountInfo<'info>,
+
+    /// CHECK: Account compression program (mpl-account-compression)
+    #[account(address = Pubkey::from_str(MPL_ACCOUNT_COMPRESSION_ID).unwrap())]
+    pub compression_program: AccountInfo<'info>,
 }
 
 
@@ -222,20 +283,24 @@ impl<'info> PositionContext<'info> {
         let ts = Clock::get()?.unix_timestamp;
     
         // Collection is provided as an account and constrained to match market creator's collection in the accounts struct
-
         if market_type == MarketType::Future {
             require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
         } 
 
-        require!(market.market_end > ts, DepredictError::BettingPeriodEnded);
+        require!(
+            market.market_end > ts, DepredictError::BettingPeriodEnded
+        );
 
+        // checks if market has already been resolved. 
         require!(
             market.winning_direction == WinningDirection::None,
             DepredictError::MarketAlreadyResolved
         );
 
-        // this ensures multiple orders are not created at the same time
-        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
+        // Ensure multiple orders are not created at the same time
+        require!(
+            ts > market.update_ts, DepredictError::ConcurrentTransaction
+        );
     
         let net_amount = args.amount;
     
@@ -392,6 +457,7 @@ impl<'info> PositionContext<'info> {
 
             target_page.entries[position_index].asset_id = asset_id;
             target_page.entries[position_index].leaf_index = leaf_index as u64;
+            
      Ok(())
     }
 }
@@ -518,6 +584,110 @@ impl<'info> PayoutContext<'info> {
         market.emit_market_event()?;
 
         msg!("Payout completed successfully");
+        Ok(())
+    }
+}
+
+// --- Prune a position entry (market creator authority only) ---
+
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct PrunePositionArgs {
+    pub page_index: u16,
+    pub slot_index: u8,
+}
+
+#[derive(Accounts)]
+#[instruction(args: PrunePositionArgs)]
+pub struct PrunePositionContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(mut,
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market: Box<Account<'info, MarketState>>, 
+
+    #[account(
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator,
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized,
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
+
+    #[account(
+        mut,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
+        bump
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
+}
+
+impl<'info> PrunePositionContext<'info> {
+    pub fn prune(&mut self, args: PrunePositionArgs) -> Result<()> {
+        let page = &mut self.position_page;
+        let idx = args.slot_index as usize;
+        require!(idx < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
+
+        let status = page.entries[idx].status;
+        require!(status == PositionStatus::Claimed || status == PositionStatus::Closed, DepredictError::PositionNotPrunable);
+
+        // Zero the slot fields and decrement count
+        page.entries[idx].asset_id = Pubkey::default();
+        page.entries[idx].amount = 0;
+        page.entries[idx].direction = PositionDirection::default();
+        page.entries[idx].status = PositionStatus::Init;
+        page.entries[idx].position_id = 0;
+        page.entries[idx].leaf_index = 0;
+        page.entries[idx].created_at = 0;
+        page.count = page.count.saturating_sub(1);
+        Ok(())
+    }
+}
+
+// --- Close an empty position page and reclaim rent ---
+
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct ClosePositionPageArgs {
+    pub page_index: u16,
+}
+
+#[derive(Accounts)]
+#[instruction(args: ClosePositionPageArgs)]
+pub struct ClosePositionPageContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(mut,
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market: Box<Account<'info, MarketState>>, 
+
+    #[account(
+        mut,
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator,
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized,
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
+
+    #[account(
+        mut,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
+        bump,
+        close = signer
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
+}
+
+impl<'info> ClosePositionPageContext<'info> {
+    pub fn close_page(&mut self, _args: ClosePositionPageArgs) -> Result<()> {
+        // Page must be empty to close
+        require!(self.position_page.count == 0, DepredictError::PositionPageNotEmpty);
+        // Market must be resolved
+        require!(self.market.market_state == MarketStates::Resolved, DepredictError::MarketStillActive);
+        // Decrement counters/budget
+        self.market.pages_allocated = self.market.pages_allocated.saturating_sub(1);
+        self.market_creator.pages_allocated = self.market_creator.pages_allocated.saturating_sub(1);
         Ok(())
     }
 }

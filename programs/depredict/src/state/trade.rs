@@ -7,13 +7,13 @@ pub struct OpenPositionArgs {
     pub amount: u64,
     pub direction: PositionDirection,
     pub metadata_uri: String,
-    pub page_index: u32,
+    pub page_index: u16,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClosePositionArgs {
-    pub page_index: u32,
-    pub slot_index: Option<u16>,
+    pub page_index: u16,
+    pub slot_index: Option<u8>,
     pub asset_id: Pubkey,
 }
 
@@ -63,10 +63,11 @@ pub const POSITION_PAGE_ENTRIES: usize = 16;
 pub struct PositionPage {
     pub bump: u8,
     pub market_id: u64,
-    pub page_index: u32,
-    pub count: u16,
+    pub page_index: u16,
+    pub count: u8,
+    pub prewarm_next: bool,
     pub entries: [Position; POSITION_PAGE_ENTRIES],
-    pub padding: [u8; 6],
+    pub padding: [u8; 5],
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, InitSpace, PartialEq, Eq, Debug)]

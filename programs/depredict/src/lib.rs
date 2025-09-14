@@ -100,6 +100,21 @@ pub mod depredict {
         ctx.accounts.payout_position(args)?;
         Ok(())
     }
+
+    pub fn ensure_position_page(ctx: Context<EnsurePositionPageContext>, args: EnsurePageArgs) -> Result<()> {
+        ctx.accounts.ensure(args)?;
+        Ok(())
+    }
+
+    pub fn prune_position(ctx: Context<PrunePositionContext>, args: PrunePositionArgs) -> Result<()> {
+        ctx.accounts.prune(args)?;
+        Ok(())
+    }
+
+    pub fn close_position_page(ctx: Context<ClosePositionPageContext>, args: ClosePositionPageArgs) -> Result<()> {
+        ctx.accounts.close_page(args)?;
+        Ok(())
+    }
 }
 
 #[cfg(not(feature = "no-entrypoint"))]

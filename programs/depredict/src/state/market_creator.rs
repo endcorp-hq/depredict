@@ -12,6 +12,8 @@ pub struct MarketCreator {
     pub name: String,                // Display name for the market creator
     pub created_at: i64,            // Timestamp when this market creator was created
     pub num_markets: u64,           // Number of markets created by this creator
+    pub active_markets: u8,        // Currently active/open markets
+    pub pages_allocated: u16,       // Total pages allocated across all active markets
     pub fee_vault: Pubkey,          // The vault that holds the fees for the market creator
     pub verified: bool,             // Whether the market creator has been verified with a valid collection
 }
@@ -26,6 +28,8 @@ impl Default for MarketCreator {
             name: String::new(),
             created_at: 0,
             num_markets: 0,
+            active_markets: 0,
+            pages_allocated: 0,
             fee_vault: Pubkey::default(),
             verified: false,
         }

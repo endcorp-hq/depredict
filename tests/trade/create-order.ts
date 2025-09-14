@@ -60,6 +60,7 @@ describe("depredict", () => {
 
     // Create user's USDC token account
     console.log("Creating user USDC token account...");
+    const solBeforeAta = await provider.connection.getBalance(USER.publicKey);
     userTokenAccount = (
       await getOrCreateAssociatedTokenAccount(
         provider.connection,
@@ -68,6 +69,9 @@ describe("depredict", () => {
         USER.publicKey
       )
     ).address;
+    const solAfterAta = await provider.connection.getBalance(USER.publicKey);
+    const ataCreationSol = (solBeforeAta - solAfterAta) / LAMPORTS_PER_SOL;
+    console.log("SOL spent to create ATA (one-time rent + fees):", ataCreationSol, "SOL");
     console.log(`User USDC ATA: ${userTokenAccount.toString()}`);
 
     // Mint USDC to USER's ATA
@@ -166,9 +170,40 @@ console.log(collection)
         throw new Error("Insufficient SOL in USER account for NFT creation");
       }
       let mplCoreCpiSigner = new PublicKey("CbNY3JiXdXNE9tPNEk1aRZVEkWdj2v7kfJLNQwZZgpXk")
-      // Create order parameters
-      const amount = new anchor.BN(3*10**6); // 3 USDC (6 decimals)
+      // Derive position page PDA (pageIndex = 0) and capture pre state for rent analysis
+      const pageIndexBuf = Buffer.from(new Uint16Array([0]).buffer);
+      const [positionPagePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+        program.programId
+      );
+      const pagePre = await provider.connection.getAccountInfo(positionPagePda);
+
+      // Ensure page is created by market creator authority (so users don't pay rent)
+      if (!pagePre) {
+        console.log("Pre-warming PositionPage (creator-funded)...");
+        await program.methods
+          .ensurePositionPage({ pageIndex: 0 })
+          .accountsPartial({
+            payer: ADMIN.publicKey,
+            market: marketPda,
+            marketCreator: marketCreatorpda,
+            positionPage: positionPagePda,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc();
+      }
+
+      // Create order parameters (1 USDC, 6 decimals)
+      const amount = new anchor.BN(1_000_000);
       const direction = { yes: {} }; // Betting on "Yes"
+
+      // Record balances before order
+      const solBefore = await provider.connection.getBalance(USER.publicKey);
+      const usdcBefore = await provider.connection.getTokenAccountBalance(userTokenAccount);
+      console.log("Balances before:");
+      console.log("- SOL:", solBefore / LAMPORTS_PER_SOL, "SOL");
+      console.log("- USDC:", usdcBefore.value.uiAmountString, "USDC");
 
        const tx = await program.methods
          .openPosition({
@@ -202,14 +237,39 @@ console.log(collection)
          })
          .signers([USER])
          .rpc();
+      const solAfterTx = await provider.connection.getBalance(USER.publicKey);
+      const solSpentTx = (solBefore - solAfterTx) / LAMPORTS_PER_SOL;
 
 
 
       console.log("Order creation transaction signature:", tx);
+      console.log("SOL spent by openPosition tx:", solSpentTx, "SOL");
+
+      // Inspect position page rent if newly created or resized
+      const pagePost = await provider.connection.getAccountInfo(positionPagePda);
+      if (!pagePre && pagePost) {
+        console.log("PositionPage PDA was created. Rent lamports:", pagePost.lamports);
+      } else if (pagePre && pagePost && pagePost.lamports > pagePre.lamports) {
+        console.log("PositionPage PDA lamports increased by:", pagePost.lamports - pagePre.lamports);
+      }
+
+      // Record balances after order
+      const solAfter = await provider.connection.getBalance(USER.publicKey);
+      const usdcAfter = await provider.connection.getTokenAccountBalance(userTokenAccount);
+      console.log("Balances after:");
+      console.log("- SOL:", solAfter / LAMPORTS_PER_SOL, "SOL");
+      console.log("- USDC:", usdcAfter.value.uiAmountString, "USDC");
+
+      // Optional: show deltas
+      const solDelta = (solBefore - solAfter) / LAMPORTS_PER_SOL;
+      const usdcDelta = Number(usdcBefore.value.amount) - Number(usdcAfter.value.amount);
+      console.log("Balance deltas:");
+      console.log("- SOL spent:", solDelta, "SOL (fees + rents)");
+      console.log("- USDC spent:", usdcDelta, "raw units (expected 1,000,000)");
 
       // Fetch the market account to verify the order was created
       const updatedMarketAccount = await program.account.marketState.fetch(marketPda);
-      console.log("Market Account after order:", updatedMarketAccount);
+      // console.log("Market Account after order:", updatedMarketAccount);
 
       // Verify the market volume increased
       assert.ok(updatedMarketAccount.volume.gt(new anchor.BN(0)), "Market volume should be greater than 0");

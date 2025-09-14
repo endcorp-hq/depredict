@@ -140,4 +140,10 @@ DepredictError {
 
     #[msg("Invalid market creator")]
     InvalidMarketCreator,
+    
+    #[msg("Position not prunable (must be Claimed or Closed)")]
+    PositionNotPrunable,
+
+    #[msg("Position page not empty")]
+    PositionPageNotEmpty,
 }

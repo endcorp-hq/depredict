@@ -93,6 +93,8 @@ impl<'info> CreateMarketCreatorContext<'info> {
             name: args.name,
             created_at: ts,
             num_markets: 0,
+            active_markets: 0,
+            pages_allocated: 0,
             fee_vault: args.fee_vault,
             verified: false, // Not verified until collection and merkle tree are created
         });
@@ -123,50 +125,43 @@ impl<'info> UpdateMarketCreatorContext<'info> {
         &mut self,
         new_tree: Pubkey,
     ) -> Result<()> {
+        
         let market_creator = &mut self.market_creator;
+        let tree_config_data = self.tree_config.data.borrow();
+
+        // check that the signer is the authority
         require!(
             market_creator.authority == *self.signer.key,
             DepredictError::Unauthorized
         );
-
-        // Check if tree_config account exists and has data
-        let tree_config_data = self.tree_config.data.borrow();
         
-        if tree_config_data.len() == 0 {
-            msg!("TreeConfig account is empty or doesn't exist yet");
-        } else {
-            msg!("TreeConfig account exists with {} bytes", tree_config_data.len());
+        // check that the tree_config account exists and has data
+        require!(
+            tree_config_data.len() > 0,
+            DepredictError::InvalidTree
+        );
+
+        // Extract tree_creator directly from the TreeConfig account data
+        let tree_creator_bytes = &tree_config_data[8..40];
             
-            // Extract tree_creator directly from the TreeConfig account data
-            // TreeConfig structure: [discriminator: 8 bytes][tree_creator: 32 bytes][...]
-            if tree_config_data.len() >= 40 { // 8 + 32 = 40 bytes minimum
-                let tree_creator_bytes = &tree_config_data[8..40]; // Skip 8 bytes, read 32 bytes
+        match Pubkey::try_from_slice(tree_creator_bytes) {
+            Ok(tree_creator) => {                        
+                // Validate tree authority matches our program's authority
+                require!(
+                    tree_creator == market_creator.authority,
+                    DepredictError::Unauthorized
+                );
                 
-                match Pubkey::try_from_slice(tree_creator_bytes) {
-                    Ok(tree_creator) => {                        
-                        // Validate tree authority matches our program's authority
-                        require!(
-                            tree_creator == market_creator.authority,
-                            DepredictError::Unauthorized
-                        );
-                        
-                        msg!("✅ TreeConfig authority validation passed");
-                        // Update the merkle tree reference
-                        market_creator.merkle_tree = new_tree;
-                        msg!("Merkle tree updated: tree={}", new_tree);
-                        return Ok(());
-                    },
-                    Err(e) => {
-                        msg!("Failed to deserialize tree_creator Pubkey: {:?}", e);
-                        return Err(DepredictError::Unauthorized.into());
-                    }
-                }
-            } else {
-                msg!("TreeConfig data is too short to contain tree_creator");
+                // Update the merkle tree reference
+                market_creator.merkle_tree = new_tree;
+
+                return Ok(());
+            },
+            Err(_) => {
                 return Err(DepredictError::Unauthorized.into());
             }
         }
-        return Err(DepredictError::Unauthorized.into());
+
     }
 
 

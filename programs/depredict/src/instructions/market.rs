@@ -18,7 +18,7 @@ use anchor_spl::{
 
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
-    MARKET
+    MARKET, POSITION_PAGE
     }, 
     constraints::{
         get_oracle_value, 
@@ -52,6 +52,7 @@ pub struct MarketContext<'info> {
 
     /// CHECK: Market creator account that will own this market
     #[account(
+        mut,
         constraint = market_creator.authority == payer.key() @ DepredictError::Unauthorized,
     )]
     pub market_creator: Box<Account<'info, MarketCreator>>,
@@ -65,8 +66,16 @@ pub struct MarketContext<'info> {
     )]
     pub market: Box<Account<'info, MarketState>>,
 
-    // No per-market positions account; positions are cNFTs minted later
-    
+    // Pre-initialize first position page (page 0)
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + crate::state::trade::PositionPage::INIT_SPACE,
+        seeds = [POSITION_PAGE.as_bytes(), &config.next_market_id.to_le_bytes(), &0u16.to_le_bytes()],
+        bump
+    )]
+    pub position_page0: Box<Account<'info, crate::state::trade::PositionPage>>,
+
     #[account(
         mut,
         // check that the mint is owned by the token program
@@ -203,9 +212,7 @@ impl<'info> MarketContext<'info> {
                 oracle_pubkey = Some(self.oracle_pubkey.key());
             }
         }
-
-        msg!("Checking mint is valid");
-
+        
         let market_id = config.next_market_id();
         msg!("Market ID: {}", market_id);
 
@@ -237,8 +244,20 @@ impl<'info> MarketContext<'info> {
             ..Default::default()
         });
 
-        // Increment market count for the market creator
+        // initialize page 0 header
+        self.position_page0.market_id = market_id;
+        self.position_page0.page_index = 0u16;
+        self.position_page0.count = 0;
+        self.position_page0.prewarm_next = false;
+        market.pages_allocated = market.pages_allocated.checked_add(1).ok_or(DepredictError::ArithmeticOverflow)?;
+
+        // Increment market count and track creator active markets
         self.market_creator.increment_market_count();
+        self.market_creator.active_markets = self
+            .market_creator
+            .active_markets
+            .checked_add(1)
+            .ok_or(DepredictError::ArithmeticOverflow)?;
 
         config.num_markets = config
             .num_markets
