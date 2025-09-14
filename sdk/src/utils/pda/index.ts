@@ -4,6 +4,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID
 } from '@solana/spl-token'
+import { MPL_BUBBLEGUM_ID } from '../constants.js'
 
 export const getTokenATA = (
   address: PublicKey,
@@ -112,5 +113,30 @@ export const getPoolPDA = (programId: PublicKey, poolId: number) => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('pool'), new BN(poolId).toArrayLike(Buffer, 'le', 8)],
     programId
+  )[0]
+}
+
+export const getMarketCreatorPDA = (programId: PublicKey, authority: PublicKey) => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('market_creator'), authority.toBytes()],
+    programId
+  )[0]
+}
+
+export const getPositionPagePDA = (programId: PublicKey, marketId: number, pageIndex: number) => {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from('pos_page'),
+      new BN(marketId).toArrayLike(Buffer, 'le', 8),
+      new BN(pageIndex).toArrayLike(Buffer, 'le', 2)
+    ],
+    programId
+  )[0]
+}
+
+export const getTreeConfigPDA = (merkleTree: PublicKey) => {
+  return PublicKey.findProgramAddressSync(
+    [merkleTree.toBuffer()],
+    new PublicKey(MPL_BUBBLEGUM_ID)
   )[0]
 }

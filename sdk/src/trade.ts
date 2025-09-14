@@ -15,14 +15,17 @@ import {
   OracleType,
 } from "./types/trade.js";
 import { RpcOptions } from "./types/index.js";
+import { PayoutArgs } from "./types/trade.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers.js";
 import {
-  getCollectionPDA,
   getConfigPDA,
   getMarketPDA,
-  getPositionAccountPDA,
+  getMarketCreatorPDA,
+  getPositionPagePDA,
+  getCollectionPDA,
   getPositionNftPDA,
+  getPositionAccountPDA,
   getSubPositionAccountPDA,
 } from "./utils/pda/index.js";
 import createVersionedTransaction from "./utils/sendVersionedTransaction.js";
@@ -32,7 +35,7 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { METAPLEX_ID, DEFAULT_MINT } from "./utils/constants.js";
+import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID as CORE_PROGRAM_ID } from "./utils/constants.js";
 import Position from "./position.js";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
@@ -76,7 +79,7 @@ export default class Trade {
   async getMarketsByAuthority(authority: PublicKey) {
     const markets = await this.program.account.marketState.all();
     const filteredMarkets = markets.filter((market) =>
-      market.account.authority.equals(authority)
+      market.account.marketCreator.equals(authority)
     );
     return filteredMarkets.map(({ account, publicKey }) =>
       formatMarket(account, publicKey)
@@ -162,16 +165,9 @@ export default class Trade {
 
     const marketPDA = getMarketPDA(this.program.programId, marketId);
 
-    const marketPositionsPDA = getPositionAccountPDA(
-      this.program.programId,
-      marketId
-    );
-
-    // Create a new keypair for the collection mint
-    const collectionMintPDA = getCollectionPDA(
-      this.program.programId,
-      marketId
-    );
+    // Derive position page 0 and market creator PDAs
+    const positionPage0PDA = getPositionPagePDA(this.program.programId, marketId, 0);
+    const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, this.ADMIN_KEY);
 
     const bettingStart =
       marketType == MarketType.LIVE
@@ -205,11 +201,10 @@ export default class Trade {
                 ? oraclePubkey
                 : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
             market: marketPDA,
-            marketPositionsAccount: marketPositionsPDA,
+            positionPage0: positionPage0PDA,
+            marketCreator: marketCreatorPDA,
             mint: marketMint,
-            collection: collectionMintPDA,
             tokenProgram: TOKEN_PROGRAM_ID,
-            mplCoreProgram: MPL_CORE_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
           })
@@ -243,19 +238,11 @@ export default class Trade {
    * @returns Transaction, addressLookupTableAccounts || null (if no swap)
    */
   async openPosition(
-    { marketId, amount, direction, token, payer, metadataUri }: OpenOrderArgs,
+    { marketId, amount, direction, token, payer, metadataUri, pageIndex }: OpenOrderArgs,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
     const addressLookupTableAccounts: AddressLookupTableAccount[] = [];
-
-    const { positionAccountPDA, ixs: positionAccountIxs } =
-      await this.position.getPositionAccountIxs(marketId, payer);
-
-    console.log(
-      "SDK: positions account in trade open",
-      positionAccountPDA.toString()
-    );
 
     const marketPDA = getMarketPDA(this.program.programId, marketId);
 
@@ -269,21 +256,41 @@ export default class Trade {
     }
 
     const marketMint = marketAccount.mint;
-    const nextPositionId = marketAccount.nextPositionId;
+    const marketCreatorPubkey: PublicKey = marketAccount.marketCreator;
+    const positionPagePDA = getPositionPagePDA(this.program.programId, marketId, pageIndex);
 
-    const configPDA = getConfigPDA(this.program.programId);
-
-    const collectionPDA = getCollectionPDA(this.program.programId, marketId);
-
-    const positionNftPDA = getPositionNftPDA(
-      this.program.programId,
-      marketId,
-      nextPositionId
+    // Derive vaults
+    const userMintAta = getAssociatedTokenAddressSync(
+      marketMint,
+      payer,
+      false,
+      TOKEN_PROGRAM_ID
+    );
+    const marketVault = getAssociatedTokenAddressSync(
+      marketMint,
+      marketPDA,
+      true,
+      TOKEN_PROGRAM_ID
     );
 
-    if (positionAccountIxs.length > 0) {
-      ixs.push(...positionAccountIxs);
-    }
+    // Fetch market creator to get merkle tree and collection
+    const marketCreatorAccount = await this.program.account.marketCreator.fetch(
+      marketCreatorPubkey
+    );
+    const merkleTree: PublicKey = marketCreatorAccount.merkleTree;
+    const collection: PublicKey = marketCreatorAccount.coreCollection;
+
+    // Constants from IDL addresses
+    const BGUM_PROGRAM_ID = new PublicKey(MPL_BUBBLEGUM_ID);
+    const MPL_NOOP_ID = new PublicKey(NOOP_PROGRAM_ID);
+    const MPL_ACCOUNT_COMPRESSION_ID = new PublicKey(ACCOUNT_COMPRESSION_ID);
+
+    // Derive TreeConfig PDA (Bubblegum)
+    const [treeConfig] = PublicKey.findProgramAddressSync(
+      [merkleTree.toBuffer()],
+      BGUM_PROGRAM_ID
+    );
+
 
     let amountInMint = amount * 10 ** marketAccount.decimals;
 
@@ -315,21 +322,29 @@ export default class Trade {
     try {
       ixs.push(
         await this.program.methods
-          .createPosition({
+          .openPosition({
             amount: new BN(amountInMint),
             direction: direction,
             metadataUri: metadataUri,
+            pageIndex: pageIndex,
           })
           .accountsPartial({
-            signer: payer,
-            feeVault: this.FEE_VAULT,
-            marketPositionsAccount: positionAccountPDA,
+            user: payer,
+            marketFeeVault: this.FEE_VAULT,
+            positionPage: positionPagePDA,
             market: marketPDA,
+            marketCreator: marketCreatorPubkey,
             mint: marketMint,
-            config: configPDA,
-            collection: collectionPDA,
-            mplCoreProgram: MPL_CORE_PROGRAM_ID,
-            positionNftAccount: positionNftPDA,
+            userMintAta: userMintAta,
+            marketVault: marketVault,
+            merkleTree: merkleTree,
+            collection: collection,
+            treeConfig: treeConfig,
+            mplCoreCpiSigner: payer,
+            mplCoreProgram: CORE_PROGRAM_ID,
+            bubblegumProgram: BGUM_PROGRAM_ID,
+            logWrapperProgram: MPL_NOOP_ID,
+            compressionProgram: MPL_ACCOUNT_COMPRESSION_ID,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
@@ -364,6 +379,7 @@ export default class Trade {
     );
     const oracleType = marketAccount.oracleType;
     const oraclePubkey = marketAccount.oraclePubkey;
+    const marketCreator = marketAccount.marketCreator;
 
     if (!oraclePubkey && "switchboard" in oracleType) {
       throw new Error("Market has no oracle pubkey");
@@ -379,6 +395,7 @@ export default class Trade {
           .accountsPartial({
             signer: payer,
             market: marketPDA,
+            marketCreator,
             oraclePubkey: !("switchboard" in oracleType)
               ? new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL")
               : oraclePubkey || anchor.web3.SystemProgram.programId,
@@ -418,10 +435,7 @@ export default class Trade {
 
     const configPDA = getConfigPDA(this.program.programId);
 
-    const marketPositionsPDA = getPositionAccountPDA(
-      this.program.programId,
-      marketId
-    );
+    // legacy positions PDA no longer needed
 
     /** DO NOT UMCOMMENT OR CALL METHOD IF NOT IMPLEMENTED THOROUGHLY */
 
@@ -460,7 +474,6 @@ export default class Trade {
             signer: payer,
             feeVault: this.FEE_VAULT,
             market: marketPDA,
-            marketPositionsAccount: marketPositionsPDA,
             config: configPDA,
             feeVaultMintAta: feeVaultMintAta,
             mint: marketMint,
@@ -531,13 +544,7 @@ export default class Trade {
     }
   }
 
-  async payoutPosition(
-    marketId: number,
-    payer: PublicKey,
-    positionId: number,
-    positionNonce: number,
-    options?: RpcOptions
-  ) {
+  async payoutPosition({ marketId, payer, pageIndex, assetId, slotIndex }: PayoutArgs, options?: RpcOptions) {
     const ixs: TransactionInstruction[] = [];
 
     const marketPda = getMarketPDA(this.program.programId, marketId);
@@ -567,61 +574,35 @@ export default class Trade {
       TOKEN_PROGRAM_ID
     );
 
-    let positionAccountPDA = getPositionAccountPDA(
-      this.program.programId,
-      marketId
-    );
-
-    if (positionNonce !== 0) {
-      // if a sub position account
-      const subPositionAccountPDA = getSubPositionAccountPDA(
-        this.program.programId,
-        marketId,
-        marketPda,
-        positionNonce
-      );
-
-      positionAccountPDA = getPositionAccountPDA(
-        this.program.programId,
-        marketId,
-        subPositionAccountPDA
-      );
-    }
-
-    // get the position from the position account
-    const positionAccount = await this.program.account.positionAccount.fetch(
-      positionAccountPDA
-    );
-    const currentPosition = positionAccount.positions.find(
-      (p) => p.positionId.toNumber() === positionId
-    );
-    if (!currentPosition) {
-      throw new Error("Position not found in position account");
-    }
-
-    const nftMint = currentPosition.mint;
-
-    if (!nftMint) {
-      throw new Error("Position is not an NFT");
-    }
+    // New flow uses compressed NFTs; payout uses asset id via position page in a separate method.
 
     try {
+      const marketCreator = (await this.program.account.marketState.fetch(marketPda)).marketCreator as PublicKey;
+      const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
       ixs.push(
         await this.program.methods
-          .settlePosition()
+          .settlePosition({
+            pageIndex,
+            slotIndex: slotIndex ?? null,
+            assetId,
+          })
           .accountsPartial({
-            signer: payer,
-            marketPositionsAccount: positionAccountPDA,
-            nftMint: nftMint,
-            userMintAta: userMintAta,
-            marketVault: marketVault,
-            mint: marketMint,
+            claimer: payer,
             market: marketPda,
-            collection: collectionPda,
-            tokenProgram: TOKEN_PROGRAM_ID,
+            marketCreator,
+            positionPage,
+            mint: marketMint,
+            claimerMintAta: userMintAta,
+            marketVault,
             mplCoreProgram: MPL_CORE_PROGRAM_ID,
+            bubblegumProgram: new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY"),
+            tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
+            treeConfig: PublicKey.findProgramAddressSync([collectionPda.toBuffer()], new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY"))[0],
+            mplCoreCpiSigner: payer,
+            logWrapperProgram: new PublicKey("mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3"),
+            compressionProgram: new PublicKey("mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW"),
           })
           .instruction()
       );

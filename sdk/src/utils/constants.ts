@@ -24,3 +24,9 @@ export const TOKEN_DECIMALS = {
 
 // Metaplex program ID
 export const METAPLEX_ID = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s'
+
+// Program IDs used by on-chain CPIs
+export const MPL_CORE_PROGRAM_ID = 'CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
+export const MPL_BUBBLEGUM_ID = 'BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY'
+export const MPL_NOOP_ID = 'mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3'
+export const MPL_ACCOUNT_COMPRESSION_ID = 'mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW'

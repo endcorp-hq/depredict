@@ -183,6 +183,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@metaplex-foundation/mpl-core-das@npm:^0.1.0":
+  version: 0.1.0
+  resolution: "@metaplex-foundation/mpl-core-das@npm:0.1.0"
+  peerDependencies:
+    "@metaplex-foundation/digital-asset-standard-api": ">=2.0.0"
+    "@metaplex-foundation/mpl-core": ">=1.4.0"
+    "@metaplex-foundation/umi": ">=1.2.0"
+  checksum: 10c0/c05642d2529891ad1e764070175e8afa68f969dd82cc26e3fecf2eb0aef7c6e522e09801e0448da4f91ef043164786a34a4b59241549ebaa355c8424b87bbfe7
+  languageName: node
+  linkType: hard
+
 "@metaplex-foundation/mpl-core@npm:^1.6.0":
   version: 1.6.0
   resolution: "@metaplex-foundation/mpl-core@npm:1.6.0"
@@ -1799,6 +1810,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fastestsmallesttextencoderdecoder@npm:^1.0.22":
+  version: 1.0.22
+  resolution: "fastestsmallesttextencoderdecoder@npm:1.0.22"
+  checksum: 10c0/ccf028cbc7f5db4a7a6feb21d81ba60e1293511b85926fcb212d1a5c3bc8e9c2d3ba590322e3589bf4ab97d1628b0f670d0fe23de7757ebda791a078adb62313
+  languageName: node
+  linkType: hard
+
 "fdir@npm:^6.4.4":
   version: 6.5.0
   resolution: "fdir@npm:6.5.0"
@@ -2307,6 +2325,68 @@ __metadata:
   bin:
     json5: lib/cli.js
   checksum: 10c0/9ee316bf21f000b00752e6c2a3b79ecf5324515a5c60ee88983a1910a45426b643a4f3461657586e8aeca87aaf96f0a519b0516d2ae527a6c3e7eed80f68717f
+  languageName: node
+  linkType: hard
+
+"litesvm-darwin-arm64@npm:0.3.3":
+  version: 0.3.3
+  resolution: "litesvm-darwin-arm64@npm:0.3.3"
+  conditions: os=darwin & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"litesvm-darwin-x64@npm:0.3.3":
+  version: 0.3.3
+  resolution: "litesvm-darwin-x64@npm:0.3.3"
+  conditions: os=darwin & cpu=x64
+  languageName: node
+  linkType: hard
+
+"litesvm-linux-arm64-musl@npm:0.3.3":
+  version: 0.3.3
+  resolution: "litesvm-linux-arm64-musl@npm:0.3.3"
+  conditions: os=linux & cpu=arm64 & libc=musl
+  languageName: node
+  linkType: hard
+
+"litesvm-linux-x64-gnu@npm:0.3.3":
+  version: 0.3.3
+  resolution: "litesvm-linux-x64-gnu@npm:0.3.3"
+  conditions: os=linux & cpu=x64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"litesvm-linux-x64-musl@npm:0.3.3":
+  version: 0.3.3
+  resolution: "litesvm-linux-x64-musl@npm:0.3.3"
+  conditions: os=linux & cpu=x64 & libc=musl
+  languageName: node
+  linkType: hard
+
+"litesvm@npm:^0.3.3":
+  version: 0.3.3
+  resolution: "litesvm@npm:0.3.3"
+  dependencies:
+    "@solana/web3.js": "npm:^1.98.4"
+    bs58: "npm:^6.0.0"
+    fastestsmallesttextencoderdecoder: "npm:^1.0.22"
+    litesvm-darwin-arm64: "npm:0.3.3"
+    litesvm-darwin-x64: "npm:0.3.3"
+    litesvm-linux-arm64-musl: "npm:0.3.3"
+    litesvm-linux-x64-gnu: "npm:0.3.3"
+    litesvm-linux-x64-musl: "npm:0.3.3"
+  dependenciesMeta:
+    litesvm-darwin-arm64:
+      optional: true
+    litesvm-darwin-x64:
+      optional: true
+    litesvm-linux-arm64-musl:
+      optional: true
+    litesvm-linux-x64-gnu:
+      optional: true
+    litesvm-linux-x64-musl:
+      optional: true
+  checksum: 10c0/e03800de2c2aa2446a0072fd288286c9cefe4bde7483cdecb483847f69dfc78090bbe3559be028becddb20ba0e899a8ae304842df4beb511f9205d1cb23b26c0
   languageName: node
   linkType: hard
 
@@ -2882,6 +2962,7 @@ __metadata:
     "@metaplex-foundation/mpl-account-compression": "npm:^0.0.1"
     "@metaplex-foundation/mpl-bubblegum": "npm:^5.0.2"
     "@metaplex-foundation/mpl-core": "npm:^1.6.0"
+    "@metaplex-foundation/mpl-core-das": "npm:^0.1.0"
     "@metaplex-foundation/mpl-toolbox": "npm:^0.10.0"
     "@metaplex-foundation/umi": "npm:^1.4.1"
     "@metaplex-foundation/umi-bundle-defaults": "npm:^1.4.1"
@@ -2899,6 +2980,7 @@ __metadata:
     bn: "npm:^1.0.5"
     chai: "npm:^4.3.4"
     dotenv: "npm:^17.2.1"
+    litesvm: "npm:^0.3.3"
     mocha: "npm:^9.0.3"
     prettier: "npm:^2.6.2"
     ts-mocha: "npm:^10.0.0"
