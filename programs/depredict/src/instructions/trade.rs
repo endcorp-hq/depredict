@@ -162,11 +162,11 @@ pub struct PositionContext<'info> {
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: merkle tree account
-    #[account(mut, constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
+    #[account(constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
     pub merkle_tree: AccountInfo<'info>,
 
     /// CHECK: collection account
-    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
+    #[account(constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
     pub collection: AccountInfo<'info>,
 
     /// CHECK: TreeConfig PDA for the merkle tree

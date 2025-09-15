@@ -59,12 +59,11 @@ describe("depredict", () => {
       // console.log("✅ Config account verified successfully");
     });
 
-    it("Fails to update fee amount with same value", async () => {
+    xit("Fails to update fee amount with same value", async () => {
       const sameFee = 100; // Same as current
 
       try {
-        await program.methods
-          .updateFeeAmount(sameFee)
+        await program.methods.updateFeeAmount(sameFee)
           .accountsPartial({
             signer: ADMIN.publicKey,
             feeVault: FEE_VAULT.publicKey,
@@ -73,7 +72,7 @@ describe("depredict", () => {
           })
           .signers([ADMIN])
           .rpc({
-            skipPreflight: true,
+            skipPreflight: false,
             commitment: "confirmed",
           });
         

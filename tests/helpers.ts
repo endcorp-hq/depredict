@@ -289,9 +289,9 @@ export async function createMarketCreator(name: string, feeVault: PublicKey): Pr
   );
   try {
     // Check if already exists
-    let marketCreator = await program.account.marketCreator.fetch(marketCreatorPda);
-    console.log("✅ Market creator already exists:", marketCreator);
-    return { marketCreator };
+    await program.account.marketCreator.fetch(marketCreatorPda);
+    console.log("✅ Market creator already exists:", marketCreatorPda.toString());
+    return { marketCreator: marketCreatorPda };
   } catch (error) {
     // Create the market creator account
     console.log("Creating market creator account...");
@@ -323,9 +323,18 @@ export async function createMarketCreator(name: string, feeVault: PublicKey): Pr
  * @param coreCollection The core collection public key
  * @returns {Promise<void>}
  */
-export async function verifyMarketCreator(marketCreator: PublicKey, coreCollection: PublicKey, merkleTree: PublicKey, treeConfig: PublicKey): Promise<void> {
+export async function verifyMarketCreator(marketCreator: PublicKey, coreCollection: PublicKey, merkleTree: PublicKey): Promise<void> {
   console.log("Verifying market creator with collection...");
   
+  console.log("Market creator:", marketCreator.toString());
+  console.log("Core collection:", coreCollection.toString());
+  console.log("Merkle tree:", merkleTree.toString());
+  
+// sanitise the input to ensure base58 encoding
+marketCreator = new PublicKey(marketCreator.toString());
+coreCollection = new PublicKey(coreCollection.toString());
+merkleTree = new PublicKey(merkleTree.toString());
+
   const tx = await program.methods
     .verifyMarketCreator({
       coreCollection: coreCollection,
