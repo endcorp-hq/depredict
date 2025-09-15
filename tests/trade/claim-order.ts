@@ -18,7 +18,10 @@ import {
   ACCOUNT_COMPRESSION_ID,
 } from "../constants";
 import { getCurrentMarketId, ensureAccountBalance } from "../helpers";
-
+import { publicKey, publicKeyBytes, PublicKeyBytes } from '@metaplex-foundation/umi'
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
+import { dasApi } from '@metaplex-foundation/digital-asset-standard-api'
+import {fromWeb3JsPublicKey} from '@metaplex-foundation/umi-web3js-adapters'
 const MPL_CORE_CPI_SIGNER = new PublicKey("CbNY3JiXdXNE9tPNEk1aRZVEkWdj2v7kfJLNQwZZgpXk");
 
 function toBigInt(n: anchor.BN | number): bigint {
@@ -41,9 +44,27 @@ describe("depredict", () => {
   let positionPagePda: PublicKey;
 
   let yesSlotIndex: number | null = null;
-  let noSlotIndex: number | null = null;
   let yesAssetId: PublicKey | null = null;
+  let yesTree: PublicKey | null = null;
+  let yesRoot: PublicKeyBytes | null = null;
+  let yesDataHash: PublicKeyBytes | null = null;
+  let yesCreatorHash: PublicKeyBytes | null = null;
+  let yesNonce: number | null = null;
+  let yesIndex: number | null = null;
+  let yesProof: PublicKeyBytes[] | null = null;
+
+
+  let noSlotIndex: number | null = null;
   let noAssetId: PublicKey | null = null;
+  let noTree: PublicKey | null = null;
+  let noRoot: PublicKeyBytes | null = null;
+  let noDataHash: PublicKeyBytes | null = null;
+  let noCreatorHash: PublicKeyBytes | null = null;
+  let noNonce: number | null = null;
+  let noIndex: number | null = null;
+  let noProof: PublicKeyBytes[] | null = null;
+
+
 
   let marketCreatorPda: PublicKey;
   let marketCreatorAccount: any;
@@ -158,12 +179,46 @@ describe("depredict", () => {
 
     const yes = await openPosition({ direction: { yes: {} }, amount: new anchor.BN(1_000_000), pageIndex: 0 });
     yesSlotIndex = yes.slotIndex;
-    yesAssetId = yes.assetId;
+    let yesUmiAssetId = fromWeb3JsPublicKey(yes.assetId);
+
+    // load cNFT data from DAS API
+    const umi = createUmi('https://api.devnet.solana.com').use(dasApi())
+
+
+    // load cNFT data from DAS API
+    const yesAsset = await umi.rpc.getAsset(yesUmiAssetId)
+    const yesAssetProof = await umi.rpc.getAssetProof(yesUmiAssetId)
+
+
+    let yesTree = yesAssetProof.tree_id;
+    let yesRoot = publicKeyBytes(yesAssetProof.root);
+    let yesDataHash = publicKeyBytes(yesAsset.compression.data_hash);
+    let yesCreatorHash = publicKeyBytes(yesAsset.compression.creator_hash);
+    let yesNonce = yesAsset.compression.seq;
+    let yesIndex = yesAssetProof.node_index; // why example show  '- 2 ** yesAssetProof.proof.length'?
+    let yesProof = yesAssetProof.proof;
+
+
+
+
 
     const no = await openPosition({ direction: { no: {} }, amount: new anchor.BN(2_000_000), pageIndex: 0 });
     noSlotIndex = no.slotIndex;
-    noAssetId = no.assetId;
-  });
+    let noUmiAssetId = fromWeb3JsPublicKey(no.assetId);
+
+    // load cNFT data from DAS API
+    const noAsset = await umi.rpc.getAsset(noUmiAssetId)
+    const noAssetProof = await umi.rpc.getAssetProof(noUmiAssetId)
+
+
+    let noTree = noAssetProof.tree_id;
+    let noRoot = publicKeyBytes(noAssetProof.root);
+    let noDataHash = publicKeyBytes(noAsset.compression.data_hash);
+    let noCreatorHash = publicKeyBytes(noAsset.compression.creator_hash);
+    let noNonce = noAsset.compression.seq;
+    let noIndex = noAssetProof.node_index; // why example show  '- 2 ** yesAssetProof.proof.length'?
+    let noProof = noAssetProof.proof;
+    });
 
   describe("Claim Order", () => {
     it("fails before market is resolved", async () => {
@@ -172,11 +227,19 @@ describe("depredict", () => {
       const userBalBefore = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
 
       try {
+
+
+
         await program.methods
           .settlePosition({
             pageIndex: 0,
             slotIndex: yesSlotIndex as number,
             assetId: yesAssetId as PublicKey,
+            root: Array.from(yesRoot!),
+            dataHash: Array.from(yesDataHash!),
+            creatorHash: Array.from(yesCreatorHash!),
+            nonce: new anchor.BN(yesNonce!),
+            index: yesIndex as number,
           })
           .accountsPartial({
             claimer: USER.publicKey,
@@ -246,12 +309,19 @@ describe("depredict", () => {
       const userBalBefore = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
       const vaultBalBefore = await provider.connection.getTokenAccountBalance(marketBefore.marketVault as PublicKey);
 
+
+
       await waitOneSecond();
       await program.methods
         .settlePosition({
-          pageIndex: 0,
-          slotIndex: yesSlotIndex as number,
-          assetId: yesAssetId as PublicKey,
+            pageIndex: 0,
+            slotIndex: yesSlotIndex as number,
+            assetId: yesAssetId as PublicKey,
+            root: Array.from(yesRoot!),
+            dataHash: Array.from(yesDataHash!),
+            creatorHash: Array.from(yesCreatorHash!),
+            nonce: new anchor.BN(yesNonce!),
+            index: yesIndex as number,
         })
         .accountsPartial({
           claimer: USER.publicKey,
@@ -307,9 +377,14 @@ describe("depredict", () => {
       await waitOneSecond();
       await program.methods
         .settlePosition({
-          pageIndex: 0,
-          slotIndex: noSlotIndex as number,
-          assetId: noAssetId as PublicKey,
+            pageIndex: 0,
+            slotIndex: yesSlotIndex as number,
+            assetId: yesAssetId as PublicKey,
+            root: Array.from(yesRoot!),
+            dataHash: Array.from(yesDataHash!),
+            creatorHash: Array.from(yesCreatorHash!),
+            nonce: new anchor.BN(yesNonce!),
+            index: yesIndex as number,
         })
         .accountsPartial({
           claimer: USER.publicKey,
@@ -350,7 +425,16 @@ describe("depredict", () => {
       try {
         await waitOneSecond();
         await program.methods
-          .settlePosition({ pageIndex: 0, slotIndex: yesSlotIndex as number, assetId: yesAssetId as PublicKey })
+          .settlePosition({             
+            pageIndex: 0,
+            slotIndex: yesSlotIndex as number,
+            assetId: yesAssetId as PublicKey,
+            root: Array.from(yesRoot!),
+            dataHash: Array.from(yesDataHash!),
+            creatorHash: Array.from(yesCreatorHash!),
+            nonce: new anchor.BN(yesNonce!),
+            index: yesIndex as number,
+        })
           .accountsPartial({
             claimer: USER.publicKey,
             market: marketPda,
@@ -385,7 +469,16 @@ describe("depredict", () => {
       const wrongAsset = Keypair.generate().publicKey;
       try {
         await program.methods
-          .settlePosition({ pageIndex: 0, slotIndex: noSlotIndex as number, assetId: wrongAsset })
+          .settlePosition({             
+            pageIndex: 0,
+            slotIndex: noSlotIndex,
+            assetId: wrongAsset,
+            root: Array.from(noRoot!),
+            dataHash: Array.from(noDataHash!),
+            creatorHash: Array.from(noCreatorHash!),
+            nonce: new anchor.BN(noNonce!),
+            index: noIndex as number,
+        })
           .accountsPartial({
             claimer: USER.publicKey,
             market: marketPda,
@@ -419,7 +512,16 @@ describe("depredict", () => {
     it("rejects when claimer is market creator authority (Unauthorized)", async () => {
       try {
         await program.methods
-          .settlePosition({ pageIndex: 0, slotIndex: noSlotIndex as number, assetId: noAssetId as PublicKey })
+          .settlePosition({ 
+            pageIndex: 0,
+            slotIndex: yesSlotIndex as number,
+            assetId: yesAssetId as PublicKey,
+            root: Array.from(yesRoot!),
+            dataHash: Array.from(yesDataHash!),
+            creatorHash: Array.from(yesCreatorHash!),
+            nonce: new anchor.BN(yesNonce!),
+            index: yesIndex as number,
+           })
           .accountsPartial({
             claimer: ADMIN.publicKey,
             market: marketPda,

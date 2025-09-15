@@ -12,9 +12,16 @@ pub struct OpenPositionArgs {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ClosePositionArgs {
+    // page and position details
     pub page_index: u16,
     pub slot_index: Option<u8>,
+    // bubblegum details loaded and passed from DAS
     pub asset_id: Pubkey,
+    pub root: [u8; 32],
+    pub data_hash: [u8; 32],
+    pub creator_hash: [u8; 32],
+    pub nonce: u64,
+    pub index: u32,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]

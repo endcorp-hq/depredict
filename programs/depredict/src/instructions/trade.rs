@@ -17,16 +17,17 @@ use anchor_spl::{
 // crate includes
 use crate::{
     constants::{
-        BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE, MAX_CREATOR_POSITIONS, POSITIONS_PER_PAGE
+        BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE, MAX_CREATOR_POSITIONS, POSITIONS_PER_PAGE, CONFIG
     }, errors::DepredictError, state::{
-        ClosePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES
-    }
+        ClosePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES, Config
+    },
+    helpers::compute_dual_fees_sequential,
 };
 
 
 // metaplex includes
 use mpl_bubblegum::{
-    instructions::MintV2CpiBuilder,
+    instructions::{MintV2CpiBuilder,BurnV2CpiBuilder},
     programs::MPL_BUBBLEGUM_ID,
     types::{MetadataArgsV2, TokenStandard},
     accounts::TreeConfig
@@ -206,6 +207,13 @@ pub struct PayoutContext<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, MarketState>>,
 
+    // Global protocol config (for protocol fee and fee vault)
+    #[account(
+        seeds = [CONFIG.as_bytes()],
+        bump = config.bump
+    )]
+    pub config: Box<Account<'info, Config>>,
+
     /// CHECK: ensure the passed market creator matches the market's configured market_creator
     #[account(
         constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator
@@ -242,6 +250,22 @@ pub struct PayoutContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    // Creator fee vault token account (must match stored pubkey and mint)
+    #[account(
+        mut,
+        constraint = creator_fee_vault_ata.key() == market_creator.fee_vault @ DepredictError::InvalidFeeVault,
+        constraint = creator_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
+    )]
+    pub creator_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    // Protocol fee vault token account (must match stored pubkey and mint)
+    #[account(
+        mut,
+        constraint = protocol_fee_vault_ata.key() == config.fee_vault @ DepredictError::InvalidFeeVault,
+        constraint = protocol_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
+    )]
+    pub protocol_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+
     /// CHECK: MPL Core program
     #[account(address = MPL_CORE_ID)]
     pub mpl_core_program: AccountInfo<'info>,
@@ -253,6 +277,14 @@ pub struct PayoutContext<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: merkle tree account
+    #[account(mut, constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
+    pub merkle_tree: AccountInfo<'info>,
+
+    /// CHECK: collection account
+    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
+    pub collection: AccountInfo<'info>,
 
     /// CHECK: TreeConfig PDA for the merkle tree
     #[account(mut)]
@@ -281,7 +313,7 @@ impl<'info> PositionContext<'info> {
         let market_type = market.market_type;
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
-    
+
         // Collection is provided as an account and constrained to match market creator's collection in the accounts struct
         if market_type == MarketType::Future {
             require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
@@ -326,6 +358,7 @@ impl<'info> PositionContext<'info> {
         target_page.market_id = market.market_id;
         target_page.page_index = args.page_index;
 
+
         let mut position_index: Option<usize> = None;
         for i in 0..POSITION_PAGE_ENTRIES {
             if target_page.entries[i].status != PositionStatus::Open { position_index = Some(i); break; }
@@ -334,14 +367,18 @@ impl<'info> PositionContext<'info> {
         require!(position_index.is_some(), DepredictError::NoAvailablePositionSlot);
         let position_index = position_index.unwrap();
         msg!("Position Index {:?} (page {:?})", position_index, target_page.page_index);
+        let mut position = target_page.entries[position_index];
+    
 
         // Update entry; leaf_index will be set after minting
-        let was_init = target_page.entries[position_index].status == PositionStatus::Init;
-        target_page.entries[position_index].amount = net_amount;
-        target_page.entries[position_index].direction = args.direction;
-        target_page.entries[position_index].status = PositionStatus::Open;
-        target_page.entries[position_index].position_id = next_position_id;
-        target_page.entries[position_index].created_at = ts;
+        let was_init = position.status == PositionStatus::Init;
+
+        position.amount = net_amount;
+        position.direction = args.direction;
+        position.status = PositionStatus::Open;
+        position.position_id = next_position_id;
+        position.created_at = ts;
+
         if was_init { target_page.count = target_page.count.saturating_add(1); }
         market.volume = market.volume.checked_add(net_amount).unwrap();
 
@@ -364,26 +401,6 @@ impl<'info> PositionContext<'info> {
             net_amount,
             self.mint.decimals
         )?;
-    
-        // Emit minimal event via existing structure if needed (optional)
-        // TODO: Fix fee structure. Need to transfer fees form users to market creator, then on market resolution + payout, transfer fees from market creator to depredict protocol. Users get paid, then market makers, then protocol. 
-        // let fee = self.config.fee_amount;
-    
-        // let transfer_result = transfer(
-        //     CpiContext::new(self.system_program.to_account_info(), Transfer {
-        //         from: self.user.to_account_info(),
-        //         to: self.market_fee_vault.to_account_info(),
-        //     }),
-        //     fee
-        // );
-    
-        // if let Err(_) = transfer_result {
-        //     return Err(DepredictError::InsufficientFunds.into());
-        // }
-    
-        // require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
-    
-        // market.update_ts = ts;
     
         // market.emit_market_event()?;
 
@@ -408,7 +425,6 @@ impl<'info> PositionContext<'info> {
             let payer = self.user.to_account_info();
             let leaf_owner = self.user.to_account_info();
             let system = self.system_program.to_account_info();
-            
 
             // Create the seeds and bump for the market creator PDA
             let market_creator_seeds = &[
@@ -455,8 +471,8 @@ impl<'info> PositionContext<'info> {
             // TODO: Consider emitting a dedicated PositionClaimed event with asset_id,
             msg!("Position created; Assset ID {:?}", asset_id);
 
-            target_page.entries[position_index].asset_id = asset_id;
-            target_page.entries[position_index].leaf_index = leaf_index as u64;
+            position.asset_id = asset_id;
+            position.leaf_index = leaf_index as u64;
             
      Ok(())
     }
@@ -469,14 +485,11 @@ impl<'info> PayoutContext<'info> {
         let market = &mut self.market;
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
-        // TODO: Verify Merkle inclusion of leaf using proof accounts once wired
         let asset_id = args.asset_id;
-
         // Auth: signer must be the claimer or the market creator authority
-        let signer_key = self.claimer.key();
         let claimer_key = self.claimer.key();
-        let is_market_creator = signer_key == self.market_creator.authority;
-        require!(signer_key == claimer_key || is_market_creator, DepredictError::Unauthorized);
+
+
         // Market creator cannot redirect payout to themselves
         require!(claimer_key != self.market_creator.authority, DepredictError::Unauthorized);
 
@@ -510,6 +523,28 @@ impl<'info> PayoutContext<'info> {
         //       - Add leaf proof accounts (root, index, hash path) to context
         //       - CPI to Bubblegum verify leaf and extract owner
         //       - require!(extracted_owner == claimer_key, DepredictError::InvalidNft)
+
+        // to get around this, lets just try to transfer the cNFT to the market creator. If the person is able to successfully sign this transaction, then they are the owner of the cNFT. Decide on best place to put this logic... probably want to check market state first, then check if the person is the owner of the cNFT, then transfer the cNFT to the market creator, then payout the position.
+
+        BurnV2CpiBuilder::new(&self.bubblegum_program)
+            .tree_config(&self.tree_config)
+            .payer(&self.claimer)
+            .leaf_owner(&self.claimer)
+            .merkle_tree(&self.merkle_tree)
+            .core_collection(Some(&self.collection))
+            .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
+            .log_wrapper(&self.log_wrapper_program)
+            .compression_program(&self.compression_program)
+            .mpl_core_program(&self.mpl_core_program)
+            .system_program(&self.system_program)
+            .root(args.root)
+            .data_hash(args.data_hash)
+            .creator_hash(args.creator_hash)
+            .nonce(args.nonce)
+            .index(args.index)
+            .invoke()?;
+        msg!("cNFT burned");
+
 
         // Check if position won
         let position_direction = position_page.entries[effective_slot_index].direction;
@@ -554,26 +589,70 @@ impl<'info> PayoutContext<'info> {
         }
 
         if payout > 0 && is_winner {
-            // Transfer payout
+            // Compute sequential fees: creator on gross payout, then protocol on remainder
+            let (creator_fee, protocol_fee, net_payout) = compute_dual_fees_sequential(
+                payout,
+                self.market_creator.creator_fee_bps,
+                self.config.fee_amount,
+            )?;
+
             let market_signer: &[&[&[u8]]] = &[&[MARKET.as_bytes(), &market.market_id.to_le_bytes(), &[market.bump]]];
             msg!("Using signer seeds: {:?}", market_signer);
-            msg!("Market vault amount before transfer: {}", self.market_vault.amount);
-            msg!("User ATA amount before transfer: {}", self.claimer_mint_ata.amount);
+            msg!("Payout (gross)={}, creator_fee={}, protocol_fee={}, net={}", payout, creator_fee, protocol_fee, net_payout);
 
-            transfer_checked(
-                CpiContext::new_with_signer(
-                    self.token_program.to_account_info(),
-                    TransferChecked {
-                        from: self.market_vault.to_account_info(),
-                        mint: self.mint.to_account_info(),
-                        to: self.claimer_mint_ata.to_account_info(),
-                        authority: market.to_account_info(),
-                    },
-                    market_signer
-                ),
-                payout,
-                self.mint.decimals
-            )?;
+            // Transfer creator fee to creator vault
+            if creator_fee > 0 {
+                transfer_checked(
+                    CpiContext::new_with_signer(
+                        self.token_program.to_account_info(),
+                        TransferChecked {
+                            from: self.market_vault.to_account_info(),
+                            mint: self.mint.to_account_info(),
+                            to: self.creator_fee_vault_ata.to_account_info(),
+                            authority: market.to_account_info(),
+                        },
+                        market_signer
+                    ),
+                    creator_fee,
+                    self.mint.decimals
+                )?;
+            }
+
+            // Transfer protocol fee to protocol vault
+            if protocol_fee > 0 {
+                transfer_checked(
+                    CpiContext::new_with_signer(
+                        self.token_program.to_account_info(),
+                        TransferChecked {
+                            from: self.market_vault.to_account_info(),
+                            mint: self.mint.to_account_info(),
+                            to: self.protocol_fee_vault_ata.to_account_info(),
+                            authority: market.to_account_info(),
+                        },
+                        market_signer
+                    ),
+                    protocol_fee,
+                    self.mint.decimals
+                )?;
+            }
+
+            // Transfer net payout to winner
+            if net_payout > 0 {
+                transfer_checked(
+                    CpiContext::new_with_signer(
+                        self.token_program.to_account_info(),
+                        TransferChecked {
+                            from: self.market_vault.to_account_info(),
+                            mint: self.mint.to_account_info(),
+                            to: self.claimer_mint_ata.to_account_info(),
+                            authority: market.to_account_info(),
+                        },
+                        market_signer
+                    ),
+                    net_payout,
+                    self.mint.decimals
+                )?;
+            }
         }
 
         position_page.entries[effective_slot_index].status = PositionStatus::Claimed;
