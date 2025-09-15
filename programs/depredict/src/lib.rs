@@ -5,6 +5,7 @@ mod constants;
 mod constraints;
 mod errors;
 mod events;
+mod helpers;
 
 use state::*;
 use instructions::*;
@@ -16,12 +17,12 @@ pub mod depredict {
     use super::*;
 
     // CONFIG INSTRUCTIONS
-    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64) -> Result<()> {
+    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u16) -> Result<()> {
         ctx.accounts.init_config(fee_amount, &ctx.bumps)?;
         Ok(())
     }
 
-    pub fn update_fee_amount(ctx: Context<UpdateConfigContext>, fee_amount: u64) -> Result<()> {
+    pub fn update_fee_amount(ctx: Context<UpdateConfigContext>, fee_amount: u16) -> Result<()> {
         ctx.accounts.update_fee_amount(fee_amount)?;
         Ok(())
     }
@@ -62,8 +63,18 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn update_market_creator(ctx: Context<UpdateMarketCreatorContext>, args: UpdateMarketCreatorArgs) -> Result<()> {
-        ctx.accounts.update_market_creator(args)?;
+    pub fn update_creator_name(ctx: Context<UpdateMarketCreatorContext>, name: String) -> Result<()> {
+        ctx.accounts.update_creator_name(name)?;
+        Ok(())
+    }
+
+    pub fn update_creator_fee_vault(ctx: Context<UpdateMarketCreatorContext>, current_fee_vault: Pubkey, new_fee_vault: Pubkey) -> Result<()> {
+        ctx.accounts.update_creator_fee_vault(current_fee_vault, new_fee_vault)?;
+        Ok(())
+    }
+
+    pub fn update_creator_fee(ctx: Context<UpdateMarketCreatorContext>, creator_fee: u16) -> Result<()> {
+        ctx.accounts.update_creator_fee(creator_fee)?;
         Ok(())
     }
 

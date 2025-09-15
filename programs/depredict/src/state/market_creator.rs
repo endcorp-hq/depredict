@@ -15,6 +15,7 @@ pub struct MarketCreator {
     pub active_markets: u8,        // Currently active/open markets
     pub pages_allocated: u16,       // Total pages allocated across all active markets
     pub fee_vault: Pubkey,          // The vault that holds the fees for the market creator
+    pub creator_fee_bps: u16,       // The fee percentage for the market creator
     pub verified: bool,             // Whether the market creator has been verified with a valid collection
 }
 
@@ -31,6 +32,7 @@ impl Default for MarketCreator {
             active_markets: 0,
             pages_allocated: 0,
             fee_vault: Pubkey::default(),
+            creator_fee_bps: 0,
             verified: false,
         }
     }
@@ -50,12 +52,7 @@ impl MarketCreator {
 pub struct CreateMarketCreatorArgs {
     pub name: String,
     pub fee_vault: Pubkey,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct UpdateMarketCreatorArgs {
-    pub name: Option<String>,
-    pub fee_vault: Option<Pubkey>,
+    pub creator_fee_bps: u16,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]

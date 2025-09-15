@@ -146,4 +146,7 @@ DepredictError {
 
     #[msg("Position page not empty")]
     PositionPageNotEmpty,
+
+    #[msg("Invalid fee bps")]
+    InvalidFeeBps,
 }

@@ -1,4 +1,4 @@
-use crate::constants::CONFIG;
+use crate::constants::{CONFIG, MAX_FEE_AMOUNT};
 use crate::errors::DepredictError;
 use crate::state::Config;
 use anchor_lang::prelude::*;
@@ -70,15 +70,20 @@ pub struct CloseConfigContext<'info> {
 }
 
 impl<'info> InitConfigContext<'info> {
-    pub fn init_config(&mut self, fee_amount: u64, bump: &InitConfigContextBumps) -> Result<()> {
+    pub fn init_config(&mut self, fee_amount: u16, bump: &InitConfigContextBumps) -> Result<()> {
+
+        require!(
+            fee_amount <= MAX_FEE_AMOUNT,
+            DepredictError::InvalidFeeAmount
+        );
+
         let config = &mut self.config;
         config.bump = bump.config;
         config.authority = *self.signer.key;
         config.fee_vault = *self.fee_vault.key;
         config.fee_amount = fee_amount;
         config.version = 1;
-        config.next_market_id = 1;
-        config.num_markets = 0;
+        config.global_markets = 0;
         config.base_uri = [0; 200];
         Ok(())
     }
@@ -87,7 +92,7 @@ impl<'info> InitConfigContext<'info> {
 impl<'info> UpdateConfigContext<'info> {
     pub fn update_fee_amount(
         &mut self,
-        fee_amount: u64,
+        fee_amount: u16,
     ) -> Result<()> {
         let config = &mut self.config;
         require!(
@@ -100,17 +105,13 @@ impl<'info> UpdateConfigContext<'info> {
             DepredictError::SameFeeAmount
         );
 
-        const MAX_FEE_AMOUNT: u64 = 1_000_000_000; // 1 billion
         require!(
             fee_amount <= MAX_FEE_AMOUNT,
             DepredictError::InvalidFeeAmount
         );
 
-
-
         config.fee_amount = fee_amount;
         config.version = config.version.checked_add(1).unwrap();
-        msg!("Fee amount updated to {}", fee_amount);
         Ok(())
     }
 
@@ -174,7 +175,7 @@ impl<'info> CloseConfigContext<'info> {
 
         let config = &mut self.config;
         require!(
-            config.num_markets == 0,
+            config.global_markets == 0,
             DepredictError::ConfigInUse
         );
         // Transfer lamports to the signer
@@ -190,5 +191,3 @@ impl<'info> CloseConfigContext<'info> {
         Ok(())
     }
 }
-
-// TODO: I think we probably want to store verified market creators somewhere.

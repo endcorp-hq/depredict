@@ -8,6 +8,9 @@ pub const BASE_URI: &str = "s3://depredict-metadata/";
 pub const MAX_CREATOR_POSITIONS: u32 = 65_536;
 pub const POSITIONS_PER_PAGE: u32 = super::state::trade::POSITION_PAGE_ENTRIES as u32;
 pub const MAX_POSITIONS_PER_PAGE: u8 = 16;
+pub const FEE_BPS_DENOMINATOR: u16 = 10_000; // 100%
+pub const MAX_FEE_AMOUNT: u16 = 200; // 2% - ludicrouslly high!
+
 // pub const TREE: &str = "tree";
 // pub const TREE_NAMESPACE_GLOBAL: &str = "global";
 // pub const DEFAULT_TREE_MAX_DEPTH: u32 = 16; // 65,536 leaves

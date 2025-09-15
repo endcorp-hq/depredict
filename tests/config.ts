@@ -28,8 +28,9 @@ describe("depredict", () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // @ts-ignore - IDL types will update after build
+      // a note that we now use BPS instead of lamports for the fee amount to calculate based on percentage. 100 = 1%. 200 = 2%. etc. MAX_FEE_AMOUNT is 200 = 2%
       const tx = await (program.methods)
-        .initializeConfig(new anchor.BN(100))
+        .initializeConfig(100)
         .accountsPartial({
           signer: ADMIN.publicKey,
           feeVault: FEE_VAULT.publicKey,
@@ -54,12 +55,12 @@ describe("depredict", () => {
       const configAccount: any = await program.account.config.fetch(configPda);
       assert.ok(configAccount.authority.equals(ADMIN.publicKey));
       assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
-      assert.ok(configAccount.feeAmount.eq(new anchor.BN(100)));
+      assert.ok(configAccount.feeAmount === 100);
       // console.log("✅ Config account verified successfully");
     });
 
     it("Fails to update fee amount with same value", async () => {
-      const sameFee = new anchor.BN(100); // Same as current
+      const sameFee = 100; // Same as current
 
       try {
         await program.methods
@@ -83,7 +84,7 @@ describe("depredict", () => {
     });
 
     it("Updates fee amount", async () => {
-      const newFeeAmount = new anchor.BN(200);
+      const newFeeAmount = 200;
 
       try {
         // Small delay to ensure everything is settled
@@ -108,12 +109,12 @@ describe("depredict", () => {
         throw error;
       }
       const configAccount = await program.account.config.fetch(configPda);
-      assert.ok(configAccount.feeAmount.eq(newFeeAmount));
+      assert.ok(configAccount.feeAmount === newFeeAmount);
     
     });
 
     it("Fails to update fee amount with wrong authority", async () => {
-      const newFeeAmount = new anchor.BN(20);
+      const newFeeAmount = 199;
       const wrongAdmin = Keypair.generate();
 
       try {
@@ -141,7 +142,7 @@ describe("depredict", () => {
 
 
     it("Fails to update fee amount with invalid amount (too high)", async () => {
-      const invalidFeeAmount = new anchor.BN(1_000_000_001); // Over 1 billion limit
+      const invalidFeeAmount = 201; // Over 200 limit
 
       try {
         await program.methods
@@ -234,12 +235,8 @@ describe("depredict", () => {
             skipPreflight: false,
             commitment: "confirmed",
           });
-        console.log("Update fee vault tx:", tx);
+        // console.log("Update fee vault tx:", tx);
       } catch (error) {
-        console.error("Update fee vault error:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
-        }
         throw error;
       }
 
@@ -267,7 +264,6 @@ describe("depredict", () => {
         
         assert.fail("Transaction should have failed due to same fee vault");
       } catch (error) {
-        console.log("Error message:", error.message);
         assert.include(error.message, "AnchorError");
         assert.include(error.message, "SameFeeVault");
       }
@@ -294,11 +290,6 @@ describe("depredict", () => {
         
         assert.fail("Transaction should have failed due to unauthorized access");
       } catch (error) {
-        console.log("Error message:", error.message);
-        // The error can be various types:
-        // 1. AnchorError with "Unauthorized" - program logic rejected it
-        // 2. Simulation failure with "debit an account but found no record of a prior credit" - account setup issue
-        // 3. General simulation failure
         if (error.message.includes("AnchorError")) {
           assert.include(error.message, "Unauthorized");
         } else if (error.message.includes("debit an account but found no record of a prior credit")) {
@@ -348,7 +339,7 @@ describe("depredict", () => {
     });
 
     it("Cleanup: Resets config to initial state", async () => {
-      const initialFeeAmount = new anchor.BN(100);
+      const initialFeeAmount = 100; // 1%
 
       try {
         // Reset authority back to ADMIN
@@ -405,7 +396,7 @@ describe("depredict", () => {
       const configAccount = await program.account.config.fetch(configPda);
       assert.ok(configAccount.authority.equals(ADMIN.publicKey));
       assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
-      assert.ok(configAccount.feeAmount.eq(initialFeeAmount));
+      assert.ok(configAccount.feeAmount === initialFeeAmount);
       console.log("✅ Config account reset to initial state");
     });
   });

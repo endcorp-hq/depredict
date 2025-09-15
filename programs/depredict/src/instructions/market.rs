@@ -260,8 +260,8 @@ impl<'info> MarketContext<'info> {
             .checked_add(1)
             .ok_or(DepredictError::ArithmeticOverflow)?;
 
-        config.num_markets = config
-            .num_markets
+        config.global_markets = config
+            .global_markets
             .checked_add(1)
             .ok_or(DepredictError::ArithmeticOverflow)?;
     
@@ -367,9 +367,9 @@ impl<'info> CloseMarketContext<'info> {
         ]];
 
 
-        msg!("Before decrement - num_markets: {}", config.num_markets);
-        config.num_markets = config.num_markets.checked_sub(1).ok_or(DepredictError::ArithmeticOverflow)?;
-        msg!("After decrement - num_markets: {}", config.num_markets);
+        msg!("Before decrement - num_markets: {}", config.global_markets);
+        config.global_markets = config.global_markets.checked_sub(1).ok_or(DepredictError::ArithmeticOverflow)?;
+        msg!("After decrement - num_markets: {}", config.global_markets);
 
         // 1. Transfer remaining token liquidity (if any) from market vault to fee vault ATA
         if self.market_vault.amount > 0 {

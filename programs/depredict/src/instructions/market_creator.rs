@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::state::{MarketCreator, CreateMarketCreatorArgs, UpdateMarketCreatorArgs, VerifyMarketCreatorArgs};
+use crate::state::{MarketCreator, CreateMarketCreatorArgs, VerifyMarketCreatorArgs};
 use crate::constants::*;
 use crate::errors::*;
 
@@ -22,7 +22,6 @@ pub struct CreateMarketCreatorContext<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(args: UpdateMarketCreatorArgs)]
 pub struct UpdateMarketCreatorContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
@@ -96,6 +95,7 @@ impl<'info> CreateMarketCreatorContext<'info> {
             active_markets: 0,
             pages_allocated: 0,
             fee_vault: args.fee_vault,
+            creator_fee_bps: args.creator_fee_bps,
             verified: false, // Not verified until collection and merkle tree are created
         });
 
@@ -105,22 +105,59 @@ impl<'info> CreateMarketCreatorContext<'info> {
 }
 
 impl<'info> UpdateMarketCreatorContext<'info> {
-    pub fn update_market_creator(&mut self, args: UpdateMarketCreatorArgs) -> Result<()> {
+
+    pub fn update_creator_name(&mut self, name: String) -> Result<()> {
         let market_creator = &mut self.market_creator;
 
         // Update fields if provided
-        if let Some(name) = args.name {
-            market_creator.name = name;
-        }
-
-        if let Some(fee_vault) = args.fee_vault {
-            market_creator.fee_vault = fee_vault;
-        }
-
-        msg!("Market creator updated successfully");
+        require!(
+            market_creator.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+        market_creator.name = name;
+ 
         Ok(())
     }
-    // 
+
+    pub fn update_creator_fee_vault(&mut self, current_fee_vault: Pubkey, new_fee_vault: Pubkey) -> Result<()> {
+        let market_creator = &mut self.market_creator;
+        require!(
+            market_creator.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+
+        require!(
+            current_fee_vault != new_fee_vault,
+            DepredictError::SameFeeVault
+        );
+
+        require!(
+            current_fee_vault == market_creator.fee_vault,
+            DepredictError::InvalidFeeVault
+        );
+
+        market_creator.fee_vault = new_fee_vault;
+        msg!("Fee vault updated to {}", new_fee_vault);
+        Ok(())
+    }
+
+    pub fn update_creator_fee(&mut self, creator_fee: u16) -> Result<()> {
+        let market_creator = &mut self.market_creator;
+        require!(
+            market_creator.authority == *self.signer.key,
+            DepredictError::Unauthorized
+        );
+
+        require!(
+            creator_fee <= MAX_FEE_AMOUNT,
+            DepredictError::InvalidFeeAmount
+        );
+
+        market_creator.creator_fee_bps = creator_fee;
+
+        Ok(())
+    }
+
     pub fn update_merkle_tree(
         &mut self,
         new_tree: Pubkey,
