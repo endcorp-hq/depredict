@@ -135,7 +135,6 @@ describe("depredict", () => {
         
         assert.fail("Transaction should have failed due to unauthorized access");
       } catch (error) {
-        console.log("Error message:", error.message);
         assert.include(error.message, "Unauthorized");
       }
     });
@@ -326,7 +325,6 @@ describe("depredict", () => {
         
         assert.fail("Transaction should have failed due to invalid fee vault account");
       } catch (error) {
-        console.log("Error message:", error.message);
         // The error can be either AnchorError or a constraint violation
         if (error.message.includes("AnchorError")) {
           assert.include(error.message, "ConstraintRaw");
@@ -397,7 +395,6 @@ describe("depredict", () => {
       assert.ok(configAccount.authority.equals(ADMIN.publicKey));
       assert.ok(configAccount.feeVault.equals(FEE_VAULT.publicKey));
       assert.ok(configAccount.feeAmount === initialFeeAmount);
-      console.log("✅ Config account reset to initial state");
     });
   });
 });

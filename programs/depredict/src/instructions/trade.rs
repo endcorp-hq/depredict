@@ -473,6 +473,8 @@ impl<'info> PositionContext<'info> {
 
             position.asset_id = asset_id;
             position.leaf_index = leaf_index as u64;
+            // Persist updated position back into the page entry
+            target_page.entries[position_index] = position;
             
      Ok(())
     }

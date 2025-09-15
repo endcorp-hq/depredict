@@ -181,8 +181,8 @@ describe("depredict", () => {
     console.log("USER public key:", USER.publicKey.toString());
     console.log("USDC mint authority (LOCAL_MINT):", LOCAL_MINT.publicKey.toString());
     
-    // Ensure USER has enough SOL for fees and account creation
-    console.log("Ensuring USER has at least 5 SOL for fees...");
+    // Avoid airdrops on devnet
+    console.log("Ensuring USER has enough SOL for fees (no airdrop on devnet)...");
     await ensureAccountBalance(USER.publicKey, 5 * LAMPORTS_PER_SOL);
 
     // Create user's USDC token account

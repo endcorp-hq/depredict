@@ -300,6 +300,7 @@ export async function createMarketCreator(name: string, feeVault: PublicKey): Pr
       .createMarketCreator({
         name: name,
         feeVault: feeVault,
+        creatorFeeBps: 100,
       })
       .accountsPartial({
         signer: ADMIN.publicKey,

@@ -45,24 +45,24 @@ describe("depredict", () => {
 
   let yesSlotIndex: number | null = null;
   let yesAssetId: PublicKey | null = null;
-  let yesTree: PublicKey | null = null;
+  let yesTree: any | null = null;
   let yesRoot: PublicKeyBytes | null = null;
   let yesDataHash: PublicKeyBytes | null = null;
   let yesCreatorHash: PublicKeyBytes | null = null;
   let yesNonce: number | null = null;
   let yesIndex: number | null = null;
-  let yesProof: PublicKeyBytes[] | null = null;
+  let yesProof: any | null = null;
 
 
   let noSlotIndex: number | null = null;
   let noAssetId: PublicKey | null = null;
-  let noTree: PublicKey | null = null;
+  let noTree: any | null = null;
   let noRoot: PublicKeyBytes | null = null;
   let noDataHash: PublicKeyBytes | null = null;
   let noCreatorHash: PublicKeyBytes | null = null;
   let noNonce: number | null = null;
   let noIndex: number | null = null;
-  let noProof: PublicKeyBytes[] | null = null;
+  let noProof: any | null = null;
 
 
 
@@ -166,8 +166,8 @@ describe("depredict", () => {
   }
 
   before(async () => {
-    await ensureAccountBalance(USER.publicKey, 2_000_000_000);
-    await ensureAccountBalance(ADMIN.publicKey, 2_000_000_000);
+    //await ensureAccountBalance(USER.publicKey, 2_000_000_000);
+    // await ensureAccountBalance(ADMIN.publicKey, 2_000_000_000);
 
     await loadMarketCreator();
 
@@ -179,45 +179,51 @@ describe("depredict", () => {
 
     const yes = await openPosition({ direction: { yes: {} }, amount: new anchor.BN(1_000_000), pageIndex: 0 });
     yesSlotIndex = yes.slotIndex;
+    yesAssetId = yes.assetId;
     let yesUmiAssetId = fromWeb3JsPublicKey(yes.assetId);
 
+    // load cNFT data from DAS API (allow override via DAS_RPC env)
+    const dasRpc = process.env.DAS_RPC || provider.connection.rpcEndpoint;
+    const umi = createUmi(dasRpc).use(dasApi())
+    const fetchWithRetry = async <T>(fn: () => Promise<T>, attempts = 10): Promise<T> => {
+      let lastErr: any;
+      for (let i = 0; i < attempts; i++) {
+        try { return await fn(); } catch (e) { lastErr = e; }
+      }
+      throw lastErr;
+    };
+    await new Promise(resolve => setTimeout(resolve, 10000));
     // load cNFT data from DAS API
-    const umi = createUmi('https://api.devnet.solana.com').use(dasApi())
+    const yesAsset = await fetchWithRetry(() => umi.rpc.getAsset(yesUmiAssetId));
+    const yesAssetProof = await fetchWithRetry(() => umi.rpc.getAssetProof(yesUmiAssetId));
 
-
-    // load cNFT data from DAS API
-    const yesAsset = await umi.rpc.getAsset(yesUmiAssetId)
-    const yesAssetProof = await umi.rpc.getAssetProof(yesUmiAssetId)
-
-
-    let yesTree = yesAssetProof.tree_id;
-    let yesRoot = publicKeyBytes(yesAssetProof.root);
-    let yesDataHash = publicKeyBytes(yesAsset.compression.data_hash);
-    let yesCreatorHash = publicKeyBytes(yesAsset.compression.creator_hash);
-    let yesNonce = yesAsset.compression.seq;
-    let yesIndex = yesAssetProof.node_index; // why example show  '- 2 ** yesAssetProof.proof.length'?
-    let yesProof = yesAssetProof.proof;
-
-
-
-
+    yesTree = yesAssetProof.tree_id;
+    yesRoot = publicKeyBytes(yesAssetProof.root);
+    yesDataHash = publicKeyBytes(yesAsset.compression.data_hash);
+    yesCreatorHash = publicKeyBytes(yesAsset.compression.creator_hash);
+    yesNonce = yesAsset.compression.seq;
+    yesIndex = yesAssetProof.node_index; // why example show  '- 2 ** yesAssetProof.proof.length'?
+    yesProof = yesAssetProof.proof;
 
     const no = await openPosition({ direction: { no: {} }, amount: new anchor.BN(2_000_000), pageIndex: 0 });
     noSlotIndex = no.slotIndex;
+    noAssetId = no.assetId;
     let noUmiAssetId = fromWeb3JsPublicKey(no.assetId);
 
-    // load cNFT data from DAS API
-    const noAsset = await umi.rpc.getAsset(noUmiAssetId)
-    const noAssetProof = await umi.rpc.getAssetProof(noUmiAssetId)
+
+    // timeout 10 seconds
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    const noAsset = await fetchWithRetry(() => umi.rpc.getAsset(noUmiAssetId));
+    const noAssetProof = await fetchWithRetry(() => umi.rpc.getAssetProof(noUmiAssetId));
 
 
-    let noTree = noAssetProof.tree_id;
-    let noRoot = publicKeyBytes(noAssetProof.root);
-    let noDataHash = publicKeyBytes(noAsset.compression.data_hash);
-    let noCreatorHash = publicKeyBytes(noAsset.compression.creator_hash);
-    let noNonce = noAsset.compression.seq;
-    let noIndex = noAssetProof.node_index; // why example show  '- 2 ** yesAssetProof.proof.length'?
-    let noProof = noAssetProof.proof;
+    noTree = noAssetProof.tree_id;
+    noRoot = publicKeyBytes(noAssetProof.root);
+    noDataHash = publicKeyBytes(noAsset.compression.data_hash);
+    noCreatorHash = publicKeyBytes(noAsset.compression.creator_hash);
+    noNonce = noAsset.compression.seq;
+    noIndex = noAssetProof.node_index; // why example show  '- 2 ** yesAssetProof.proof.length'?
+    noProof = noAssetProof.proof;
     });
 
   describe("Claim Order", () => {
