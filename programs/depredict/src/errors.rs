@@ -60,6 +60,9 @@ DepredictError {
     #[msg("Insufficient liquidity")]
     InsufficientLiquidity,
 
+    #[msg("Market not resolved")]
+    MarketNotResolved,
+
     #[msg("Market already resolved")]
     MarketAlreadyResolved,
 

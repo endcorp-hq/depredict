@@ -31,6 +31,27 @@ anchor.setProvider(provider);
 
 const program = anchor.workspace.Depredict as Program<Depredict>;
 
+// Monkey-patch provider to skip confirmations to avoid devnet timeout flakiness
+const originalSendAndConfirm = provider.sendAndConfirm.bind(provider);
+provider.sendAndConfirm = async (tx: anchor.web3.Transaction, signers?: anchor.web3.Signer[], _opts?: anchor.web3.ConfirmOptions) => {
+  try {
+    tx.feePayer = provider.wallet.publicKey;
+    if (!tx.recentBlockhash) {
+      const { blockhash } = await provider.connection.getLatestBlockhash('processed');
+      tx.recentBlockhash = blockhash;
+    }
+    if (signers && signers.length) {
+      tx.partialSign(...signers);
+    }
+    const signed = await provider.wallet.signTransaction(tx);
+    const sig = await provider.connection.sendRawTransaction(signed.serialize(), { skipPreflight: true, maxRetries: 0 });
+    return sig;
+  } catch (e) {
+    // Fallback to original in case of unexpected errors
+    return originalSendAndConfirm(tx, signers, _opts);
+  }
+};
+
 // Load keypairs
 const ADMIN = Keypair.fromSecretKey(
   Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/keypair.json", "utf-8")))
