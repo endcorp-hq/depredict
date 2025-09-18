@@ -15,7 +15,6 @@ use anchor_spl::{
     }
 };
 
-
 use switchboard_on_demand::{prelude::rust_decimal::Decimal};
 use crate::{constants::{ 
     MARKET, POSITION_PAGE
@@ -32,30 +31,19 @@ use crate::errors::DepredictError;
 
 #[derive(Accounts)]
 #[instruction(args: CreateMarketArgs)]
-pub struct MarketContext<'info> {
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
-    /// CHECK: fee vault account
-    #[account(
-        mut, 
-        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
-    )]
-    pub fee_vault: AccountInfo<'info>,
-
-    /// CHECK: oracle is checked in the implementation function
-    #[account(mut)]
-    pub oracle_pubkey: AccountInfo<'info>,
-    
-    #[account(mut)]
-    pub config: Box<Account<'info, Config>>,
-
+pub struct CreateMarketContext<'info> {
     /// CHECK: Market creator account that will own this market
     #[account(
         mut,
         constraint = market_creator.authority == payer.key() @ DepredictError::Unauthorized,
     )]
     pub market_creator: Box<Account<'info, MarketCreator>>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    
+    #[account(mut)]
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         init,
@@ -87,10 +75,15 @@ pub struct MarketContext<'info> {
         init,
         payer = payer,
         associated_token::mint = mint,
-        associated_token::authority = market,
-        associated_token::token_program = token_program
+        associated_token::authority = market, // vault should be owned by the market PDA
+        associated_token::token_program = token_program,
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    
+    /// CHECK: oracle is checked in the implementation function
+    #[account(mut)]
+    pub oracle_pubkey: AccountInfo<'info>,
+
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -145,20 +138,23 @@ pub struct CloseMarketContext<'info> {
     /// CHECK: fee vault account where rent/tokens are sent
     #[account(
         mut, 
-        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
+        constraint = protocol_fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
     )]
-    pub fee_vault: AccountInfo<'info>,
+    pub protocol_fee_vault: AccountInfo<'info>,
 
     #[account(mut)]
     pub config: Box<Account<'info, Config>>,
 
+    // Protocol fee vault token account (must match stored pubkey and mint)
     #[account(
         init_if_needed,
         payer = signer,
         associated_token::mint = mint,
-        associated_token::authority = fee_vault
+        associated_token::authority = protocol_fee_vault,
+        constraint = protocol_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint,
     )]
-    pub fee_vault_mint_ata: InterfaceAccount<'info, TokenAccount>,
+    pub protocol_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+
     #[account(
         mut,
         constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized
@@ -168,7 +164,7 @@ pub struct CloseMarketContext<'info> {
     // Creator fee vault token account (must match stored pubkey and mint)
     #[account(
         mut,
-        constraint = creator_fee_vault_ata.key() == market_creator.fee_vault @ DepredictError::InvalidFeeVault,
+        constraint = creator_fee_vault_ata.owner == market_creator.fee_vault @ DepredictError::InvalidFeeVault,
         constraint = creator_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
     )]
     pub creator_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -196,27 +192,18 @@ pub struct CloseMarketContext<'info> {
         associated_token::authority = market,
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-    // Protocol fee vault token account (must match stored pubkey and mint)
-    #[account(
-        mut,
-        constraint = protocol_fee_vault_ata.key() == config.fee_vault @ DepredictError::InvalidFeeVault,
-        constraint = protocol_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
-    )]
-    pub protocol_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> MarketContext<'info> {
-    pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &MarketContextBumps) -> Result<()> {
-        
+impl<'info> CreateMarketContext<'info> {
+    pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &CreateMarketContextBumps) -> Result<()> {
         let market = &mut self.market;
         let config = &mut self.config;
         let market_type = args.market_type;
-
         let ts = Clock::get()?.unix_timestamp;
-
         let oracle_pubkey: Option<Pubkey>;
 
         match args.oracle_type {
@@ -361,7 +348,6 @@ impl<'info> ResolveMarketContext<'info> {
     }
 }
 
-
 impl<'info> CloseMarketContext<'info> {
     pub fn close_market(&mut self, args: CloseMarketArgs) -> Result<()> {
 
@@ -457,22 +443,15 @@ impl<'info> CloseMarketContext<'info> {
                 self.token_program.to_account_info(),
                 CloseAccount {
                     account: self.market_vault.to_account_info(),
-                    destination: self.fee_vault.to_account_info(), // Lamport destination
+                    destination: self.creator_fee_vault_ata.to_account_info(), // Lamport destination
                     authority: market.to_account_info(), // Market PDA is authority
                 },
                 market_signer
             )
         )?;
 
-
-
-        // 3. Close the market state account itself, sending its rent lamports to the fee_vault
-        // Anchor does this automatically if the account is mutable and owned by the program,
-        // sending lamports to the payer (signer) by default. To send to fee_vault,
-        // we need to transfer lamports *before* the instruction ends.
-        
         let market_account_info = self.market.to_account_info();
-        let fee_vault_info = self.fee_vault.to_account_info();
+        let fee_vault_info = self.creator_fee_vault_ata.to_account_info();
         let market_lamports = market_account_info.lamports();
 
         msg!("Closing market account: {}", market_account_info.key());
@@ -481,17 +460,9 @@ impl<'info> CloseMarketContext<'info> {
         **market_account_info.try_borrow_mut_lamports()? -= market_lamports;
         **fee_vault_info.try_borrow_mut_lamports()? += market_lamports;        
 
-
-
         // Mark the market account data as closed by zeroizing (optional but good practice)
-        // market_account_info.assign(&System::id()); // This reassigns owner
-        // market_account_info.resize(0)?; // This might fail if rent epoch not met
-        // A common way is to zero out the data manually if needed, 
-        // but closing typically involves just reclaiming lamports.
-        // Since Anchor doesn't have a direct `close_account_manually_to_recipient`,
-        // transferring lamports like this is the way.
-        // The account will be garbage collected eventually.
-
+        market_account_info.resize(0)?; // This might fail if rent epoch not met
+        market_account_info.assign(&System::id()); // This reassigns owner
         Ok(())
     }
 }

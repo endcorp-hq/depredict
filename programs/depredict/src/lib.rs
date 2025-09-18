@@ -10,7 +10,7 @@ mod helpers;
 use state::*;
 use instructions::*;
 
-declare_id!("B59K5U1aam8BCJ428UELFZin6zjJeL2zbzsJdDtfqVwC");
+declare_id!("FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33");
 
 #[program]
 pub mod depredict {
@@ -80,7 +80,7 @@ pub mod depredict {
 
     // MARKET INSTRUCTIONS
 
-    pub fn create_market(ctx: Context<MarketContext>, args: CreateMarketArgs) -> Result<()> {
+    pub fn create_market(ctx: Context<CreateMarketContext>, args: CreateMarketArgs) -> Result<()> {
         ctx.accounts.create_market(args, &ctx.bumps)?;
         Ok(())
     }
@@ -102,13 +102,13 @@ pub mod depredict {
 
     // POSITION INSTRUCTIONS
 
-    pub fn open_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
+    pub fn open_position(ctx: Context<OpenPositionContext>, args: OpenPositionArgs) -> Result<()> {
         ctx.accounts.open_position(args)?;
         Ok(())
     }
 
-    pub fn settle_position(ctx: Context<PayoutContext>, args: ClosePositionArgs) -> Result<()> {
-        ctx.accounts.payout_position(args)?;
+    pub fn settle_position(ctx: Context<SettlePositionContext>, args: SettlePositionArgs) -> Result<()> {
+        ctx.accounts.settle_position(args)?;
         Ok(())
     }
 

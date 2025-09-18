@@ -7,11 +7,10 @@ pub struct OpenPositionArgs {
     pub amount: u64,
     pub direction: PositionDirection,
     pub metadata_uri: String,
-    pub page_index: u16,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct ClosePositionArgs {
+pub struct SettlePositionArgs {
     // page and position details
     pub page_index: u16,
     pub slot_index: Option<u8>,
@@ -21,7 +20,7 @@ pub struct ClosePositionArgs {
     pub data_hash: [u8; 32],
     pub creator_hash: [u8; 32],
     pub nonce: u64,
-    pub index: u32,
+    pub leaf_index: u32,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]

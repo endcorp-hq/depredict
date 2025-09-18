@@ -19,11 +19,10 @@ use crate::{
     constants::{
         BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE, MAX_CREATOR_POSITIONS, POSITIONS_PER_PAGE, CONFIG
     }, errors::DepredictError, state::{
-        ClosePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES, Config
+        SettlePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES, Config
     },
     helpers::compute_dual_fees_sequential,
 };
-
 
 // metaplex includes
 use mpl_bubblegum::{
@@ -32,6 +31,8 @@ use mpl_bubblegum::{
     types::{MetadataArgsV2, TokenStandard},
     accounts::TreeConfig
 };
+// use mpl_bubblegum::types::LeafSchema; // adjust path if needed
+// use mpl_bubblegum::utils::hash_leaf_v1;            // adjust path if needed
 use mpl_core::programs::{
     MPL_CORE_ID
 };
@@ -58,7 +59,7 @@ pub struct EnsurePositionPageContext<'info> {
     pub market: Box<Account<'info, MarketState>>, 
 
     /// CHECK: must match market.market_creator
-    #[account(constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator)]
+    #[account(mut, constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator)]
     pub market_creator: Box<Account<'info, MarketCreator>>, 
 
     #[account(
@@ -106,24 +107,17 @@ impl<'info> EnsurePositionPageContext<'info> {
 
 #[derive(Accounts)]
 #[instruction(args: OpenPositionArgs)]
-pub struct PositionContext<'info> {
+pub struct OpenPositionContext<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    /// CHECK: multisig fee vault account
-    #[account(
-        mut, 
-        constraint = market_fee_vault.key() == market_creator.fee_vault @ DepredictError::InvalidFeeVault
-    )]
-    pub market_fee_vault: AccountInfo<'info>,
-
-    // Paged positions account for this market and page index (must exist; pre-created by market creator)
-    #[account(
-        mut,
-        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
-        bump
-    )]
+    /// current page PDA; program verifies/derives and uses it
+    #[account(mut)]
     pub position_page: Box<Account<'info, PositionPage>>,
+
+    /// next page PDA; program verifies/derives and must be pre-created by authority
+    #[account(mut)]
+    pub position_page_next: Box<Account<'info, PositionPage>>,
 
     #[account(mut,
         seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
@@ -131,9 +125,9 @@ pub struct PositionContext<'info> {
     )]
     pub market: Box<Account<'info, MarketState>>,
 
-
     /// CHECK: Market creator account that owns this market
     #[account(
+        mut,
         constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidCollection
     )]
     pub market_creator: Box<Account<'info, MarketCreator>>,
@@ -161,15 +155,15 @@ pub struct PositionContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: merkle tree account
-    #[account(constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
+    /// CHECK: merkle tree account (must be writable; Bubblegum updates it)
+    #[account(mut, constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
     pub merkle_tree: AccountInfo<'info>,
 
-    /// CHECK: collection account
-    #[account(constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
+    /// CHECK: collection account (writable; may be touched by CPI)
+    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
     pub collection: AccountInfo<'info>,
 
-    /// CHECK: TreeConfig PDA for the merkle tree
+    /// CHECK: TreeConfig PDA for the merkle tree (writable)
     #[account(mut)]
     pub tree_config: AccountInfo<'info>,
 
@@ -199,8 +193,8 @@ pub struct PositionContext<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(args: ClosePositionArgs)]
-pub struct PayoutContext<'info> {
+#[instruction(args: SettlePositionArgs)]
+pub struct SettlePositionContext<'info> {
     #[account(mut)]
     pub claimer: Signer<'info>,
 
@@ -250,22 +244,6 @@ pub struct PayoutContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    // Creator fee vault token account (must match stored pubkey and mint)
-    #[account(
-        mut,
-        constraint = creator_fee_vault_ata.key() == market_creator.fee_vault @ DepredictError::InvalidFeeVault,
-        constraint = creator_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
-    )]
-    pub creator_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    // Protocol fee vault token account (must match stored pubkey and mint)
-    #[account(
-        mut,
-        constraint = protocol_fee_vault_ata.key() == config.fee_vault @ DepredictError::InvalidFeeVault,
-        constraint = protocol_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
-    )]
-    pub protocol_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
-
     /// CHECK: MPL Core program
     #[account(address = MPL_CORE_ID)]
     pub mpl_core_program: AccountInfo<'info>,
@@ -294,7 +272,6 @@ pub struct PayoutContext<'info> {
     #[account(mut)]
     pub mpl_core_cpi_signer: AccountInfo<'info>,
 
-
     /// CHECK: Log wrapper (mpl-noop)
     #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
     pub log_wrapper_program: AccountInfo<'info>,
@@ -305,38 +282,29 @@ pub struct PayoutContext<'info> {
 }
 
 
-impl<'info> PositionContext<'info> {
-    pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<()> {
+impl<'info> OpenPositionContext<'info> {
+    pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<(Pubkey, u64)> {
 
         let market = &mut self.market;
-        let next_position_id = market.next_position_id(); // increment and fetch
+        let next_position_id = market.next_position_id();
         let market_type = market.market_type;
-        let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
 
-        // Collection is provided as an account and constrained to match market creator's collection in the accounts struct
+
+
+
+
         if market_type == MarketType::Future {
             require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
-        } 
+        }
 
-        require!(
-            market.market_end > ts, DepredictError::BettingPeriodEnded
-        );
+        require!(market.market_end > ts, DepredictError::BettingPeriodEnded);
+        require!(market.winning_direction == WinningDirection::None, DepredictError::MarketAlreadyResolved);
+        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
 
-        // checks if market has already been resolved. 
-        require!(
-            market.winning_direction == WinningDirection::None,
-            DepredictError::MarketAlreadyResolved
-        );
-
-        // Ensure multiple orders are not created at the same time
-        require!(
-            ts > market.update_ts, DepredictError::ConcurrentTransaction
-        );
-    
         let net_amount = args.amount;
-    
-        let ( current_liquidity, otherside_current_liquidity) = match args.direction {
+
+        let (current_liquidity, otherside_current_liquidity) = match args.direction {
             PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
             PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
         };
@@ -344,53 +312,65 @@ impl<'info> PositionContext<'info> {
         msg!("current liquidity {:?}", current_liquidity);
         msg!("otherside current liquidity {:?}", otherside_current_liquidity);
         msg!("Net Amount {:?}", net_amount);
-    
+
         let new_directional_liquidity = current_liquidity.checked_add(net_amount).unwrap();
         msg!("new directional liquidity {:?}", new_directional_liquidity);
-
-        let markets_liquidity = new_directional_liquidity
-            .checked_add(otherside_current_liquidity)
-            .unwrap();
+        let markets_liquidity = new_directional_liquidity.checked_add(otherside_current_liquidity).unwrap();
         msg!("markets liquidity {:?}", markets_liquidity);
-        
-        // Helper to find target page and free slot
-        let target_page: &mut PositionPage = position_page;
-        target_page.market_id = market.market_id;
-        target_page.page_index = args.page_index;
 
+        // Ensure headers are populated
+        self.position_page.market_id = market.market_id;
 
-        let mut position_index: Option<usize> = None;
+        // Pick target page and slot
+        let mut use_next_page = false;
+        let mut slot_index: Option<usize> = None;
+
+        // search current page first
         for i in 0..POSITION_PAGE_ENTRIES {
-            if target_page.entries[i].status != PositionStatus::Open { position_index = Some(i); break; }
+            if self.position_page.entries[i].status == PositionStatus::Init { slot_index = Some(i); break; }
         }
 
-        require!(position_index.is_some(), DepredictError::NoAvailablePositionSlot);
-        let position_index = position_index.unwrap();
-        msg!("Position Index {:?} (page {:?})", position_index, target_page.page_index);
-        let mut position = target_page.entries[position_index];
-    
+        if slot_index.is_none() {
+            // no free slot on current; mark prewarm and use next page
+            self.position_page.prewarm_next = true;
+            self.position_page_next.market_id = market.market_id;
+            for i in 0..POSITION_PAGE_ENTRIES {
+                if self.position_page_next.entries[i].status == PositionStatus::Init { slot_index = Some(i); break; }
+            }
+            require!(slot_index.is_some(), DepredictError::NoAvailablePositionSlot);
+            use_next_page = true;
+        }
 
-        // Update entry; leaf_index will be set after minting
-        let was_init = position.status == PositionStatus::Init;
+        let idx = slot_index.unwrap();
+        msg!("Position Index {:?} (page {:?})", idx, if use_next_page { self.position_page_next.page_index } else { self.position_page.page_index });
 
+        // Snapshot existing entry status to determine if we increment count
+        let was_init = if use_next_page {
+            self.position_page_next.entries[idx].status == PositionStatus::Init
+        } else {
+            self.position_page.entries[idx].status == PositionStatus::Init
+        };
+
+        // Build local position to avoid borrow conflicts across CPIs
+        let mut position = if use_next_page {
+            self.position_page_next.entries[idx]
+        } else {
+            self.position_page.entries[idx]
+        };
         position.amount = net_amount;
         position.direction = args.direction;
         position.status = PositionStatus::Open;
         position.position_id = next_position_id;
         position.created_at = ts;
 
-        if was_init { target_page.count = target_page.count.saturating_add(1); }
+        // Market accounting
         market.volume = market.volume.checked_add(net_amount).unwrap();
-
         match args.direction {
-            PositionDirection::Yes => {
-                market.yes_liquidity = market.yes_liquidity.checked_add(net_amount).unwrap();
-            }
-            PositionDirection::No => {
-                market.no_liquidity = market.no_liquidity.checked_add(net_amount).unwrap();
-            }
+            PositionDirection::Yes => { market.yes_liquidity = market.yes_liquidity.checked_add(net_amount).unwrap(); }
+            PositionDirection::No => { market.no_liquidity = market.no_liquidity.checked_add(net_amount).unwrap(); }
         }
 
+        // Transfer funds in
         transfer_checked(
             CpiContext::new(self.token_program.to_account_info(), TransferChecked {
                 from: self.user_mint_ata.to_account_info(),
@@ -401,133 +381,148 @@ impl<'info> PositionContext<'info> {
             net_amount,
             self.mint.decimals
         )?;
-    
-        // market.emit_market_event()?;
+        msg!("Transferred funds to market vault");
 
-            // Build uri = {base_uri}/{marketId}/{positionId}.json from fixed bytes
-            let uri = format!("{}/{}/{}.json", BASE_URI, market.market_id, next_position_id);
-            let name = format!("DEPREDICT-{}-{}", market.market_id, next_position_id);
+        // Mint cNFT to user and collection
+        msg!("Minting cNFT");
+        let uri = format!("{}/{}/{}.json", BASE_URI, market.market_id, next_position_id);
+        let name = format!("DEPREDICT-{}-{}", market.market_id, next_position_id);
+        let metadata = MetadataArgsV2 {
+            name,
+            symbol: String::from(""),
+            uri,
+            seller_fee_basis_points: 0,
+            primary_sale_happened: false,
+            is_mutable: false,
+            token_standard: Some(TokenStandard::NonFungible),
+            collection: Some(self.market_creator.core_collection),
+            creators: vec![],
+        };
+        let market_creator = &self.market_creator.to_account_info();
+        let payer = self.user.to_account_info();
+        let leaf_owner = self.user.to_account_info();
+        let system = self.system_program.to_account_info();
+        let market_creator_seeds = &[
+            MARKET_CREATOR.as_bytes(),
+            &self.market_creator.authority.to_bytes(),
+            &[self.market_creator.bump],
+        ];
+        let market_creator_signer_seeds: &[&[&[u8]]] = &[&market_creator_seeds[..]];
+        let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
+        builder
+            .tree_config(&self.tree_config)
+            .payer(&payer)
+            .tree_creator_or_delegate(Some(market_creator))
+            .collection_authority(Some(market_creator))
+            .leaf_owner(&leaf_owner)
+            .leaf_delegate(Some(&payer))
+            .merkle_tree(&self.merkle_tree)
+            .core_collection(Some(&self.collection))
+            .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
+            .log_wrapper(&self.log_wrapper_program)
+            .compression_program(&self.compression_program)
+            .mpl_core_program(&self.mpl_core_program)
+            .system_program(&system)
+            .metadata(metadata);
+        builder.invoke_signed(market_creator_signer_seeds)?;
 
-            // Build MetadataArgsV2 with required fields for mpl-bubblegum 2.1.1
-            let metadata = MetadataArgsV2 {
-                name,
-                symbol: String::from(""),
-                uri,
-                seller_fee_basis_points: 0,
-                primary_sale_happened: false,
-                is_mutable: false,
-                token_standard: Some(TokenStandard::NonFungible),
-                collection: Some(self.market_creator.core_collection),
-                creators: vec![],
-            };
+        // Fetch leaf index and asset id
+        let mut tree_config_data: &[u8] = &self.tree_config.try_borrow_data()?;
+        let tree_account = TreeConfig::deserialize(&mut tree_config_data)?;
+        let leaf_index = tree_account.num_minted - 1;
+        let (asset_id, _bump) = Pubkey::find_program_address(
+            &[b"asset", self.merkle_tree.key().as_ref(), &leaf_index.to_le_bytes()],
+            &MPL_BUBBLEGUM_ID,
+        );
+        msg!("Position created; Assset ID {:?}", asset_id);
 
-            let market_creator = &self.market_creator.to_account_info();
-            let payer = self.user.to_account_info();
-            let leaf_owner = self.user.to_account_info();
-            let system = self.system_program.to_account_info();
+        // Complete local position and persist to chosen page
+        position.asset_id = asset_id;
+        position.leaf_index = leaf_index as u64;
+        if use_next_page {
+            self.position_page_next.entries[idx] = position;
+            if was_init { self.position_page_next.count = self.position_page_next.count.saturating_add(1); }
+        } else {
+            self.position_page.entries[idx] = position;
+            if was_init { self.position_page.count = self.position_page.count.saturating_add(1); }
+        }
 
-            // Create the seeds and bump for the market creator PDA
-            let market_creator_seeds = &[
-                MARKET_CREATOR.as_bytes(),
-                &self.market_creator.authority.to_bytes(),
-                &[self.market_creator.bump]
-            ];
-            let market_creator_signer_seeds: &[&[&[u8]]] = &[&market_creator_seeds[..]];
-
-            let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
-            builder
-                .tree_config(&self.tree_config)
-                .payer(&payer)
-                .tree_creator_or_delegate(Some(market_creator))
-                .collection_authority(Some(market_creator))
-                .leaf_owner(&leaf_owner)
-                .leaf_delegate(Some(&payer))
-                .merkle_tree(&self.merkle_tree)
-                .core_collection(Some(&self.collection))
-                .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
-                .log_wrapper(&self.log_wrapper_program)
-                .compression_program(&self.compression_program)
-                .mpl_core_program(&self.mpl_core_program)
-                .system_program(&system)
-                .metadata(metadata);
-            
-            // Use invoke_signed to provide the seeds for the market creator PDA
-            builder.invoke_signed(market_creator_signer_seeds)?;
-
-            let mut tree_config_data: &[u8] = &self.tree_config.try_borrow_data()?;
-            let tree_account = TreeConfig::deserialize(&mut tree_config_data)?;
-            msg!("tree_account {:?}", tree_account);
-            let leaf_index = tree_account.num_minted - 1;
-            msg!("leaf_index {:?}", leaf_index);
-
-            let (asset_id, _bump) = Pubkey::find_program_address(
-                &[
-                    b"asset",
-                    self.merkle_tree.key().as_ref(),
-                    &leaf_index.to_le_bytes(),
-                ],
-                &MPL_BUBBLEGUM_ID,
-            );
-            // TODO: Consider emitting a dedicated PositionClaimed event with asset_id,
-            msg!("Position created; Assset ID {:?}", asset_id);
-
-            position.asset_id = asset_id;
-            position.leaf_index = leaf_index as u64;
-            // Persist updated position back into the page entry
-            target_page.entries[position_index] = position;
-            
-     Ok(())
+        // Mark update time and return
+        market.update_ts = ts;
+        Ok((asset_id, leaf_index as u64))
     }
 }
 
 
-impl<'info> PayoutContext<'info> {
-    pub fn payout_position(&mut self, args: ClosePositionArgs) -> Result<()> {
-
+impl<'info> SettlePositionContext<'info> {
+    pub fn settle_position(&mut self, args: SettlePositionArgs) -> Result<()> {
         let market = &mut self.market;
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
         let asset_id = args.asset_id;
-        // Auth: signer must be the claimer or the market creator authority
         let claimer_key = self.claimer.key();
 
+        // Market must be resolved
+        require!(market.market_state == MarketStates::Resolved, DepredictError::MarketStillActive);
 
-        // Market creator cannot redirect payout to themselves
+        // Optional: prevent creator authority from claiming
         require!(claimer_key != self.market_creator.authority, DepredictError::Unauthorized);
 
-        // Determine the slot index: use provided value or search by asset_id
-        let effective_slot_index: usize = if let Some(idx) = args.slot_index { 
-            let idx_usize = idx as usize; 
+        // Locate slot by provided index or search by asset_id
+        let effective_slot_index: usize = if let Some(idx) = args.slot_index {
+            let idx_usize = idx as usize;
             require!(idx_usize < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
             require!(position_page.entries[idx_usize].asset_id == asset_id, DepredictError::InvalidNft);
             idx_usize
         } else {
             let mut found: Option<usize> = None;
-            for i in 0..POSITION_PAGE_ENTRIES { 
+            for i in 0..POSITION_PAGE_ENTRIES {
                 if position_page.entries[i].status == PositionStatus::Open && position_page.entries[i].asset_id == asset_id { found = Some(i); break; }
             }
             require!(found.is_some(), DepredictError::PositionNotFound);
             found.unwrap()
         };
-        // Check market is resolved
-        require!(
-            market.winning_direction != WinningDirection::None,
-            DepredictError::MarketStillActive
-        );
-        require!(market.market_state == MarketStates::Resolved, DepredictError::MarketNotAllowedToPayout);
 
         require!(effective_slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
-        // Must be Open
         require!(position_page.entries[effective_slot_index].status == PositionStatus::Open, DepredictError::PositionNotFound);
         require!(position_page.entries[effective_slot_index].asset_id == args.asset_id && position_page.entries[effective_slot_index].asset_id != Pubkey::default(), DepredictError::InvalidNft);
 
-        // TODO: Verify compressed asset leaf belongs to `claimer` via Bubblegum proof CPI.
-        //       - Add leaf proof accounts (root, index, hash path) to context
-        //       - CPI to Bubblegum verify leaf and extract owner
-        //       - require!(extracted_owner == claimer_key, DepredictError::InvalidNft)
+        // Determine win status and potential payout
+        let position_direction = position_page.entries[effective_slot_index].direction;
+        let is_winner = match (position_direction, market.winning_direction) {
+            (PositionDirection::Yes, WinningDirection::Yes) |
+            (PositionDirection::No, WinningDirection::No) => true,
+            _ => false,
+        };
 
-        // to get around this, lets just try to transfer the cNFT to the market creator. If the person is able to successfully sign this transaction, then they are the owner of the cNFT. Decide on best place to put this logic... probably want to check market state first, then check if the person is the owner of the cNFT, then transfer the cNFT to the market creator, then payout the position.
+        let position_amount_raw = position_page.entries[effective_slot_index].amount;
+        let mut payout: u64 = 0;
+        if is_winner {
+            let (winning_liquidity, otherside_liquidity) = match position_direction {
+                PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
+                PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
+            };
 
+            let position_amount = Decimal::from(position_amount_raw);
+            let winning_liquidity = Decimal::from(winning_liquidity);
+            let otherside_liquidity = Decimal::from(otherside_liquidity);
+
+            let winning_percentage = position_amount
+                .checked_div(winning_liquidity)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+
+            let share_of_otherside = otherside_liquidity
+                .checked_mul(winning_percentage)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+
+            let total_payout = share_of_otherside
+                .checked_add(position_amount)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+
+            payout = total_payout.try_into().map_err(|_| DepredictError::ArithmeticOverflow)?;
+        }
+
+        // Gate by cNFT ownership/permission: burn first (CPI enforces permission)
         BurnV2CpiBuilder::new(&self.bubblegum_program)
             .tree_config(&self.tree_config)
             .payer(&self.claimer)
@@ -543,103 +538,23 @@ impl<'info> PayoutContext<'info> {
             .data_hash(args.data_hash)
             .creator_hash(args.creator_hash)
             .nonce(args.nonce)
-            .index(args.index)
+            .index(args.leaf_index)
             .invoke()?;
         msg!("cNFT burned");
 
-
-        // Check if position won
-        let position_direction = position_page.entries[effective_slot_index].direction;
-        let is_winner = match (position_direction, market.winning_direction) {
-            (PositionDirection::Yes, WinningDirection::Yes) |
-            (PositionDirection::No, WinningDirection::No) => true,
-            _ => false,
-        };
-
-        let position_amount = position_page.entries[effective_slot_index].amount;
-        let mut payout = 0;
-        if is_winner {
-
-            let (winning_liquidity, otherside_liquidity) = match position_direction {
-                PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
-                PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
-            };
-            
-
-            // Convert u64s to Decimals
-            let position_amount = Decimal::from(position_amount);
-            let winning_liquidity = Decimal::from(winning_liquidity);
-            let otherside_liquidity = Decimal::from(otherside_liquidity);
-
-            // Compute percentage share of the winning pool
-            let winning_percentage = position_amount
-                .checked_div(winning_liquidity)
-                .ok_or(DepredictError::ArithmeticOverflow)?;
-
-            // Compute share from otherside pool
-            let share_of_otherside = otherside_liquidity
-                .checked_mul(winning_percentage)
-                .ok_or(DepredictError::ArithmeticOverflow)?;
-
-            // Total payout = stake + winnings
-            let total_payout = share_of_otherside
-                .checked_add(position_amount)
-                .ok_or(DepredictError::ArithmeticOverflow)?;
-
-            // Convert back to u64 (this floors the value)
-            payout = total_payout.try_into().map_err(|_| DepredictError::ArithmeticOverflow)?;
-        }
-
+        // If winner, transfer payout (after successful burn gating)
         if payout > 0 && is_winner {
-            // Compute sequential fees: creator on gross payout, then protocol on remainder
-            let (creator_fee, protocol_fee, net_payout) = compute_dual_fees_sequential(
+            let (_creator_fee, _protocol_fee, net_payout) = compute_dual_fees_sequential(
                 payout,
                 self.market_creator.creator_fee_bps,
                 self.config.fee_amount,
             )?;
-
-            let market_signer: &[&[&[u8]]] = &[&[MARKET.as_bytes(), &market.market_id.to_le_bytes(), &[market.bump]]];
-            msg!("Using signer seeds: {:?}", market_signer);
-            msg!("Payout (gross)={}, creator_fee={}, protocol_fee={}, net={}", payout, creator_fee, protocol_fee, net_payout);
-
-            // Transfer creator fee to creator vault
-            if creator_fee > 0 {
-                transfer_checked(
-                    CpiContext::new_with_signer(
-                        self.token_program.to_account_info(),
-                        TransferChecked {
-                            from: self.market_vault.to_account_info(),
-                            mint: self.mint.to_account_info(),
-                            to: self.creator_fee_vault_ata.to_account_info(),
-                            authority: market.to_account_info(),
-                        },
-                        market_signer
-                    ),
-                    creator_fee,
-                    self.mint.decimals
-                )?;
-            }
-
-            // Transfer protocol fee to protocol vault
-            if protocol_fee > 0 {
-                transfer_checked(
-                    CpiContext::new_with_signer(
-                        self.token_program.to_account_info(),
-                        TransferChecked {
-                            from: self.market_vault.to_account_info(),
-                            mint: self.mint.to_account_info(),
-                            to: self.protocol_fee_vault_ata.to_account_info(),
-                            authority: market.to_account_info(),
-                        },
-                        market_signer
-                    ),
-                    protocol_fee,
-                    self.mint.decimals
-                )?;
-            }
-
-            // Transfer net payout to winner
             if net_payout > 0 {
+                let market_signer: &[&[&[u8]]] = &[&[
+                    MARKET.as_bytes(),
+                    &market.market_id.to_le_bytes(),
+                    &[market.bump],
+                ]];
                 transfer_checked(
                     CpiContext::new_with_signer(
                         self.token_program.to_account_info(),
@@ -649,22 +564,19 @@ impl<'info> PayoutContext<'info> {
                             to: self.claimer_mint_ata.to_account_info(),
                             authority: market.to_account_info(),
                         },
-                        market_signer
+                        market_signer,
                     ),
                     net_payout,
-                    self.mint.decimals
+                    self.mint.decimals,
                 )?;
             }
         }
 
+        // Mark as claimed and update timestamp
         position_page.entries[effective_slot_index].status = PositionStatus::Claimed;
-
         require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
         market.update_ts = ts;
-        // TODO: Emit a specific payout/settlement event rather than the full market event. Probs redesign all events to be more specific.
         market.emit_market_event()?;
-
-        msg!("Payout completed successfully");
         Ok(())
     }
 }
@@ -772,4 +684,3 @@ impl<'info> ClosePositionPageContext<'info> {
         Ok(())
     }
 }
-
