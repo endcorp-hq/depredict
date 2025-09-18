@@ -159,7 +159,19 @@ pub struct CloseMarketContext<'info> {
         associated_token::authority = fee_vault
     )]
     pub fee_vault_mint_ata: InterfaceAccount<'info, TokenAccount>,
+    #[account(
+        mut,
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>,
 
+    // Creator fee vault token account (must match stored pubkey and mint)
+    #[account(
+        mut,
+        constraint = creator_fee_vault_ata.key() == market_creator.fee_vault @ DepredictError::InvalidFeeVault,
+        constraint = creator_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
+    )]
+    pub creator_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     // Market must exist and match args.market_id
     #[account(
         mut,
@@ -184,7 +196,13 @@ pub struct CloseMarketContext<'info> {
         associated_token::authority = market,
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-
+    // Protocol fee vault token account (must match stored pubkey and mint)
+    #[account(
+        mut,
+        constraint = protocol_fee_vault_ata.key() == config.fee_vault @ DepredictError::InvalidFeeVault,
+        constraint = protocol_fee_vault_ata.mint == mint.key() @ DepredictError::InvalidMint
+    )]
+    pub protocol_fee_vault_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -350,16 +368,17 @@ impl<'info> CloseMarketContext<'info> {
         let market = &mut self.market;
         let signer = &self.signer;
         let config = &mut self.config;
+        let market_creator = &mut self.market_creator;
 
         require!(market.market_creator == *signer.key, DepredictError::Unauthorized);
 
         let market_state = market.market_state;
         require!(market_state == MarketStates::Resolved, DepredictError::MarketStillActive);
 
-        let market_id = self.market.market_id;
+        let market_id = market.market_id;
         require!(market_id == args.market_id, DepredictError::InvalidMarketId);
 
-        let market_bump = self.market.bump;
+        let market_bump = market.bump;
         let market_signer: &[&[&[u8]]] = &[&[
             MARKET.as_bytes(),
             &market_id.to_le_bytes(),
@@ -371,23 +390,64 @@ impl<'info> CloseMarketContext<'info> {
         config.global_markets = config.global_markets.checked_sub(1).ok_or(DepredictError::ArithmeticOverflow)?;
         msg!("After decrement - num_markets: {}", config.global_markets);
 
-        // 1. Transfer remaining token liquidity (if any) from market vault to fee vault ATA
-        if self.market_vault.amount > 0 {
-            msg!("Transferring {} tokens from market vault before closing.", self.market_vault.amount);
-            transfer_checked(
-                CpiContext::new_with_signer(
-                    self.token_program.to_account_info(),
-                    TransferChecked {
-                        from: self.market_vault.to_account_info(),
-                        mint: self.mint.to_account_info(),
-                        to: self.fee_vault_mint_ata.to_account_info(),
-                        authority: self.market.to_account_info(), // Market PDA is authority
-                    },
-                    market_signer,
-                ),
-                self.market_vault.amount,
-                self.mint.decimals,
-            )?;
+        // 1. Distribute remaining token liquidity from market vault to creator and protocol
+        let total_remaining: u64 = self.market_vault.amount;
+        if total_remaining > 0 {
+            let creator_bps: u64 = market_creator.creator_fee_bps as u64;
+            let protocol_bps: u64 = config.fee_amount as u64;
+            let sum_bps: u64 = creator_bps
+                .checked_add(protocol_bps)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+
+            // Compute creator share proportionally: total * creator_bps / (creator_bps + protocol_bps), rounded down
+            let creator_share: u64 = if sum_bps == 0 {
+                0
+            } else {
+                let numerator: u128 = (total_remaining as u128)
+                    .checked_mul(creator_bps as u128)
+                    .ok_or(DepredictError::ArithmeticOverflow)?;
+                let denom: u128 = sum_bps as u128;
+                u64::try_from(numerator / denom).map_err(|_| DepredictError::ArithmeticOverflow)?
+            };
+            let protocol_share: u64 = total_remaining
+                .checked_sub(creator_share)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+
+            // First, transfer creator share (if any)
+            if creator_share > 0 {
+                transfer_checked(
+                    CpiContext::new_with_signer(
+                        self.token_program.to_account_info(),
+                        TransferChecked {
+                            from: self.market_vault.to_account_info(),
+                            mint: self.mint.to_account_info(),
+                            to: self.creator_fee_vault_ata.to_account_info(),
+                            authority: market.to_account_info(),
+                        },
+                        market_signer,
+                    ),
+                    creator_share,
+                    self.mint.decimals,
+                )?;
+            }
+
+            // Then, transfer the remainder to the protocol vault (covers both proportional share and sum_bps==0 case)
+            if protocol_share > 0 {
+                transfer_checked(
+                    CpiContext::new_with_signer(
+                        self.token_program.to_account_info(),
+                        TransferChecked {
+                            from: self.market_vault.to_account_info(),
+                            mint: self.mint.to_account_info(),
+                            to: self.protocol_fee_vault_ata.to_account_info(),
+                            authority: market.to_account_info(),
+                        },
+                        market_signer,
+                    ),
+                    protocol_share,
+                    self.mint.decimals,
+                )?;
+            }
         }
 
         // 2. Close the market's token ATA, sending its rent lamports to the fee_vault
@@ -398,11 +458,13 @@ impl<'info> CloseMarketContext<'info> {
                 CloseAccount {
                     account: self.market_vault.to_account_info(),
                     destination: self.fee_vault.to_account_info(), // Lamport destination
-                    authority: self.market.to_account_info(), // Market PDA is authority
+                    authority: market.to_account_info(), // Market PDA is authority
                 },
                 market_signer
             )
         )?;
+
+
 
         // 3. Close the market state account itself, sending its rent lamports to the fee_vault
         // Anchor does this automatically if the account is mutable and owned by the program,
