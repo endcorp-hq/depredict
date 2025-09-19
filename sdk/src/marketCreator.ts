@@ -9,12 +9,12 @@ export default class MarketCreatorSDK {
   /**
    * Create a MarketCreator account (owned by signer)
    */
-  async createMarketCreator({ name, feeVault, signer }: { name: string; feeVault: PublicKey; signer: PublicKey; }) {
+  async createMarketCreator({ name, feeVault, creatorFeeBps, signer }: { name: string; feeVault: PublicKey; creatorFeeBps: number; signer: PublicKey; }) {
     const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, signer);
     const ixs: TransactionInstruction[] = [];
     ixs.push(
       await this.program.methods
-        .createMarketCreator({ name, feeVault })
+        .createMarketCreator({ name, feeVault, creatorFeeBps })
         .accountsPartial({
           signer,
           marketCreator: marketCreatorPDA,
@@ -47,21 +47,58 @@ export default class MarketCreatorSDK {
   }
 
   /**
-   * Update MarketCreator (name and/or feeVault)
-   * Note: Context requires merkleTree and treeConfig accounts even if only updating fields.
+   * Update MarketCreator name
    */
-  async updateMarketCreator({ signer, name, feeVault, merkleTree }: { signer: PublicKey; name?: string; feeVault?: PublicKey; merkleTree: PublicKey; }) {
+  async updateMarketCreatorName({ signer, newName }: { signer: PublicKey; newName: string; }) {
     const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, signer);
-    const treeConfig = getTreeConfigPDA(merkleTree);
     const ixs: TransactionInstruction[] = [];
     ixs.push(
       await this.program.methods
-        .updateMarketCreator({ name: name ?? null, feeVault: feeVault ?? null })
+        .updateCreatorName(newName)
         .accountsPartial({
           signer,
           marketCreator: marketCreatorPDA,
-          merkleTree,
-          treeConfig,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction()
+    );
+    return ixs;
+  }  
+  
+  /**
+  * Update MarketCreator feeVault
+  * Note: Context requires merkleTree and treeConfig accounts even if only updating fields.
+  */
+
+  async updateMarketCreatorFeeVault({ signer, currentFeeVault, newFeeVault }: { signer: PublicKey; currentFeeVault: PublicKey; newFeeVault: PublicKey; }) {
+    const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, signer);
+    const ixs: TransactionInstruction[] = [];
+    ixs.push(
+      await this.program.methods
+        .updateCreatorFeeVault(currentFeeVault, newFeeVault)
+        .accountsPartial({
+          signer,
+          marketCreator: marketCreatorPDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction()
+    );
+    return ixs;
+  }
+
+  /**
+   * Update MarketCreator fee
+   * Note: Creator fee is in basis points, 100 = 1% - max hardcoded at is 2%
+   */
+  async updateMarketCreatorFee({ signer, creatorFeeBps }: { signer: PublicKey; creatorFeeBps: number; }) {
+    const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, signer);
+    const ixs: TransactionInstruction[] = [];
+    ixs.push(
+      await this.program.methods
+        .updateCreatorFee(creatorFeeBps)
+        .accountsPartial({
+          signer,
+          marketCreator: marketCreatorPDA,
           systemProgram: SystemProgram.programId,
         })
         .instruction()

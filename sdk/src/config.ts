@@ -14,15 +14,14 @@ export default class Config {
 
   /**
    * Init a config account to maintain details
-   *
+   * Note: Fee amount is in basis points, 100 = 1% - max hardcoded at is 2%
    */
   async createConfig(feeAmount: number, payer: PublicKey) {
     const configPDA = getConfigPDA(this.program.programId);
     const ixs: TransactionInstruction[] = [];
-    const feeAmountBN = new BN(feeAmount);
     ixs.push(
       await this.program.methods
-        .initializeConfig(feeAmountBN)
+        .initializeConfig(feeAmount)
         .accountsPartial({
           signer: payer,
           feeVault: this.FEE_VAULT,
@@ -31,7 +30,7 @@ export default class Config {
         })
         .instruction()
     );
-    return ixs;
+    return ixs; 
   }
 
   /**
@@ -58,10 +57,9 @@ export default class Config {
   ) {
     const configPDA = getConfigPDA(this.program.programId);
     const ixs: TransactionInstruction[] = [];
-    const feeAmountBN = new BN(feeAmount);
     ixs.push(
       await this.program.methods
-        .updateFeeAmount(feeAmountBN)
+        .updateFeeAmount(feeAmount)
         .accountsPartial({
           signer: this.ADMIN_KEY,
           feeVault: this.FEE_VAULT,

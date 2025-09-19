@@ -35,7 +35,7 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID as CORE_PROGRAM_ID } from "./utils/constants.js";
+import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID as CORE_PROGRAM_ID, MPL_CORE_CPI_SIGNER } from "./utils/constants.js";
 import Position from "./position.js";
 import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
 
@@ -194,8 +194,8 @@ export default class Trade {
             bettingStart,
           })
           .accountsPartial({
+            marketCreator: marketCreatorPDA,
             payer: payer,
-            feeVault: this.FEE_VAULT,
             config: configPDA,
             oraclePubkey:
               oracleType == OracleType.SWITCHBOARD
@@ -203,7 +203,6 @@ export default class Trade {
                 : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
             market: marketPDA,
             positionPage0: positionPage0PDA,
-            marketCreator: marketCreatorPDA,
             mint: marketMint,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -327,12 +326,11 @@ export default class Trade {
             amount: new BN(amountInMint),
             direction: direction,
             metadataUri: metadataUri,
-            pageIndex: pageIndex,
           })
           .accountsPartial({
             user: payer,
-            marketFeeVault: this.FEE_VAULT,
             positionPage: positionPagePDA,
+            positionPageNext: positionPagePDA,
             market: marketPDA,
             marketCreator: marketCreatorPubkey,
             mint: marketMint,
@@ -341,7 +339,7 @@ export default class Trade {
             merkleTree: merkleTree,
             collection: collection,
             treeConfig: treeConfig,
-            mplCoreCpiSigner: payer,
+            mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
             mplCoreProgram: CORE_PROGRAM_ID,
             bubblegumProgram: BGUM_PROGRAM_ID,
             logWrapperProgram: MPL_NOOP_ID,
@@ -465,6 +463,14 @@ export default class Trade {
       TOKEN_PROGRAM_ID
     );
 
+    const marketCreatorPubkey = marketAccount.marketCreator;
+    const creatorFeeVaultAta = getAssociatedTokenAddressSync(
+      marketMint,
+      marketCreatorPubkey,
+      true,
+      TOKEN_PROGRAM_ID
+    );
+
     try {
       ixs.push(
         await this.program.methods
@@ -473,10 +479,12 @@ export default class Trade {
           })
           .accountsPartial({
             signer: payer,
-            feeVault: this.FEE_VAULT,
+            protocolFeeVault: this.FEE_VAULT,
+            protocolFeeVaultAta: feeVaultMintAta,
+            marketCreator: marketCreatorPubkey,
+            creatorFeeVaultAta: creatorFeeVaultAta,
             market: marketPDA,
             config: configPDA,
-            feeVaultMintAta: feeVaultMintAta,
             mint: marketMint,
             marketVault: marketVault,
             tokenProgram: TOKEN_PROGRAM_ID,
@@ -586,6 +594,11 @@ export default class Trade {
             pageIndex,
             slotIndex: slotIndex ?? null,
             assetId,
+            root,
+            dataHash,
+            creatorHash,
+            nonce,
+            leafIndex,
           })
           .accountsPartial({
             claimer: payer,

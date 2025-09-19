@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/depredict.json`.
  */
 export type Depredict = {
-  "address": "6s9hbResitoGVoBEk6e5G6c9RzfvDnVKix7kwW6fUkWe",
+  "address": "FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33",
   "metadata": {
     "name": "depredict",
     "version": "0.5.0",
@@ -76,7 +76,7 @@ export type Depredict = {
           "signer": true
         },
         {
-          "name": "feeVault",
+          "name": "protocolFeeVault",
           "writable": true
         },
         {
@@ -84,13 +84,13 @@ export type Depredict = {
           "writable": true
         },
         {
-          "name": "feeVaultMintAta",
+          "name": "protocolFeeVaultAta",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "account",
-                "path": "feeVault"
+                "path": "protocolFeeVault"
               },
               {
                 "kind": "const",
@@ -172,6 +172,14 @@ export type Depredict = {
               ]
             }
           }
+        },
+        {
+          "name": "marketCreator",
+          "writable": true
+        },
+        {
+          "name": "creatorFeeVaultAta",
+          "writable": true
         },
         {
           "name": "market",
@@ -415,24 +423,16 @@ export type Depredict = {
       ],
       "accounts": [
         {
+          "name": "marketCreator",
+          "writable": true
+        },
+        {
           "name": "payer",
           "writable": true,
           "signer": true
         },
         {
-          "name": "feeVault",
-          "writable": true
-        },
-        {
-          "name": "oraclePubkey",
-          "writable": true
-        },
-        {
           "name": "config",
-          "writable": true
-        },
-        {
-          "name": "marketCreator",
           "writable": true
         },
         {
@@ -552,6 +552,10 @@ export type Depredict = {
               ]
             }
           }
+        },
+        {
+          "name": "oraclePubkey",
+          "writable": true
         },
         {
           "name": "tokenProgram",
@@ -685,7 +689,8 @@ export type Depredict = {
           }
         },
         {
-          "name": "marketCreator"
+          "name": "marketCreator",
+          "writable": true
         },
         {
           "name": "positionPage",
@@ -782,7 +787,7 @@ export type Depredict = {
       "args": [
         {
           "name": "feeAmount",
-          "type": "u64"
+          "type": "u16"
         }
       ]
     },
@@ -805,38 +810,18 @@ export type Depredict = {
           "signer": true
         },
         {
-          "name": "marketFeeVault",
+          "name": "positionPage",
+          "docs": [
+            "current page PDA; program verifies/derives and uses it"
+          ],
           "writable": true
         },
         {
-          "name": "positionPage",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  115,
-                  95,
-                  112,
-                  97,
-                  103,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "market.market_id",
-                "account": "marketState"
-              },
-              {
-                "kind": "arg",
-                "path": "args.page_index"
-              }
-            ]
-          }
+          "name": "positionPageNext",
+          "docs": [
+            "next page PDA; program verifies/derives and must be pre-created by authority"
+          ],
+          "writable": true
         },
         {
           "name": "market",
@@ -863,7 +848,8 @@ export type Depredict = {
           }
         },
         {
-          "name": "marketCreator"
+          "name": "marketCreator",
+          "writable": true
         },
         {
           "name": "mint",
@@ -1191,6 +1177,24 @@ export type Depredict = {
           "writable": true
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "marketCreator"
         },
         {
@@ -1362,6 +1366,14 @@ export type Depredict = {
           "address": "11111111111111111111111111111111"
         },
         {
+          "name": "merkleTree",
+          "writable": true
+        },
+        {
+          "name": "collection",
+          "writable": true
+        },
+        {
           "name": "treeConfig",
           "writable": true
         },
@@ -1381,7 +1393,7 @@ export type Depredict = {
           "name": "args",
           "type": {
             "defined": {
-              "name": "closePositionArgs"
+              "name": "settlePositionArgs"
             }
           }
         }
@@ -1499,6 +1511,112 @@ export type Depredict = {
       ]
     },
     {
+      "name": "updateCreatorFee",
+      "discriminator": [
+        177,
+        106,
+        220,
+        56,
+        30,
+        10,
+        207,
+        216
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "marketCreator",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "creatorFee",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "updateCreatorFeeVault",
+      "discriminator": [
+        23,
+        113,
+        60,
+        1,
+        111,
+        180,
+        206,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "marketCreator",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "currentFeeVault",
+          "type": "pubkey"
+        },
+        {
+          "name": "newFeeVault",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "updateCreatorName",
+      "discriminator": [
+        234,
+        179,
+        252,
+        154,
+        161,
+        197,
+        161,
+        137
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "marketCreator",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "updateFeeAmount",
       "discriminator": [
         42,
@@ -1547,7 +1665,7 @@ export type Depredict = {
       "args": [
         {
           "name": "feeAmount",
-          "type": "u64"
+          "type": "u16"
         }
       ]
     },
@@ -1637,97 +1755,6 @@ export type Depredict = {
           "type": {
             "defined": {
               "name": "updateMarketArgs"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "updateMarketCreator",
-      "discriminator": [
-        74,
-        45,
-        21,
-        243,
-        168,
-        5,
-        217,
-        215
-      ],
-      "accounts": [
-        {
-          "name": "signer",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "marketCreator",
-          "writable": true
-        },
-        {
-          "name": "merkleTree",
-          "writable": true
-        },
-        {
-          "name": "treeConfig",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "merkleTree"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                152,
-                139,
-                128,
-                235,
-                121,
-                53,
-                40,
-                105,
-                178,
-                36,
-                116,
-                95,
-                89,
-                221,
-                191,
-                138,
-                38,
-                88,
-                202,
-                19,
-                220,
-                104,
-                129,
-                33,
-                38,
-                53,
-                28,
-                174,
-                7,
-                193,
-                165,
-                165
-              ]
-            }
-          }
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "args",
-          "type": {
-            "defined": {
-              "name": "updateMarketCreatorArgs"
             }
           }
         }
@@ -2071,148 +2098,158 @@ export type Depredict = {
     },
     {
       "code": 6019,
+      "name": "marketNotResolved",
+      "msg": "Market not resolved"
+    },
+    {
+      "code": 6020,
       "name": "marketAlreadyResolved",
       "msg": "Market already resolved"
     },
     {
-      "code": 6020,
+      "code": 6021,
       "name": "concurrentTransaction",
       "msg": "Concurrent transaction"
     },
     {
-      "code": 6021,
+      "code": 6022,
       "name": "marketNotAllowedToPayout",
       "msg": "Market Not allowed to payout"
     },
     {
-      "code": 6022,
+      "code": 6023,
       "name": "userTradeIsSubUser",
       "msg": "User trade is sub user"
     },
     {
-      "code": 6023,
+      "code": 6024,
       "name": "prizeNotFound",
       "msg": "Prize not found"
     },
     {
-      "code": 6024,
+      "code": 6025,
       "name": "noPrizesAvailable",
       "msg": "No Prize Available"
     },
     {
-      "code": 6025,
+      "code": 6026,
       "name": "alreadyLinked",
       "msg": "Already linked"
     },
     {
-      "code": 6026,
+      "code": 6027,
       "name": "notLinked",
       "msg": "Not linked"
     },
     {
-      "code": 6027,
+      "code": 6028,
       "name": "invalidCustomer",
       "msg": "Invalid customer"
     },
     {
-      "code": 6028,
+      "code": 6029,
       "name": "invalidMint",
       "msg": "Invalid mint"
     },
     {
-      "code": 6029,
+      "code": 6030,
       "name": "invalidFeeVault",
       "msg": "Invalid fee vault"
     },
     {
-      "code": 6030,
+      "code": 6031,
       "name": "invalidShares",
       "msg": "Invalid shares"
     },
     {
-      "code": 6031,
+      "code": 6032,
       "name": "unauthorizedToOrderBook",
       "msg": "Unauthorized to order book"
     },
     {
-      "code": 6032,
+      "code": 6033,
       "name": "orderIsFullFilled",
       "msg": "Order is full filled"
     },
     {
-      "code": 6033,
+      "code": 6034,
       "name": "overflow",
       "msg": "overflow"
     },
     {
-      "code": 6034,
+      "code": 6035,
       "name": "marketAlreadyAggregated",
       "msg": "Market already aggregated"
     },
     {
-      "code": 6035,
+      "code": 6036,
       "name": "invalidMarketId",
       "msg": "Invalid market id"
     },
     {
-      "code": 6036,
+      "code": 6037,
       "name": "invalidCollection",
       "msg": "Invalid collection"
     },
     {
-      "code": 6037,
+      "code": 6038,
       "name": "invalidCollectionMint",
       "msg": "Invalid collection mint"
     },
     {
-      "code": 6038,
+      "code": 6039,
       "name": "invalidAuthority",
       "msg": "Invalid collection authority"
     },
     {
-      "code": 6039,
+      "code": 6040,
       "name": "invalidMplCoreProgram",
       "msg": "Invalid mpl core program"
     },
     {
-      "code": 6040,
+      "code": 6041,
       "name": "invalidNft",
       "msg": "Invalid NFT"
     },
     {
-      "code": 6041,
+      "code": 6042,
       "name": "marketCreatorInactive",
       "msg": "Market creator is inactive"
     },
     {
-      "code": 6042,
+      "code": 6043,
       "name": "invalidProgram",
       "msg": "Invalid program"
     },
     {
-      "code": 6043,
+      "code": 6044,
       "name": "invalidTree",
       "msg": "Invalid tree"
     },
     {
-      "code": 6044,
+      "code": 6045,
       "name": "alreadyVerified",
       "msg": "Market creator already verified"
     },
     {
-      "code": 6045,
+      "code": 6046,
       "name": "invalidMarketCreator",
       "msg": "Invalid market creator"
     },
     {
-      "code": 6046,
+      "code": 6047,
       "name": "positionNotPrunable",
       "msg": "Position not prunable (must be Claimed or Closed)"
     },
     {
-      "code": 6047,
+      "code": 6048,
       "name": "positionPageNotEmpty",
       "msg": "Position page not empty"
+    },
+    {
+      "code": 6049,
+      "name": "invalidFeeBps",
+      "msg": "Invalid fee bps"
     }
   ],
   "types": [
@@ -2224,28 +2261,6 @@ export type Depredict = {
           {
             "name": "marketId",
             "type": "u64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "closePositionArgs",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "pageIndex",
-            "type": "u16"
-          },
-          {
-            "name": "slotIndex",
-            "type": {
-              "option": "u8"
-            }
-          },
-          {
-            "name": "assetId",
-            "type": "pubkey"
           }
         ]
       }
@@ -2281,18 +2296,18 @@ export type Depredict = {
           },
           {
             "name": "feeAmount",
-            "type": "u64"
+            "type": "u16"
           },
           {
             "name": "version",
-            "type": "u64"
+            "type": "u16"
           },
           {
             "name": "nextMarketId",
             "type": "u64"
           },
           {
-            "name": "numMarkets",
+            "name": "globalMarkets",
             "type": "u64"
           },
           {
@@ -2370,6 +2385,10 @@ export type Depredict = {
           {
             "name": "feeVault",
             "type": "pubkey"
+          },
+          {
+            "name": "creatorFeeBps",
+            "type": "u16"
           }
         ]
       }
@@ -2430,6 +2449,10 @@ export type Depredict = {
           {
             "name": "feeVault",
             "type": "pubkey"
+          },
+          {
+            "name": "creatorFeeBps",
+            "type": "u16"
           },
           {
             "name": "verified",
@@ -2708,10 +2731,6 @@ export type Depredict = {
           {
             "name": "metadataUri",
             "type": "string"
-          },
-          {
-            "name": "pageIndex",
-            "type": "u16"
           }
         ]
       }
@@ -3001,6 +3020,63 @@ export type Depredict = {
       }
     },
     {
+      "name": "settlePositionArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pageIndex",
+            "type": "u16"
+          },
+          {
+            "name": "slotIndex",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "assetId",
+            "type": "pubkey"
+          },
+          {
+            "name": "root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "dataHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "creatorHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "leafIndex",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "updateMarketArgs",
       "type": {
         "kind": "struct",
@@ -3019,26 +3095,6 @@ export type Depredict = {
                   "name": "marketStates"
                 }
               }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "updateMarketCreatorArgs",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "name",
-            "type": {
-              "option": "string"
-            }
-          },
-          {
-            "name": "feeVault",
-            "type": {
-              "option": "pubkey"
             }
           }
         ]
