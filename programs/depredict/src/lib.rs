@@ -37,11 +37,6 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn update_merkle_tree(ctx: Context<UpdateMarketCreatorContext>, new_tree: Pubkey) -> Result<()> {
-        ctx.accounts.update_merkle_tree(new_tree)?;
-        Ok(())
-    }
-
     pub fn update_base_uri(ctx: Context<UpdateConfigContext>, base_uri: [u8; 200]) -> Result<()> {
         ctx.accounts.update_base_uri(base_uri)?;
         Ok(())
@@ -63,18 +58,23 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn update_creator_name(ctx: Context<UpdateMarketCreatorContext>, name: String) -> Result<()> {
+    pub fn update_creator_name(ctx: Context<UpdateMarketCreatorDetailsContext>, name: String) -> Result<()> {
         ctx.accounts.update_creator_name(name)?;
         Ok(())
     }
 
-    pub fn update_creator_fee_vault(ctx: Context<UpdateMarketCreatorContext>, current_fee_vault: Pubkey, new_fee_vault: Pubkey) -> Result<()> {
+    pub fn update_creator_fee_vault(ctx: Context<UpdateMarketCreatorDetailsContext>, current_fee_vault: Pubkey, new_fee_vault: Pubkey) -> Result<()> {
         ctx.accounts.update_creator_fee_vault(current_fee_vault, new_fee_vault)?;
         Ok(())
     }
 
-    pub fn update_creator_fee(ctx: Context<UpdateMarketCreatorContext>, creator_fee: u16) -> Result<()> {
+    pub fn update_creator_fee(ctx: Context<UpdateMarketCreatorDetailsContext>, creator_fee: u16) -> Result<()> {
         ctx.accounts.update_creator_fee(creator_fee)?;
+        Ok(())
+    }
+
+    pub fn update_merkle_tree(ctx: Context<UpdateMarketCreatorTreeContext>, new_tree: Pubkey) -> Result<()> {
+        ctx.accounts.update_merkle_tree(new_tree)?;
         Ok(())
     }
 

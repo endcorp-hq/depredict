@@ -22,7 +22,7 @@ pub struct CreateMarketCreatorContext<'info> {
 }
 
 #[derive(Accounts)]
-pub struct UpdateMarketCreatorContext<'info> {
+pub struct UpdateMarketCreatorTreeContext<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
 
@@ -46,6 +46,19 @@ pub struct UpdateMarketCreatorContext<'info> {
         bump
     )]
     pub tree_config: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+#[derive(Accounts)]
+pub struct UpdateMarketCreatorDetailsContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -104,7 +117,7 @@ impl<'info> CreateMarketCreatorContext<'info> {
     }
 }
 
-impl<'info> UpdateMarketCreatorContext<'info> {
+impl<'info> UpdateMarketCreatorDetailsContext<'info> {
 
     pub fn update_creator_name(&mut self, name: String) -> Result<()> {
         let market_creator = &mut self.market_creator;
@@ -158,6 +171,11 @@ impl<'info> UpdateMarketCreatorContext<'info> {
         Ok(())
     }
 
+    
+
+}
+
+impl<'info> UpdateMarketCreatorTreeContext<'info> {
     pub fn update_merkle_tree(
         &mut self,
         new_tree: Pubkey,
@@ -201,8 +219,8 @@ impl<'info> UpdateMarketCreatorContext<'info> {
 
     }
 
-
 }
+
 
 impl<'info> VerifyMarketCreatorContext<'info> {
     pub fn verify_market_creator(&mut self, args: VerifyMarketCreatorArgs) -> Result<()> {
