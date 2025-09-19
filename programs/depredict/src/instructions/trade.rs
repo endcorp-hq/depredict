@@ -522,25 +522,25 @@ impl<'info> SettlePositionContext<'info> {
             payout = total_payout.try_into().map_err(|_| DepredictError::ArithmeticOverflow)?;
         }
 
-        // Gate by cNFT ownership/permission: burn first (CPI enforces permission)
-        BurnV2CpiBuilder::new(&self.bubblegum_program)
-            .tree_config(&self.tree_config)
-            .payer(&self.claimer)
-            .leaf_owner(&self.claimer)
-            .merkle_tree(&self.merkle_tree)
-            .core_collection(Some(&self.collection))
-            .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
-            .log_wrapper(&self.log_wrapper_program)
-            .compression_program(&self.compression_program)
-            .mpl_core_program(&self.mpl_core_program)
-            .system_program(&self.system_program)
-            .root(args.root)
-            .data_hash(args.data_hash)
-            .creator_hash(args.creator_hash)
-            .nonce(args.nonce)
-            .index(args.leaf_index)
-            .invoke()?;
-        msg!("cNFT burned");
+        // // Gate by cNFT ownership/permission: burn first (CPI enforces permission)
+        // BurnV2CpiBuilder::new(&self.bubblegum_program)
+        //     .tree_config(&self.tree_config)
+        //     .payer(&self.claimer)
+        //     .leaf_owner(&self.claimer)
+        //     .merkle_tree(&self.merkle_tree)
+        //     .core_collection(Some(&self.collection))
+        //     .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
+        //     .log_wrapper(&self.log_wrapper_program)
+        //     .compression_program(&self.compression_program)
+        //     .mpl_core_program(&self.mpl_core_program)
+        //     .system_program(&self.system_program)
+        //     .root(args.root)
+        //     .data_hash(args.data_hash)
+        //     .creator_hash(args.creator_hash)
+        //     .nonce(args.nonce)
+        //     .index(args.leaf_index)
+        //     .invoke()?;
+        // msg!("cNFT burned");
 
         // If winner, transfer payout (after successful burn gating)
         if payout > 0 && is_winner {

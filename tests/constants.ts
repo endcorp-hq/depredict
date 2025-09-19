@@ -16,8 +16,8 @@ const ORACLE_KEY = new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL")
 const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 // Set default environment variables if not already set
 if (!process.env.ANCHOR_PROVIDER_URL) {
-  process.env.ANCHOR_PROVIDER_URL = "http://127.0.0.1:8899";
-  console.log("Set ANCHOR_PROVIDER_URL to localnet:", process.env.ANCHOR_PROVIDER_URL);
+  process.env.ANCHOR_PROVIDER_URL = "https://api.devnet.solana.com";
+  console.log("Set ANCHOR_PROVIDER_URL to:", process.env.ANCHOR_PROVIDER_URL);
 }
 
 if (!process.env.ANCHOR_WALLET) {
@@ -25,8 +25,16 @@ if (!process.env.ANCHOR_WALLET) {
   console.log("Set ANCHOR_WALLET to:", process.env.ANCHOR_WALLET);
 }
 
-// Initialize provider and program
-const provider = anchor.AnchorProvider.env();
+// Initialize provider with longer confirm timeout and higher retries (devnet can be slow)
+const baseProvider = anchor.AnchorProvider.env();
+const rpcUrl = process.env.ANCHOR_PROVIDER_URL as string;
+const connection = new anchor.web3.Connection(rpcUrl, {
+  commitment: "processed"});
+const provider = new anchor.AnchorProvider(connection, baseProvider.wallet, {
+  commitment: "processed",
+  preflightCommitment: "processed",
+  maxRetries: 3,
+});
 anchor.setProvider(provider);
 
 const program = anchor.workspace.Depredict as Program<Depredict>;

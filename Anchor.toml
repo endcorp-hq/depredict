@@ -11,7 +11,7 @@ skip-lint = false
 depredict = "FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33"
 
 [programs.localnet]
-depredict = "B59K5U1aam8BCJ428UELFZin6zjJeL2zbzsJdDtfqVwC"
+depredict = "FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33"
 
 [registry]
 url = "https://api.apr.dev"
@@ -22,6 +22,7 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test-all = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tests.ts"
+test-batch-open-claim = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/batch-open-claim.ts"
 test-check-config = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/check-config.ts"
 test-claim-order = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/claim-order.ts"
 test-close-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/close-market.ts"
@@ -36,7 +37,6 @@ test-runner = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tes
 test-runner-continue = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/run-all-tests.ts -- --continue-on-failure"
 test-setup-markets = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/setup-markets.ts"
 test-update-market = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/market/update-market.ts"
-test-batch-open-claim = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/trade/batch-open-claim.ts"
 
 [test]
 startup_wait = 5000
@@ -45,6 +45,6 @@ upgradeable = false
 
 [test.validator]
 bind_address = "127.0.0.1"
-url = "https://devnet.helius-rpc.com/?api-key=52e2a914-28ac-4bd4-a222-1d44168db946"
+url = "https://api.devnet.solana.com"
 ledger = ".anchor/test-ledger"
 rpc_port = 8899

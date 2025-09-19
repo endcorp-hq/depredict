@@ -5,7 +5,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { ADMIN, FEE_VAULT, program, LOCAL_MINT, ORACLE_KEY } from "../constants";
+import { ADMIN, FEE_VAULT, program, LOCAL_MINT, ORACLE_KEY, provider } from "../constants";
 import { getNetworkConfig, extractErrorCode, getCurrentUnixTime, getMarketCreatorDetails } from "../helpers";
 
 
@@ -30,6 +30,11 @@ async function tryCreateMarketTx({
     program.programId
   );
 
+  // Extra logging for debugging
+  console.log("programId", program.programId.toBase58());
+  console.log("configPda", configPda.toBase58());
+  console.log("derived marketPda", marketPda.toBase58());
+
   // Market times
   const validatorTime = await getCurrentUnixTime();
  
@@ -38,17 +43,31 @@ async function tryCreateMarketTx({
   const marketEnd = new anchor.BN(validatorTime + 86400);
   const question = Array.from(Buffer.from(questionStr));
   const usdcMintToUse = usdcMintParam || LOCAL_MINT.publicKey;
+  const pageIndexBuf = Buffer.from(new Uint16Array([0]).buffer);
+  const positionPage0Pda = PublicKey.findProgramAddressSync(
+    [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+    program.programId
+  )[0];
+  console.log("positionPage0Pda", positionPage0Pda.toBase58());
 
+  async function waitForAccount(pubkey: PublicKey, attempts = 40, delayMs = 800) {
+    for (let i = 0; i < attempts; i++) {
+      const info = await provider.connection.getAccountInfo(pubkey);
+      if (info && info.data && info.data.length > 0) return true;
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+    return false;
+  }
   // Determine oracle type based on the oracle pubkey
   // For manual resolution, we use ADMIN.publicKey as oracle_pubkey but set oracleType to none
   const isManualResolve = oraclePubkey.equals(ADMIN.publicKey);
-
+  console.log("ADMIN.publicKey", ADMIN.publicKey.toString());
   try {
     // Always source the current fee vault from config unless explicitly overridden
     const feeVaultToUse: PublicKey = feeVault || configAccount.feeVault;
     const marketCreatorDetails = await getMarketCreatorDetails();
     
-    const tx = await program.methods
+    const method = program.methods
       .createMarket({
         question,
         marketStart,
@@ -59,19 +78,33 @@ async function tryCreateMarketTx({
         bettingStart: bettingStart,
       })
       .accountsPartial({
+        marketCreator: marketCreatorDetails.marketCreator,
         payer: ADMIN.publicKey,
-        feeVault: feeVaultToUse,
+        config: configPda,
+        positionPage0: positionPage0Pda,
+        mint: usdcMintToUse,
         market: marketPda,
         oraclePubkey: oraclePubkey,
-        mint: usdcMintToUse,
         tokenProgram: TOKEN_PROGRAM_ID,
-        config: configPda,
-        marketCreator: marketCreatorDetails.marketCreator,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
-      .signers([ADMIN])
-      .rpc();
+      .signers([ADMIN]);
+
+    if (expectError) {
+      try {
+        await method.simulate();
+        return { tx: null, error: null, marketPda, marketId };
+      } catch (simErr) {
+        console.log("simulate error (expected)", simErr.toString());
+        return { tx: null, error: simErr, marketPda, marketId };
+      }
+    }
+
+    const tx = await method.rpc();
+    console.log("createMarket tx", tx);
+    const exists = await waitForAccount(marketPda, 50, 500);
+    console.log("market account exists:", exists);
     return { tx, error: null, marketPda, marketId };
   } catch (error) {
     console.log("error", error);

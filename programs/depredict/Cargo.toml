@@ -26,6 +26,7 @@ switchboard-on-demand = "0.5.1"
 mpl-core = { version = "0.10.1" }
 mpl-bubblegum = "2.1.1"
 solana-security-txt = "1.1.1"
+# spl-account-compression = { version = "1.0.0", features = ["no-entrypoint"] }
 
 [dev-dependencies]
 litesvm = "0.7.0"
