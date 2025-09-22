@@ -30,58 +30,52 @@ const provider = anchor.AnchorProvider;
 import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID as CORE_PROGRAM_ID, MPL_CORE_CPI_SIGNER } from "./constants.js";
 import { fromWeb3JsKeypair, fromWeb3JsPublicKey } from "@metaplex-foundation/umi-web3js-adapters";
 
-const DAS_RPC = "https://api.devnet.solana.com"; // must be helius or something. Load from env. 
+let program: Program<Depredict>;
 
-const CANOPY_DEPTH = 8; // have some central account based settings (e.g. basic account, pro, super pro, etc.)
+const DAS_RPC = process.env.DAS_RPC; // must be helius or something. Load from env. 
 
 let CACHED_LUT: PublicKey | null = null; // cached lut for faster txs
 
 
 // function to fetch asset proof with retry
-async function fetchAssetProofWithRetry(assetId: PublicKey, attempts = 8, delayMs = 1500): Promise<{
+export const fetchAssetProof = async (assetId: PublicKey): Promise<{
     root: PublicKeyBytes;
     dataHash: PublicKeyBytes;
     creatorHash: PublicKeyBytes;
-    nonce: number;
-    index: number;
-    proof: string[];
-  }> {
-    const umi = createUmi(DAS_RPC).use(dasApi());
-    let lastErr: any = null;
-    for (let i = 0; i < attempts; i++) {
-      try {
-        const assetPk = fromWeb3JsPublicKey(assetId);
-        const proofRef = await umi.rpc.getAssetProof(assetPk);
-        const assetRef = await umi.rpc.getAsset(assetPk);
-        return {
-          root: publicKeyBytes(proofRef.root.toString()),
-          dataHash: publicKeyBytes(assetRef.compression.data_hash.toString()),
-          creatorHash: publicKeyBytes(assetRef.compression.creator_hash.toString()),
-          nonce: assetRef.compression.seq,
-          index: assetRef.compression.leaf_id,
-          proof: proofRef.proof,
-        };
-      } catch (e) {
-        lastErr = e;
-        if (i < attempts - 1) {
-          await new Promise((r) => setTimeout(r, delayMs));
-        }
-      }
+        nonce: number;
+        index: number;
+        proof: string[];
+    }> => {
+
+    const umi = createUmi(DAS_RPC as string).use(dasApi());
+    const assetPk = fromWeb3JsPublicKey(assetId);
+    const proofRef = await umi.rpc.getAssetProof(assetPk);
+    const assetRef = await umi.rpc.getAsset(assetPk);
+
+    return {
+        root: publicKeyBytes(proofRef.root.toString()),
+        dataHash: publicKeyBytes(assetRef.compression.data_hash.toString()),
+        creatorHash: publicKeyBytes(assetRef.compression.creator_hash.toString()),
+        nonce: assetRef.compression.seq,
+        index: assetRef.compression.leaf_id,
+        proof: proofRef.proof,
+    };
+
     }
-    throw lastErr ?? new Error("Failed to fetch asset proof");
-  }
+ 
+  
 
 
 
 
 
 // function to truncate proofs to the canopy depth for smaller tx
-function truncateProof(proof: string[], canopyDepth: number = CANOPY_DEPTH): string[] {
+function truncateProof(proof: string[], canopyDepth: number): string[] {
   return proof.slice(0, Math.max(0, proof.length - canopyDepth));
 }
 
 // function to convert proofs to remaining accounts for smaller tx
-function proofToRemainingAccounts(proof: string[], canopyDepth: number = CANOPY_DEPTH) {
+function proofToRemainingAccounts(proof: string[], canopyDepth: number) {
   const truncated = truncateProof(proof, canopyDepth);
   return truncated.map((p) => ({
     pubkey: new PublicKey(p),
@@ -91,37 +85,38 @@ function proofToRemainingAccounts(proof: string[], canopyDepth: number = CANOPY_
 }
 
 // function to send txs with lookup v0
-async function sendWithLookupV0(ixs: TransactionInstruction[], payer: Keypair, addresses: PublicKey[]) {
+export const sendTxWithLookupV0 = async (program: Program<Depredict>,ixs: TransactionInstruction[], payer: Keypair, addresses: PublicKey[]) => {
   // If no extra addresses needed, send legacy
-  if (!addresses || addresses.length === 0) {
+   if (!addresses || addresses.length === 0) {
     const txLegacy = new anchor.web3.Transaction().add(...ixs);
-    await provider.connection.sendAndConfirm(txLegacy, [payer]);
+    await program.provider.connection.sendAndConfirm(txLegacy, [payer]);
     return;
-  }
-
-  if (!CACHED_LUT) {
-    const slot = await provider.connection.getSlot();
+  } else if (!CACHED_LUT) {
+    // Create lookup table
+    const slot = await program.provider.connection.getSlot();
     const [createIx, createdLutAddr] = AddressLookupTableProgram.createLookupTable({
       authority: payer.publicKey,
       payer: payer.publicKey,
       recentSlot: slot,
     });
     const txCreate = new anchor.web3.Transaction().add(createIx);
-    await provider.sendAndConfirm(txCreate, [payer]);
+    await program.provider.connection.sendAndConfirm(txCreate, [payer]);
     await new Promise((r) => setTimeout(r, 1200));
     CACHED_LUT = createdLutAddr;
   }
 
+  // If lookup table exists, send tx with lookup v0
   const lutAddress = CACHED_LUT as PublicKey;
-  let lutResp = await provider.connection.getAddressLookupTable(lutAddress);
+  let lutResp = await program.provider.connection.getAddressLookupTable(lutAddress);
   if (!lutResp.value) {
     await new Promise((r) => setTimeout(r, 1200));
-    lutResp = await provider.connection.getAddressLookupTable(lutAddress);
+    lutResp = await program.provider.connection.getAddressLookupTable(lutAddress);
   }
   const lutAcctBefore = lutResp.value;
   if (!lutAcctBefore) throw new Error("Lookup table not found/active");
 
-  const existing = new Set(lutAcctBefore.state.addresses.map((a) => a.toBase58()));
+  // Add addresses to lookup table
+  const existing = new Set(lutAcctBefore.state.addresses.map((a: any) => a.toBase58()));
   const toAdd = addresses.filter((a) => !existing.has(a.toBase58()));
   if (toAdd.length > 0) {
     const chunkSize = 20;
@@ -134,16 +129,15 @@ async function sendWithLookupV0(ixs: TransactionInstruction[], payer: Keypair, a
         addresses: chunk,
       });
       const txExtend = new anchor.web3.Transaction().add(extendIx);
-      await provider.sendAndConfirm(txExtend, [payer]);
+      await program.provider.connection.sendAndConfirm(txExtend, [payer]);
     }
   }
-
-  await new Promise((r) => setTimeout(r, 1200));
-  const lutRespAfter = await provider.connection.getAddressLookupTable(lutAddress);
+  const lutRespAfter = await program.provider.connection.getAddressLookupTable(lutAddress);
   const lutAcct = lutRespAfter.value;
   if (!lutAcct) throw new Error("Lookup table not found/active after extend");
 
-  const { blockhash } = await provider.connection.getLatestBlockhash();
+  // Send tx with lookup v0
+  const { blockhash } = await program.provider.connection.getLatestBlockhash();
   const msgV0 = new TransactionMessage({
     payerKey: payer.publicKey,
     recentBlockhash: blockhash,
@@ -152,9 +146,9 @@ async function sendWithLookupV0(ixs: TransactionInstruction[], payer: Keypair, a
 
   const vtx = new VersionedTransaction(msgV0);
   vtx.sign([payer]);
-  const sig = await provider.connection.sendTransaction(vtx, { skipPreflight: false });
-  const block = await provider.connection.getLatestBlockhash("confirmed");
-  await provider.connection.confirmTransaction(
+  const sig = await program.provider.connection.sendTransaction(vtx, { skipPreflight: false });
+  const block = await program.provider.connection.getLatestBlockhash("confirmed");
+  await program.provider.connection.confirmTransaction(
     {
       signature: sig,
       ...block,
