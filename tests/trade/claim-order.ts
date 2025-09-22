@@ -269,10 +269,10 @@ describe("depredict", () => {
           .accountsPartial({
             signer: ADMIN.publicKey,
             marketCreator: marketCreatorPda,
-            merkleTree: mcBefore.merkleTree as PublicKey,
-            treeConfig: PublicKey.findProgramAddressSync([
-              (mcBefore.merkleTree as PublicKey).toBuffer(),
-            ], BUBBLEGUM_PROGRAM_ID)[0],
+            // merkleTree: mcBefore.merkleTree as PublicKey,
+            //treeConfig: PublicKey.findProgramAddressSync([
+            //  (mcBefore.merkleTree as PublicKey).toBuffer(),
+            //], BUBBLEGUM_PROGRAM_ID)[0],
             systemProgram: SystemProgram.programId,
           })
           .signers([ADMIN])
