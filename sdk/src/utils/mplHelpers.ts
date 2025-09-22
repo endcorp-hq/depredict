@@ -1,81 +1,74 @@
 
 import { Program } from "@coral-xyz/anchor";
 import { Depredict } from "../types/depredict.js";
-// solana
-import { PublicKey, SystemProgram, Keypair, AddressLookupTableProgram, TransactionMessage, VersionedTransaction, TransactionInstruction } from "@solana/web3.js";
-import * as anchor from "@coral-xyz/anchor";
-// mpl
+import { PublicKey, Keypair, AddressLookupTableProgram, AddressLookupTableAccount, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
 import { createTreeV2, setTreeDelegate } from "@metaplex-foundation/mpl-bubblegum";
-import {
-  createCollectionV2,
-  mplCore,
-  pluginAuthorityPairV2
-} from '@metaplex-foundation/mpl-core';
-import { 
-  generateSigner,
-  signerIdentity,
-  sol,
-  createSignerFromKeypair,
-  type KeypairSigner,
-  Pda,
-  Signer,
-  publicKeyBytes,
-  type PublicKeyBytes,
-} from '@metaplex-foundation/umi';
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
-import { dasApi } from '@metaplex-foundation/digital-asset-standard-api'
-
-const provider = anchor.AnchorProvider;
-// constants
-import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID as CORE_PROGRAM_ID, MPL_CORE_CPI_SIGNER } from "./constants.js";
+import { createCollectionV2, mplCore, pluginAuthorityPairV2 } from "@metaplex-foundation/mpl-core";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import { dasApi } from "@metaplex-foundation/digital-asset-standard-api";
+import { generateSigner, signerIdentity, createSignerFromKeypair, publicKeyBytes, type PublicKeyBytes, type KeypairSigner, Pda } from "@metaplex-foundation/umi";
 import { fromWeb3JsKeypair, fromWeb3JsPublicKey } from "@metaplex-foundation/umi-web3js-adapters";
+import createVersionedTransaction from "./sendVersionedTransaction.js";
+import { getMarketCreatorPDA } from "./pda/index.js";
 
-let program: Program<Depredict>;
+const DAS_RPC = process.env.DAS_RPC || "";
 
-const DAS_RPC = process.env.DAS_RPC; // must be helius or something. Load from env. 
+function getUmi(rpcEndpoint?: string) {
+  const endpoint = rpcEndpoint && rpcEndpoint.length > 0 ? rpcEndpoint : DAS_RPC;
+  if (!endpoint) {
+    throw new Error("DAS RPC endpoint not provided. Pass rpcEndpoint or set process.env.DAS_RPC");
+  }
+  return createUmi(endpoint);
+}
 
-let CACHED_LUT: PublicKey | null = null; // cached lut for faster txs
+export const fetchAssetProof = async (
+  assetId: PublicKey,
+  rpcEndpoint?: string
+): Promise<{
+  root: PublicKeyBytes;
+  dataHash: PublicKeyBytes;
+  creatorHash: PublicKeyBytes;
+  nonce: number;
+  index: number;
+  proof: string[];
+}> => {
+  const umi = getUmi(rpcEndpoint).use(dasApi());
+  const assetPk = fromWeb3JsPublicKey(assetId);
+  const proofRef = await (umi.rpc as any).getAssetProof(assetPk);
+  const assetRef = await (umi.rpc as any).getAsset(assetPk);
+  return {
+    root: publicKeyBytes(proofRef.root.toString()),
+    dataHash: publicKeyBytes(assetRef.compression.data_hash.toString()),
+    creatorHash: publicKeyBytes(assetRef.compression.creator_hash.toString()),
+    nonce: assetRef.compression.seq,
+    index: assetRef.compression.leaf_id,
+    proof: proofRef.proof,
+  };
+};
 
-
-// function to fetch asset proof with retry
-export const fetchAssetProof = async (assetId: PublicKey): Promise<{
-    root: PublicKeyBytes;
-    dataHash: PublicKeyBytes;
-    creatorHash: PublicKeyBytes;
-        nonce: number;
-        index: number;
-        proof: string[];
-    }> => {
-
-    const umi = createUmi(DAS_RPC as string).use(dasApi());
-    const assetPk = fromWeb3JsPublicKey(assetId);
-    const proofRef = await umi.rpc.getAssetProof(assetPk);
-    const assetRef = await umi.rpc.getAsset(assetPk);
-
-    return {
-        root: publicKeyBytes(proofRef.root.toString()),
-        dataHash: publicKeyBytes(assetRef.compression.data_hash.toString()),
-        creatorHash: publicKeyBytes(assetRef.compression.creator_hash.toString()),
-        nonce: assetRef.compression.seq,
-        index: assetRef.compression.leaf_id,
-        proof: proofRef.proof,
-    };
-
+export async function fetchAssetProofWithRetry(
+  assetId: PublicKey,
+  rpcEndpoint?: string,
+  retries = 5,
+  delayMs = 500
+) {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fetchAssetProof(assetId, rpcEndpoint);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries - 1) await new Promise((r) => setTimeout(r, delayMs));
     }
- 
-  
+  }
+  throw lastErr;
+}
 
-
-
-
-
-// function to truncate proofs to the canopy depth for smaller tx
-function truncateProof(proof: string[], canopyDepth: number): string[] {
+export function truncateProof(proof: string[], canopyDepth: number): string[] {
   return proof.slice(0, Math.max(0, proof.length - canopyDepth));
 }
 
-// function to convert proofs to remaining accounts for smaller tx
-function proofToRemainingAccounts(proof: string[], canopyDepth: number) {
+export function proofToRemainingAccounts(proof: string[], canopyDepth: number) {
   const truncated = truncateProof(proof, canopyDepth);
   return truncated.map((p) => ({
     pubkey: new PublicKey(p),
@@ -84,169 +77,162 @@ function proofToRemainingAccounts(proof: string[], canopyDepth: number) {
   }));
 }
 
-// function to send txs with lookup v0
-export const sendTxWithLookupV0 = async (program: Program<Depredict>,ixs: TransactionInstruction[], payer: Keypair, addresses: PublicKey[]) => {
-  // If no extra addresses needed, send legacy
-   if (!addresses || addresses.length === 0) {
-    const txLegacy = new anchor.web3.Transaction().add(...ixs);
-    await program.provider.connection.sendAndConfirm(txLegacy, [payer]);
-    return;
-  } else if (!CACHED_LUT) {
-    // Create lookup table
-    const slot = await program.provider.connection.getSlot();
-    const [createIx, createdLutAddr] = AddressLookupTableProgram.createLookupTable({
-      authority: payer.publicKey,
-      payer: payer.publicKey,
+export async function buildLookupTableTransactions(
+  program: Program<Depredict>,
+  payer: PublicKey,
+  addresses: PublicKey[],
+  existingLookupTable?: PublicKey
+): Promise<{
+  createLutTx?: VersionedTransaction;
+  extendLutTxs: VersionedTransaction[];
+  lookupTableAddress: PublicKey;
+}> {
+  const connection = program.provider.connection;
+  let lookupTableAddress = existingLookupTable ?? PublicKey.default;
+  const extendLutTxs: VersionedTransaction[] = [];
+  let createLutTx: VersionedTransaction | undefined;
+
+  if (!existingLookupTable) {
+    const slot = await connection.getSlot();
+    const [createIx, createdAddress] = AddressLookupTableProgram.createLookupTable({
+      authority: payer,
+      payer,
       recentSlot: slot,
     });
-    const txCreate = new anchor.web3.Transaction().add(createIx);
-    await program.provider.connection.sendAndConfirm(txCreate, [payer]);
-    await new Promise((r) => setTimeout(r, 1200));
-    CACHED_LUT = createdLutAddr;
+    createLutTx = await createVersionedTransaction(program, [createIx], payer);
+    lookupTableAddress = createdAddress;
+  } else {
+    lookupTableAddress = existingLookupTable;
   }
 
-  // If lookup table exists, send tx with lookup v0
-  const lutAddress = CACHED_LUT as PublicKey;
-  let lutResp = await program.provider.connection.getAddressLookupTable(lutAddress);
-  if (!lutResp.value) {
-    await new Promise((r) => setTimeout(r, 1200));
-    lutResp = await program.provider.connection.getAddressLookupTable(lutAddress);
+  const chunkSize = 20;
+  for (let i = 0; i < addresses.length; i += chunkSize) {
+    const chunk = addresses.slice(i, i + chunkSize);
+    const extendIx = AddressLookupTableProgram.extendLookupTable({
+      payer,
+      authority: payer,
+      lookupTable: lookupTableAddress,
+      addresses: chunk,
+    });
+    const tx = await createVersionedTransaction(program, [extendIx], payer);
+    extendLutTxs.push(tx);
   }
-  const lutAcctBefore = lutResp.value;
-  if (!lutAcctBefore) throw new Error("Lookup table not found/active");
 
-  // Add addresses to lookup table
-  const existing = new Set(lutAcctBefore.state.addresses.map((a: any) => a.toBase58()));
-  const toAdd = addresses.filter((a) => !existing.has(a.toBase58()));
-  if (toAdd.length > 0) {
-    const chunkSize = 20;
-    for (let i = 0; i < toAdd.length; i += chunkSize) {
-      const chunk = toAdd.slice(i, i + chunkSize);
-      const extendIx = AddressLookupTableProgram.extendLookupTable({
-        payer: payer.publicKey,
-        authority: payer.publicKey,
-        lookupTable: lutAddress,
-        addresses: chunk,
-      });
-      const txExtend = new anchor.web3.Transaction().add(extendIx);
-      await program.provider.connection.sendAndConfirm(txExtend, [payer]);
-    }
-  }
-  const lutRespAfter = await program.provider.connection.getAddressLookupTable(lutAddress);
-  const lutAcct = lutRespAfter.value;
-  if (!lutAcct) throw new Error("Lookup table not found/active after extend");
-
-  // Send tx with lookup v0
-  const { blockhash } = await program.provider.connection.getLatestBlockhash();
-  const msgV0 = new TransactionMessage({
-    payerKey: payer.publicKey,
-    recentBlockhash: blockhash,
-    instructions: ixs,
-  }).compileToV0Message([lutAcct]);
-
-  const vtx = new VersionedTransaction(msgV0);
-  vtx.sign([payer]);
-  const sig = await program.provider.connection.sendTransaction(vtx, { skipPreflight: false });
-  const block = await program.provider.connection.getLatestBlockhash("confirmed");
-  await program.provider.connection.confirmTransaction(
-    {
-      signature: sig,
-      ...block,
-    },
-    "confirmed",
-  );
+  return { createLutTx, extendLutTxs, lookupTableAddress };
 }
 
+export async function compileTxWithLookupV0(
+  program: Program<Depredict>,
+  ixs: TransactionInstruction[],
+  payer: PublicKey,
+  lookupTableAddress: PublicKey
+) {
+  const { value } = await program.provider.connection.getAddressLookupTable(lookupTableAddress);
+  if (!value) throw new Error("Lookup table not found/active");
+  return createVersionedTransaction(program, ixs, payer, undefined, [value as AddressLookupTableAccount]);
+}
 
-async function createCoreCollection(authority: Keypair): Promise<KeypairSigner & { publicKey: string }> {
+export async function sendWithLookupV0(
+  program: Program<Depredict>,
+  ixs: TransactionInstruction[],
+  payer: PublicKey,
+  addresses: PublicKey[] = [],
+  existingLookupTable?: PublicKey
+): Promise<{
+  createLutTx?: VersionedTransaction;
+  extendLutTxs: VersionedTransaction[];
+  mainTx: VersionedTransaction;
+  lookupTableAddress: PublicKey;
+}> {
+  if (!addresses || addresses.length === 0) {
+    const mainTx = await createVersionedTransaction(program, ixs, payer);
+    return { extendLutTxs: [], mainTx, lookupTableAddress: PublicKey.default };
+  }
+  const { createLutTx, extendLutTxs, lookupTableAddress } = await buildLookupTableTransactions(
+    program,
+    payer,
+    addresses,
+    existingLookupTable
+  );
+  const mainTx = await compileTxWithLookupV0(program, ixs, payer, lookupTableAddress);
+  return { createLutTx, extendLutTxs, mainTx, lookupTableAddress };
+}
 
-  const umi = createUmi("https://api.devnet.solana.com") // todo swap for helius, load from env. 
-  .use(mplCore());
-  let signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority));
-  umi.use(signerIdentity(signer, true))
+export async function createCoreCollection(
+  program: Program<Depredict>,
+  authority: Keypair,
+  {
+    name = "Test Collection",
+    uri = "https://example.com/metadata.json",
+    rpcEndpoint,
+  }: { name?: string; uri?: string; rpcEndpoint?: string } = {}
+): Promise<KeypairSigner & { publicKey: string }> {
+  const umi = getUmi(rpcEndpoint).use(mplCore());
+  const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority));
+  umi.use(signerIdentity(signer, true));
 
-  const metadataUri = 'https://example.com/metadata.json';
-  
-  // create a collection
   const collection = generateSigner(umi);
 
-      // we must use the marketCreator PDA as the authority to create the collection
-    // market creator pda - generalise or load from other fn. 
-    const seeds = [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()];
-    const [marketCreatorpda, bump] = PublicKey.findProgramAddressSync(
-      seeds,
-      program.programId
-    );
-    let localMarketCreatorpda: Pda = [fromWeb3JsPublicKey(marketCreatorpda), bump] as Pda;
+  const derived = getMarketCreatorPDA(program.programId, authority.publicKey);
+  const [marketCreatorPda, bump] = PublicKey.findProgramAddressSync(
+    [Buffer.from("market_creator"), authority.publicKey.toBytes()],
+    program.programId
+  );
+  if (!marketCreatorPda.equals(derived)) throw new Error("MarketCreator PDA derivation mismatch");
+  const umiMarketCreatorPda: Pda = [fromWeb3JsPublicKey(marketCreatorPda), bump] as Pda;
 
-
-
-  const tx_create = await createCollectionV2(umi, {
+  await createCollectionV2(umi, {
     collection,
     payer: signer,
-    updateAuthority: localMarketCreatorpda,
-    name: 'Test Collection',
-    uri: metadataUri,
-    plugins: [
-      pluginAuthorityPairV2({
-        type: 'BubblegumV2',
-      }),
-    ],
+    updateAuthority: umiMarketCreatorPda,
+    name,
+    uri,
+    plugins: [pluginAuthorityPairV2({ type: "BubblegumV2" })],
   }).sendAndConfirm(umi);
 
-  console.log("tx_create", tx_create);
-
-return { ...collection, publicKey: collection.publicKey.toString() } as any;
+  return { ...collection, publicKey: collection.publicKey.toString() } as any;
 }
 
-async function createMerkleTree(authority: Keypair): Promise<PublicKey> {
-  
-  const umi = createUmi("https://api.devnet.solana.com"); // todo swap for helius, load from env. 
-
+export async function createMerkleTree(
+  program: Program<Depredict>,
+  authority: Keypair,
+  {
+    maxDepth = 16,
+    canopyDepth = 8,
+    maxBufferSize = 64,
+    isPublic = false,
+    rpcEndpoint,
+  }: { maxDepth?: number; canopyDepth?: number; maxBufferSize?: number; isPublic?: boolean; rpcEndpoint?: string } = {}
+): Promise<PublicKey> {
+  const umi = getUmi(rpcEndpoint);
   const umiAuthorityKp = umi.eddsa.createKeypairFromSecretKey(authority.secretKey);
   umi.use(signerIdentity(createSignerFromKeypair(umi, umiAuthorityKp)));
 
-  let signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority));
+  const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority));
   const merkleTree = generateSigner(umi);
   const builder = await createTreeV2(umi, {
     merkleTree,
-    maxDepth: 16,
-    canopyDepth: 8,
-    maxBufferSize: 64,
-    public: false,
+    maxDepth,
+    canopyDepth,
+    maxBufferSize,
+    public: isPublic,
     treeCreator: signer,
   });
   await builder.sendAndConfirm(umi);
-  // Delegate tree authority to the market creator PDA so program CPI can sign via seeds
-  const [marketCreatorpda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
+
+  const [marketCreatorPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("market_creator"), authority.publicKey.toBytes()],
     program.programId
   );
   await setTreeDelegate(umi, {
     treeCreator: signer,
-    newTreeDelegate: fromWeb3JsPublicKey(marketCreatorpda),
+    newTreeDelegate: fromWeb3JsPublicKey(marketCreatorPda),
     merkleTree: merkleTree.publicKey,
   }).sendAndConfirm(umi);
-  
-  const treePubkey = new PublicKey(merkleTree.publicKey.toString());
-  console.log("Merkle tree created:", treePubkey.toString());
-  // Wait for the account to be fully propagated on-chain
-  await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay
-  
-  // Verify the account exists and can be fetched
-  try {
-    const accountInfo = await provider.connection.getAccountInfo(treePubkey);
 
-    if (!accountInfo) {
-      throw new Error(`Merkle tree account ${treePubkey.toString()} not found after creation`);
-    }
-  } catch (error) {
-    console.error(`❌ Failed to verify merkle tree account:`, error);
-    throw error;
-  }
-  
+  const treePubkey = new PublicKey(merkleTree.publicKey.toString());
+  const accountInfo = await program.provider.connection.getAccountInfo(treePubkey);
+  if (!accountInfo) throw new Error(`Merkle tree account ${treePubkey.toString()} not found after creation`);
   return treePubkey;
 }
 
-export { createCoreCollection, createMerkleTree };
-export { truncateProof, proofToRemainingAccounts, fetchAssetProofWithRetry, sendWithLookupV0 };
