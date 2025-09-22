@@ -13,7 +13,13 @@ import { PositionAccount, PositionStatus } from "./types/position.js";
 export default class Position {
   constructor(private program: Program<Depredict>) {}
 
-  /** Ensure a position page exists (and initialize header if needed) */
+  /** 
+   * Ensure a position page exists (and initialize header if needed)
+   * @param marketId - Market ID
+   * @param payer - Payer public key
+   * @param pageIndex - Page index
+   * @returns {Promise<{ixs: TransactionInstruction[]}>} - Transaction instructions
+   */
   async ensurePositionPage({ marketId, payer, pageIndex }: { marketId: number; payer: PublicKey; pageIndex: number; }) {
     const ixs: TransactionInstruction[] = [];
     const market = getMarketPDA(this.program.programId, marketId);
@@ -36,7 +42,14 @@ export default class Position {
     return ixs;
   }
 
-  /** Prune a position slot (creator only) */
+  /** 
+   * Prune a position slot (creator only)
+   * @param marketId - Market ID
+   * @param signer - Signer public key
+   * @param pageIndex - Page index
+   * @param slotIndex - Slot index
+   * @returns {Promise<{ixs: TransactionInstruction[]}>} - Transaction instructions
+   */
   async prunePosition({ marketId, signer, pageIndex, slotIndex }: { marketId: number; signer: PublicKey; pageIndex: number; slotIndex: number; }) {
     const ixs: TransactionInstruction[] = [];
     const market = getMarketPDA(this.program.programId, marketId);
@@ -58,7 +71,13 @@ export default class Position {
     return ixs;
   }
 
-  /** Close an empty position page (creator only) */
+  /** 
+   * Close an empty position page (creator only)
+   * @param marketId - Market ID
+   * @param signer - Signer public key
+   * @param pageIndex - Page index
+   * @returns {Promise<{ixs: TransactionInstruction[]}>} - Transaction instructions
+   */
   async closePositionPage({ marketId, signer, pageIndex }: { marketId: number; signer: PublicKey; pageIndex: number; }) {
     const ixs: TransactionInstruction[] = [];
     const market = getMarketPDA(this.program.programId, marketId);
