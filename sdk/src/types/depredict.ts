@@ -8,7 +8,7 @@ export type Depredict = {
   "address": "FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33",
   "metadata": {
     "name": "depredict",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
@@ -1959,45 +1959,6 @@ export type Depredict = {
         52,
         83
       ]
-    },
-    {
-      "name": "poolEvent",
-      "discriminator": [
-        76,
-        227,
-        205,
-        183,
-        1,
-        218,
-        164,
-        244
-      ]
-    },
-    {
-      "name": "positionEvent",
-      "discriminator": [
-        169,
-        63,
-        86,
-        103,
-        243,
-        59,
-        238,
-        111
-      ]
-    },
-    {
-      "name": "priceEvent",
-      "discriminator": [
-        31,
-        40,
-        141,
-        125,
-        132,
-        253,
-        225,
-        229
-      ]
     }
   ],
   "errors": [
@@ -2750,40 +2711,6 @@ export type Depredict = {
       }
     },
     {
-      "name": "poolEvent",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "poolId",
-            "type": "u64"
-          },
-          {
-            "name": "question",
-            "type": {
-              "array": [
-                "u8",
-                80
-              ]
-            }
-          },
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "markets",
-            "type": {
-              "array": [
-                "u64",
-                60
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
       "name": "position",
       "type": {
         "kind": "struct",
@@ -2837,60 +2764,6 @@ export type Depredict = {
           },
           {
             "name": "no"
-          }
-        ]
-      }
-    },
-    {
-      "name": "positionEvent",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "positionId",
-            "type": "u64"
-          },
-          {
-            "name": "mint",
-            "type": {
-              "option": "pubkey"
-            }
-          },
-          {
-            "name": "positionNonce",
-            "type": "u32"
-          },
-          {
-            "name": "marketId",
-            "type": "u64"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "direction",
-            "type": {
-              "defined": {
-                "name": "positionDirection"
-              }
-            }
-          },
-          {
-            "name": "positionStatus",
-            "type": {
-              "defined": {
-                "name": "positionStatus"
-              }
-            }
-          },
-          {
-            "name": "ts",
-            "type": "i64"
-          },
-          {
-            "name": "createdAt",
-            "type": "i64"
           }
         ]
       }
@@ -2961,30 +2834,6 @@ export type Depredict = {
           },
           {
             "name": "claimed"
-          }
-        ]
-      }
-    },
-    {
-      "name": "priceEvent",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "marketId",
-            "type": "u64"
-          },
-          {
-            "name": "yesPrice",
-            "type": "u64"
-          },
-          {
-            "name": "noPrice",
-            "type": "u64"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
           }
         ]
       }
