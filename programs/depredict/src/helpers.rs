@@ -14,12 +14,12 @@ pub fn compute_fee_bps(amount_lamports: u64, fee_bps: u16) -> Result<u64> {
     u64::try_from(fee).map_err(|_| DepredictError::ArithmeticOverflow.into())
 }
 
-pub fn net_of_fee(amount_lamports: u64, fee_bps: u16) -> Result<u64> {
-    let fee = compute_fee_bps(amount_lamports, fee_bps)?;
-    amount_lamports
-        .checked_sub(fee)
-        .ok_or(DepredictError::ArithmeticOverflow.into())
-}
+// pub fn net_of_fee(amount_lamports: u64, fee_bps: u16) -> Result<u64> {
+//     let fee = compute_fee_bps(amount_lamports, fee_bps)?;
+//     amount_lamports
+//         .checked_sub(fee)
+//         .ok_or(DepredictError::ArithmeticOverflow.into())
+// }
 
 /// Computes creator fee first on the gross amount, then protocol fee on the remainder (sequential).
 /// Returns (creator_fee, protocol_fee, net_amount).
@@ -48,8 +48,8 @@ mod tests {
     fn fee_zero_amount_is_zero() {
         let fee = compute_fee_bps(0, 25).unwrap();
         assert_eq!(fee, 0);
-        let net = net_of_fee(0, 25).unwrap();
-        assert_eq!(net, 0);
+        // let net = net_of_fee(0, 25).unwrap();
+        // assert_eq!(net, 0);
     }
 
     #[test]
@@ -57,8 +57,8 @@ mod tests {
         // 1 lamport at 25 bps (0.25%) floors to 0
         let fee = compute_fee_bps(1, 25).unwrap();
         assert_eq!(fee, 0);
-        let net = net_of_fee(1, 25).unwrap();
-        assert_eq!(net, 1);
+        // let net = net_of_fee(1, 25).unwrap();
+        // assert_eq!(net, 1);
     }
 
     #[test]
@@ -66,8 +66,8 @@ mod tests {
         let amount = 1_000_000u64;
         let fee = compute_fee_bps(amount, 0).unwrap();
         assert_eq!(fee, 0);
-        let net = net_of_fee(amount, 0).unwrap();
-        assert_eq!(net, amount);
+        // let net = net_of_fee(amount, 0).unwrap();
+        // assert_eq!(net, amount);
     }
 
     #[test]
@@ -75,8 +75,8 @@ mod tests {
         let amount = u64::MAX;
         let fee = compute_fee_bps(amount, 0).unwrap();
         assert_eq!(fee, 0);
-        let net = net_of_fee(amount, 0).unwrap();
-        assert_eq!(net, amount);
+        // let net = net_of_fee(amount, 0).unwrap();
+        // assert_eq!(net, amount);
     }
 
     #[test]
@@ -89,9 +89,9 @@ mod tests {
         let expected = ((amount as u128) * (bps as u128)) / (FEE_BPS_DENOMINATOR as u128);
         assert_eq!(fee as u128, expected);
 
-        // Net amount should be amount - fee
-        let net = net_of_fee(amount, bps).unwrap();
-        assert_eq!(net as u128, (amount as u128) - expected);
+        // // Net amount should be amount - fee
+        // let net = net_of_fee(amount, bps).unwrap();
+        // assert_eq!(net as u128, (amount as u128) - expected);
     }
 
     #[test]
@@ -100,8 +100,8 @@ mod tests {
         let bps: u16 = 10_000; // 100%
         let fee = compute_fee_bps(amount, bps).unwrap();
         assert_eq!(fee, amount);
-        let net = net_of_fee(amount, bps).unwrap();
-        assert_eq!(net, 0);
+        // let net = net_of_fee(amount, bps).unwrap();
+        // assert_eq!(net, 0);
     }
 
     #[test]

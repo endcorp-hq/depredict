@@ -26,7 +26,7 @@ use crate::{
 
 // metaplex includes
 use mpl_bubblegum::{
-    instructions::{MintV2CpiBuilder,BurnV2CpiBuilder},
+    instructions::{MintV2CpiBuilder},
     programs::MPL_BUBBLEGUM_ID,
     types::{MetadataArgsV2, TokenStandard},
     accounts::TreeConfig

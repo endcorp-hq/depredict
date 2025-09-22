@@ -1,27 +1,27 @@
 use anchor_lang::prelude::*;
 
-use crate::state::{ MarketStates, PositionDirection, PositionStatus, WinningDirection };
+use crate::state::{ MarketStates, WinningDirection };
 
-#[event]
-pub struct PriceEvent {
-    pub market_id: u64,
-    pub yes_price: u64,
-    pub no_price: u64,
-    pub timestamp: i64,
-}
+// #[event]
+// pub struct PriceEvent {
+//     pub market_id: u64,
+//     pub yes_price: u64,
+//     pub no_price: u64,
+//     pub timestamp: i64,
+// }
 
-#[event]
-pub struct PositionEvent {
-    pub position_id: u64,
-    pub mint: Option<Pubkey>,
-    pub position_nonce: u32,
-    pub market_id: u64,
-    pub amount: u64,
-    pub direction: PositionDirection,
-    pub position_status: PositionStatus,
-    pub ts: i64,
-    pub created_at: i64,
-}
+// #[event]
+// pub struct PositionEvent {
+//     pub position_id: u64,
+//     pub mint: Option<Pubkey>,
+//     pub position_nonce: u32,
+//     pub market_id: u64,
+//     pub amount: u64,
+//     pub direction: PositionDirection,
+//     pub position_status: PositionStatus,
+//     pub ts: i64,
+//     pub created_at: i64,
+// }
 
 #[event]
 pub struct MarketEvent {
@@ -46,10 +46,10 @@ pub struct MarketEvent {
     // pub pool_id: u64,
 }
 
-#[event]
-pub struct PoolEvent {
-    pub pool_id: u64,
-    pub question: [u8; 80],
-    pub authority: Pubkey,
-    pub markets: [u64; 60],
-}
+// #[event]
+// pub struct PoolEvent {
+//     pub pool_id: u64,
+//     pub question: [u8; 80],
+//     pub authority: Pubkey,
+//     pub markets: [u64; 60],
+// }
