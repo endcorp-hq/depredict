@@ -3,7 +3,7 @@ import { Program } from "@coral-xyz/anchor";
 import { Depredict } from "../target/types/depredict";
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
-import { ADMIN, FEE_VAULT } from "./helpers";
+import { ADMIN, FEE_VAULT } from "./constants";
 
 describe("close-config", () => {
   const provider = anchor.AnchorProvider.env();

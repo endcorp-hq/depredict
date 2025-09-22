@@ -1,0 +1,36 @@
+
+action "depredict_market_event" "svm::deploy_subgraph" {
+    program_id = action.deploy_depredict.program_id
+    program_idl = action.deploy_depredict.program_idl
+    block_height = 0 // action.deploy_depredict.block_height
+    event {
+        name = "MarketEvent"
+    }
+}
+
+action "depredict_pool_event" "svm::deploy_subgraph" {
+    program_id = action.deploy_depredict.program_id
+    program_idl = action.deploy_depredict.program_idl
+    block_height = 0 // action.deploy_depredict.block_height
+    event {
+        name = "PoolEvent"
+    }
+}
+
+action "depredict_position_event" "svm::deploy_subgraph" {
+    program_id = action.deploy_depredict.program_id
+    program_idl = action.deploy_depredict.program_idl
+    block_height = 0 // action.deploy_depredict.block_height
+    event {
+        name = "PositionEvent"
+    }
+}
+
+action "depredict_price_event" "svm::deploy_subgraph" {
+    program_id = action.deploy_depredict.program_id
+    program_idl = action.deploy_depredict.program_idl
+    block_height = 0 // action.deploy_depredict.block_height
+    event {
+        name = "PriceEvent"
+    }
+}

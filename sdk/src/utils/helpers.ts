@@ -8,7 +8,7 @@ import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { IdlAccounts } from '@coral-xyz/anchor'
 import { Depredict } from '../types/depredict.js'
-import { PositionAccount, Position, PositionDirection, PositionStatus } from '../types/position.js'
+import { PositionDirection, PositionStatus } from '../types/position.js'
 
 export const encodeString = (value: string, alloc = 32): number[] => {
   const buffer = Buffer.alloc(alloc, 32)
@@ -30,7 +30,7 @@ export const formatMarket = (
   return {
     bump: account.bump,
     address: address.toString(),
-    authority: account.authority.toString(),
+    authority: account.marketCreator.toString(),
     marketId: account.marketId.toString(),
     yesLiquidity: account.yesLiquidity.toString(),
     noLiquidity: account.noLiquidity.toString(),
@@ -49,38 +49,6 @@ export const formatMarket = (
     winningDirection: getWinningDirection(account.winningDirection),
     marketType: getMarketType(account.marketType),
     bettingStartTime: account.bettingStart.toString(),
-  }
-}
-
-export const formatPositionAccount = (
-  account: IdlAccounts<Depredict>['positionAccount'],
-  marketId?: number
-): PositionAccount => {
-  console.log('formatPositionAccount', account)
-  return {
-    authority: account.authority,
-    marketId: marketId ? marketId : account.marketId ? account.marketId.toNumber() : 0,
-    positions: account.positions.map((position: any) =>
-      formatPosition(position)
-    ),
-    nonce: account.nonce,
-    isSubPosition: account.isSubPosition
-  }
-}
-
-export const formatPosition = (
-  position: IdlAccounts<Depredict>['positionAccount']['positions'][number]
-): Position => {
-  return {
-    ts: position.ts.toString(),
-    positionNonce: position.positionNonce.toString(),
-    createdAt: position.createdAt ? position.createdAt.toString() : '',
-    positionId: position.positionId.toString(),
-    marketId: position.marketId.toString(),
-    mint: position.mint ? position.mint.toString() : '',
-    positionStatus: getPositionStatus(position.positionStatus),
-    direction: getPositionDirection(position.direction),
-    amount: position.amount.toString(),
   }
 }
 

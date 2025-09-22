@@ -1,55 +1,83 @@
-import { BN, Program } from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
 import { Depredict } from "./types/depredict.js";
-import { formatPositionAccount } from "./utils/helpers.js";
 import {
   PublicKey,
   SystemProgram,
   TransactionInstruction,
 } from "@solana/web3.js";
 
-import {
-  getMarketPDA,
-  getPositionAccountPDA,
-  getSubPositionAccountPDA,
-} from "./utils/pda/index.js";
+import { getMarketPDA, getPositionPagePDA } from "./utils/pda/index.js";
 import { RpcOptions } from "./types/index.js";
 import { PositionAccount, PositionStatus } from "./types/position.js";
-import { METAPLEX_ID } from "./utils/constants.js";
-import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes/index.js";
 
 export default class Position {
-  METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
   constructor(private program: Program<Depredict>) {}
 
-  /**
-   * Get all Position Accounts for a Market
-   * @param marketId - Market ID
-   *
-   */
-  async getPositionsAccountsForMarket(marketId: number) {
-    const allAccounts = await this.program.account.positionAccount.all();
-    console.log(
-      "SDK: All position accounts for user for market:",
-      allAccounts.map((acc) => ({
-        marketId: acc.account.marketId,
-        authority: acc.account.authority.toString(),
-        // log other fields you want to see
-      }))
-    );
+  /** Ensure a position page exists (and initialize header if needed) */
+  async ensurePositionPage({ marketId, payer, pageIndex }: { marketId: number; payer: PublicKey; pageIndex: number; }) {
+    const ixs: TransactionInstruction[] = [];
+    const market = getMarketPDA(this.program.programId, marketId);
+    const marketAccount = await this.program.account.marketState.fetch(market);
+    const marketCreator = marketAccount.marketCreator as PublicKey;
+    const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
 
-    // Then try the filtered query
-    const response = await this.program.account.positionAccount.all([
-      {
-        memcmp: {
-          offset: 8 + 1,
-          bytes: bs58.encode(new BN(marketId).toArray("le", 8)),
-        },
-      },
-    ]);
-
-    return response.map(({ account }) =>
-      formatPositionAccount(account, marketId)
+    ixs.push(
+      await this.program.methods
+        .ensurePositionPage({ pageIndex })
+        .accountsPartial({
+          payer,
+          market,
+          marketCreator,
+          positionPage,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction()
     );
+    return ixs;
+  }
+
+  /** Prune a position slot (creator only) */
+  async prunePosition({ marketId, signer, pageIndex, slotIndex }: { marketId: number; signer: PublicKey; pageIndex: number; slotIndex: number; }) {
+    const ixs: TransactionInstruction[] = [];
+    const market = getMarketPDA(this.program.programId, marketId);
+    const marketAccount = await this.program.account.marketState.fetch(market);
+    const marketCreator = marketAccount.marketCreator as PublicKey;
+    const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+
+    ixs.push(
+      await this.program.methods
+        .prunePosition({ pageIndex, slotIndex })
+        .accountsPartial({
+          signer,
+          market,
+          marketCreator,
+          positionPage,
+        })
+        .instruction()
+    );
+    return ixs;
+  }
+
+  /** Close an empty position page (creator only) */
+  async closePositionPage({ marketId, signer, pageIndex }: { marketId: number; signer: PublicKey; pageIndex: number; }) {
+    const ixs: TransactionInstruction[] = [];
+    const market = getMarketPDA(this.program.programId, marketId);
+    const marketAccount = await this.program.account.marketState.fetch(market);
+    const marketCreator = marketAccount.marketCreator as PublicKey;
+    const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+
+    ixs.push(
+      await this.program.methods
+        .closePositionPage({ pageIndex })
+        .accountsPartial({
+          signer,
+          market,
+          marketCreator,
+          positionPage,
+        })
+        .instruction()
+    );
+    return ixs;
   }
 
   /**
@@ -93,37 +121,7 @@ export default class Position {
   //   );
   // }
 
-  /**
-   * Get the PDA for a position account
-   * @param marketId - Market ID
-   * @param marketAddress - Market Address
-   * @param positionNonce - The nonce of the position account
-   *
-   */
-  async getPositionsAccountPda(marketId: number, positionNonce = 0) {
-    let positionAccountPDA = getPositionAccountPDA(
-      this.program.programId,
-      marketId
-    );
-
-    if (positionNonce !== 0) {
-      const marketAddress = getMarketPDA(this.program.programId, marketId);
-      const subPositionAccountPDA = getSubPositionAccountPDA(
-        this.program.programId,
-        marketId,
-        marketAddress,
-        positionNonce
-      );
-
-      positionAccountPDA = getPositionAccountPDA(
-        this.program.programId,
-        marketId,
-        subPositionAccountPDA
-      );
-    }
-
-    return this.program.account.positionAccount.fetch(positionAccountPDA);
-  }
+  // Legacy positionAccount flows have been removed in favor of paged position accounts.
 
   /**
    * Create Sub positions account
@@ -132,212 +130,16 @@ export default class Position {
    * @param options - RPC options
    *
    */
-  async createSubPositionAccount(
-    marketId: number,
-    payer: PublicKey,
-    marketAddress: PublicKey,
-    options?: RpcOptions
-  ) {
-    const ixs: TransactionInstruction[] = [];
-
-    const positionAccount = await this.getPositionsAccountPda(marketId);
-
-    const subPositionAccountPDA = getSubPositionAccountPDA(
-      this.program.programId,
-      marketId,
-      marketAddress,
-      positionAccount.nonce + 1
-    );
-
-    const marketPositionsAccount = getPositionAccountPDA(
-      this.program.programId,
-      marketId
-    );
-
-    try {
-      ixs.push(
-        await this.program.methods
-          .createSubPositionAccount(subPositionAccountPDA)
-          .accountsPartial({
-            signer: payer,
-            market: marketAddress,
-            marketPositionsAccount: marketPositionsAccount,
-            subMarketPositions: subPositionAccountPDA,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction()
-      );
-    } catch (error) {
-      console.log("error", error);
-      throw error;
-    }
-
-    return ixs;
-  }
+  // createSubPositionAccount removed (no longer applicable)
 
   /**
    * Get position account Nonce With Slots
    * @param positionAccounts - Position Accounts
    *
    */
-  getPositionAccountNonceWithSlots(
-    positionAccounts: PositionAccount[],
-    payer: PublicKey
-  ) {
-    const marketId = Number(positionAccounts[0].marketId);
-    const marketAddress = getMarketPDA(this.program.programId, marketId);
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
-      );
-    }
-    let nonce: number | null = null;
+  // getPositionAccountNonceWithSlots removed (no longer applicable)
 
-    for (const positionAccount of positionAccounts.reverse()) {
-      if (nonce !== null) {
-        break;
-      }
-
-      console.log("SDK: positionAccount", positionAccount);
-
-      let freeSlots = 0;
-
-      positionAccount.positions.forEach((position) => {
-        if (nonce !== null) {
-          return;
-        }
-
-        if (
-          position.positionStatus !== PositionStatus.OPEN &&
-          position.positionStatus !== PositionStatus.WAITING &&
-          freeSlots >= 2
-        ) {
-          nonce = positionAccount.isSubPosition
-            ? Number(positionAccount.nonce)
-            : 0;
-        }
-
-        if (
-          position.positionStatus !== PositionStatus.OPEN &&
-          position.positionStatus !== PositionStatus.WAITING
-        ) {
-          freeSlots += 1;
-        }
-      });
-    }
-
-    if (nonce === null) {
-      throw new Error("No open orders found");
-    }
-
-    if (nonce === 0) {
-      return getPositionAccountPDA(this.program.programId, Number(marketId));
-    }
-
-    console.log("SDK: nonce", nonce);
-
-    const subPositionAccountPDA = getSubPositionAccountPDA(
-      this.program.programId,
-      Number(marketId),
-      marketAddress,
-      nonce
-    );
-
-    const positionAccountPDA = getPositionAccountPDA(
-      this.program.programId,
-      Number(marketId),
-      subPositionAccountPDA
-    );
-
-    return positionAccountPDA;
-  }
-
-  async getPositionAccountIxs(marketId: number, payer: PublicKey) {
-    if (!payer) {
-      throw new Error(
-        "Payer public key is not available. Wallet might not be connected."
-      );
-    }
-
-    let marketAddress = getMarketPDA(this.program.programId, marketId);
-
-    const marketPositionsAccount = getPositionAccountPDA(
-      this.program.programId,
-      marketId
-    );
-
-    console.log("SDK: marketPositionsAccount from positions", marketPositionsAccount.toString());
-
-    const ixs: TransactionInstruction[] = [];
-
-    let positionAccounts: PositionAccount[] = [];
-
-    positionAccounts = await this.getPositionsAccountsForMarket(marketId);
-
-    console.log("SDK: initial positionAccounts", positionAccounts);
-
-    if (positionAccounts.length === 0) {
-      throw new Error(
-        "No position accounts found for this market. Something went wrong."
-      );
-    }
-
-    try {
-      const positionAccountWithSlots = this.getPositionAccountNonceWithSlots(
-        positionAccounts,
-        payer
-      );
-
-      console.log("SDK: returned positionAccountPDA", positionAccountWithSlots);
-
-      return { positionAccountPDA: positionAccountWithSlots, ixs };
-    } catch {
-      const mainPositionAccount = positionAccounts.find(
-        (positionAccount) => !positionAccount.isSubPosition
-      );
-
-      if (!mainPositionAccount) {
-        throw new Error(
-          "Main position account not found. Cannot determine next sub-position nonce."
-        );
-      }
-
-      const subPositionAccountKey = getSubPositionAccountPDA(
-        this.program.programId,
-        marketId,
-        marketAddress,
-        Number(mainPositionAccount.nonce) + 1
-      );
-
-      console.log("SDK: subPositionAccountKey", subPositionAccountKey.toString());
-
-      const subPositionAccountPDA = getPositionAccountPDA(
-        this.program.programId,
-        marketId,
-        subPositionAccountKey
-      );
-
-      console.log("SDK: subPositionAccountPDA", subPositionAccountPDA.toString());
-
-      ixs.push(
-        await this.program.methods
-          .createSubPositionAccount(subPositionAccountKey)
-          .accountsPartial({
-            signer: payer,
-            market: marketAddress,
-            marketPositionsAccount: marketPositionsAccount,
-            subMarketPositions: subPositionAccountPDA,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction()
-      );
-
-      return {
-        positionAccountPDA: subPositionAccountPDA,
-        ixs,
-      };
-    }
-  }
+  // getPositionAccountIxs removed (no longer applicable)
 
   // async mintExistingPosition(
   //   marketId: number,

@@ -8,7 +8,8 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
 } from "@solana/spl-token";
-import { ADMIN, FEE_VAULT, getUsdcMint, getCurrentMarketId } from "../helpers";
+import { ADMIN, FEE_VAULT, program } from "../constants";
+import { getUsdcMint, getCurrentMarketId } from "../helpers";
 
 describe("depredict", () => {
   const provider = anchor.AnchorProvider.env();
@@ -20,6 +21,7 @@ describe("depredict", () => {
 
 
   let localMintPubkey: PublicKey;
+  let feeVaultTokenAccount: PublicKey;
 
   before(async () => {
     const { mint: localMintKey, } = await getUsdcMint();
@@ -27,7 +29,7 @@ describe("depredict", () => {
     console.log(`Loaded local token mint: ${localMintPubkey.toString()}`);
 
     try {
-      const feeVaultTokenAccount = (
+      feeVaultTokenAccount = (
         await getOrCreateAssociatedTokenAccount(
           provider.connection,
           admin, // Payer
@@ -74,6 +76,63 @@ describe("depredict", () => {
 
       console.log("Market PDA:", marketPda.toString());
 
+      // Derive market creator PDA
+      const [marketCreatorPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("market_creator"), admin.publicKey.toBytes()],
+        program.programId
+      );
+
+      // Before closing, prune positions and close empty pages to reclaim rent
+      const marketAccount: any = await program.account.marketState.fetch(marketPda);
+      const pagesAllocated = Number(marketAccount.pagesAllocated || 0);
+      for (let i = 0; i < pagesAllocated; i++) {
+        const pageIndexBuf = Buffer.from(new Uint16Array([i]).buffer);
+        const [positionPagePda] = PublicKey.findProgramAddressSync(
+          [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+          program.programId
+        );
+
+        const pageInfo = await anchor.getProvider().connection.getAccountInfo(positionPagePda);
+        if (!pageInfo) continue; // Page may not exist
+
+        try {
+          const page: any = await program.account.positionPage.fetch(positionPagePda);
+          // Prune any Claimed/Closed slots
+          for (let s = 0; s < page.entries.length; s++) {
+            const st = page.entries[s].status;
+            const isClaimed = !!st["claimed"];
+            const isClosed = !!st["closed"];
+            if (isClaimed || isClosed) {
+              try {
+                await program.methods
+                  .prunePosition({ pageIndex: i, slotIndex: s })
+                  .accounts({ signer: admin.publicKey, market: marketPda, marketCreator: marketCreatorPda, positionPage: positionPagePda })
+                  .signers([admin])
+                  .rpc();
+              } catch (_) {}
+            }
+          }
+
+          // Refetch and attempt to close if empty
+          const afterPrune: any = await program.account.positionPage.fetch(positionPagePda);
+          if (Number(afterPrune.count) === 0) {
+            try {
+              await program.methods
+                .closePositionPage({ pageIndex: i })
+                .accounts({ signer: admin.publicKey, market: marketPda, marketCreator: marketCreatorPda, positionPage: positionPagePda })
+                .signers([admin])
+                .rpc();
+              console.log(`Closed empty PositionPage index ${i}`);
+            } catch (e) {
+              console.log(`Could not close PositionPage index ${i}:`, (e as any).message);
+            }
+          }
+        } catch (e) {
+          // If cannot fetch, skip
+          continue;
+        }
+      }
+
       await program.methods
         .closeMarket({
           marketId,
@@ -82,7 +141,8 @@ describe("depredict", () => {
           signer: admin.publicKey,
           feeVault: feeVault.publicKey,
           market: marketPda,
-          usdcMint: localMintPubkey,
+          mint: localMintPubkey,
+          feeVaultMintAta: feeVaultTokenAccount,
           config: configPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

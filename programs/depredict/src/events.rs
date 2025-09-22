@@ -25,7 +25,7 @@ pub struct PositionEvent {
 
 #[event]
 pub struct MarketEvent {
-    pub authority: Pubkey,
+    pub market_creator: Pubkey,
     pub market_id: u64,
     pub yes_liquidity: u64,
     pub no_liquidity: u64,

@@ -9,7 +9,7 @@ use crate::{
 pub struct MarketState {
     pub bump: u8,
     pub market_id: u64,
-    pub authority: Pubkey,
+    pub market_creator: Pubkey,      // Reference to the market creator who owns this market
     pub market_type: MarketType,
     pub oracle_type: OracleType,
     pub oracle_pubkey: Option<Pubkey>,
@@ -23,6 +23,7 @@ pub struct MarketState {
     pub update_ts: i64,
     pub padding_1: [u8; 7],
     pub next_position_id: u64,
+    pub pages_allocated: u32,
     pub market_state: MarketStates,
     pub betting_start: i64, //voting begins (same as market_start if live market)
     pub market_start: i64, //voting ends, market question period starts
@@ -99,7 +100,7 @@ impl Default for MarketState {
     fn default() -> Self {
         Self {
             bump: 0,
-            authority: Pubkey::default(),
+            market_creator: Pubkey::default(),
             oracle_type: OracleType::None,
             oracle_pubkey: None,
             nft_collection: None,
@@ -112,6 +113,7 @@ impl Default for MarketState {
             no_liquidity: 0,
             update_ts: 0,
             next_position_id: 1,
+            pages_allocated: 0,
             market_state: MarketStates::Active,
             market_start: 0,
             market_end: 0,
@@ -247,8 +249,8 @@ impl MarketState {
     // }
 
     pub fn emit_market_event(&self) -> Result<()> {
-        emit!(MarketEvent {
-            authority: self.authority,
+            emit!(MarketEvent {
+            market_creator: self.market_creator,
             market_id: self.market_id,
             yes_liquidity: self.yes_liquidity,
             no_liquidity: self.no_liquidity,

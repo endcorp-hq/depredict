@@ -1,14 +1,3 @@
-// Unified market creation tests for both localnet and devnet
-// 
-// This file handles market creation testing across both networks:
-// - Localnet: Tests basic validation and manual resolution (MPL Core limitations apply)
-// - Devnet: Full testing including oracle-based markets and NFT creation
-// 
-// The tests automatically adapt based on the network configuration:
-// - Manual resolution markets work on both networks
-// - Oracle-based markets only work on devnet (skipped on localnet)
-// - Error expectations differ between networks due to program availability
-
 import * as anchor from "@coral-xyz/anchor";  
 import { PublicKey, Keypair } from "@solana/web3.js";
 import {
@@ -16,8 +5,8 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { getNetworkConfig, ADMIN, FEE_VAULT, program, provider, LOCAL_MINT, ORACLE_KEY, extractErrorCode } from "../helpers";
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import { ADMIN, FEE_VAULT, program, LOCAL_MINT, ORACLE_KEY, provider } from "../constants";
+import { getNetworkConfig, extractErrorCode, getCurrentUnixTime, getMarketCreatorDetails } from "../helpers";
 
 
 // At the top of your file:
@@ -27,7 +16,7 @@ async function tryCreateMarketTx({
   questionStr = "Default question?",
   metadataUri = "https://arweave.net/default",
   oraclePubkey = ORACLE_KEY,
-  feeVault = FEE_VAULT.publicKey,
+  feeVault = null as PublicKey | null,
   usdcMintParam = null,
   expectError = null,
   liveMarket = false,
@@ -40,32 +29,45 @@ async function tryCreateMarketTx({
     [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
     program.programId
   );
-  const [marketPositionsPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
-  const [collectionPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("collection"), marketId.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
+
+  // Extra logging for debugging
+  console.log("programId", program.programId.toBase58());
+  console.log("configPda", configPda.toBase58());
+  console.log("derived marketPda", marketPda.toBase58());
 
   // Market times
-  const currentSlot = await provider.connection.getSlot();
-  const validatorTime = await provider.connection.getBlockTime(currentSlot);
-  if (!validatorTime) assert.fail("Could not fetch validator block time.");
+  const validatorTime = await getCurrentUnixTime();
  
   const marketStart = liveMarket ? new anchor.BN(validatorTime - 60) : new anchor.BN(validatorTime + 86400);
   const bettingStart = new anchor.BN(validatorTime - 60);
   const marketEnd = new anchor.BN(validatorTime + 86400);
   const question = Array.from(Buffer.from(questionStr));
   const usdcMintToUse = usdcMintParam || LOCAL_MINT.publicKey;
+  const pageIndexBuf = Buffer.from(new Uint16Array([0]).buffer);
+  const positionPage0Pda = PublicKey.findProgramAddressSync(
+    [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+    program.programId
+  )[0];
+  console.log("positionPage0Pda", positionPage0Pda.toBase58());
 
+  async function waitForAccount(pubkey: PublicKey, attempts = 40, delayMs = 800) {
+    for (let i = 0; i < attempts; i++) {
+      const info = await provider.connection.getAccountInfo(pubkey);
+      if (info && info.data && info.data.length > 0) return true;
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+    return false;
+  }
   // Determine oracle type based on the oracle pubkey
   // For manual resolution, we use ADMIN.publicKey as oracle_pubkey but set oracleType to none
   const isManualResolve = oraclePubkey.equals(ADMIN.publicKey);
-
+  console.log("ADMIN.publicKey", ADMIN.publicKey.toString());
   try {
-    const tx = await program.methods
+    // Always source the current fee vault from config unless explicitly overridden
+    const feeVaultToUse: PublicKey = feeVault || configAccount.feeVault;
+    const marketCreatorDetails = await getMarketCreatorDetails();
+    
+    const method = program.methods
       .createMarket({
         question,
         marketStart,
@@ -76,28 +78,40 @@ async function tryCreateMarketTx({
         bettingStart: bettingStart,
       })
       .accountsPartial({
+        marketCreator: marketCreatorDetails.marketCreator,
         payer: ADMIN.publicKey,
-        feeVault,
-        market: marketPda,
-        collection: collectionPda,
-        marketPositionsAccount: marketPositionsPda,
-        oraclePubkey: oraclePubkey,
-        usdcMint: usdcMintToUse,
-        tokenProgram: TOKEN_PROGRAM_ID,
         config: configPda,
+        positionPage0: positionPage0Pda,
+        mint: usdcMintToUse,
+        market: marketPda,
+        oraclePubkey: oraclePubkey,
+        tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
-        mplCoreProgram: MPL_CORE_PROGRAM_ID,
       })
-      .signers([ADMIN])
-      .rpc();
-    return { tx, error: null, marketPda, collectionPda, marketId };
+      .signers([ADMIN]);
+
+    if (expectError) {
+      try {
+        await method.simulate();
+        return { tx: null, error: null, marketPda, marketId };
+      } catch (simErr) {
+        console.log("simulate error (expected)", simErr.toString());
+        return { tx: null, error: simErr, marketPda, marketId };
+      }
+    }
+
+    const tx = await method.rpc();
+    console.log("createMarket tx", tx);
+    const exists = await waitForAccount(marketPda, 50, 500);
+    console.log("market account exists:", exists);
+    return { tx, error: null, marketPda, marketId };
   } catch (error) {
     console.log("error", error);
     if (expectError) {
       assert.include(error.toString(), expectError);
     }
-    return { tx: null, error, marketPda, collectionPda, marketId };
+    return { tx: null, error, marketPda, marketId };
   }
 }
 
@@ -169,7 +183,14 @@ describe("depredict", () => {
         const configAccount = await program.account.config.fetch(configPda);
         const expectedMarketId = configAccount.nextMarketId.sub(new anchor.BN(1)); // The market that was just created
         assert.ok(marketAccount.marketId.eq(expectedMarketId));
-        assert.ok(marketAccount.authority.equals(ADMIN.publicKey));
+        
+        // Check that marketCreator is set to the expected market creator PDA
+        const expectedMarketCreatorPda = PublicKey.findProgramAddressSync(
+          [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
+          program.programId
+        )[0];
+        assert.ok(marketAccount.marketCreator.equals(expectedMarketCreatorPda));
+        
         assert.ok('none' in marketAccount.oracleType, "Should be none oracle type");
         assert.ok(marketAccount.oraclePubkey === null, "Oracle pubkey should be null for manual resolution");
       }

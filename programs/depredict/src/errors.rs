@@ -60,6 +60,9 @@ DepredictError {
     #[msg("Insufficient liquidity")]
     InsufficientLiquidity,
 
+    #[msg("Market not resolved")]
+    MarketNotResolved,
+
     #[msg("Market already resolved")]
     MarketAlreadyResolved,
 
@@ -125,4 +128,28 @@ DepredictError {
 
     #[msg("Invalid NFT")]
     InvalidNft,
+
+    #[msg("Market creator is inactive")]
+    MarketCreatorInactive,
+
+    #[msg("Invalid program")]
+    InvalidProgram,
+
+    #[msg("Invalid tree")]
+    InvalidTree,
+
+    #[msg("Market creator already verified")]
+    AlreadyVerified,
+
+    #[msg("Invalid market creator")]
+    InvalidMarketCreator,
+    
+    #[msg("Position not prunable (must be Claimed or Closed)")]
+    PositionNotPrunable,
+
+    #[msg("Position page not empty")]
+    PositionPageNotEmpty,
+
+    #[msg("Invalid fee bps")]
+    InvalidFeeBps,
 }
