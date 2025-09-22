@@ -23,10 +23,7 @@ import {
   getMarketPDA,
   getMarketCreatorPDA,
   getPositionPagePDA,
-  getCollectionPDA,
-  getPositionNftPDA,
-  getPositionAccountPDA,
-  getSubPositionAccountPDA,
+    getTreeConfigPDA,
 } from "./utils/pda/index.js";
 import createVersionedTransaction from "./utils/sendVersionedTransaction.js";
 import { swap } from "./utils/swap.js";
@@ -35,9 +32,9 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID as CORE_PROGRAM_ID, MPL_CORE_CPI_SIGNER } from "./utils/constants.js";
+import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID, MPL_CORE_CPI_SIGNER, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID } from "./utils/constants.js";
 import Position from "./position.js";
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+import { fetchAssetProofWithRetry } from "./utils/mplHelpers.js";
 
 export default class Trade {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
@@ -340,7 +337,7 @@ export default class Trade {
             collection: collection,
             treeConfig: treeConfig,
             mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
-            mplCoreProgram: CORE_PROGRAM_ID,
+            mplCoreProgram: MPL_CORE_PROGRAM_ID,
             bubblegumProgram: BGUM_PROGRAM_ID,
             logWrapperProgram: MPL_NOOP_ID,
             compressionProgram: MPL_ACCOUNT_COMPRESSION_ID,
@@ -411,7 +408,6 @@ export default class Trade {
   }
 
   /**
-   * WIP: Not implemented yet
    * Close Market and related accounts to collect remaining liquidity
    * @param marketId - The ID of the market
    * @param payer - The payer of the Market
@@ -566,8 +562,7 @@ export default class Trade {
       throw new Error(`Market ${marketId} does not have a mint configured`);
     }
     const marketMint = marketAccount.mint;
-
-    const collectionPda = getCollectionPDA(this.program.programId, marketId);
+    const configPda = getConfigPDA(this.program.programId);
 
     const userMintAta = getAssociatedTokenAddressSync(
       marketMint,
@@ -583,10 +578,28 @@ export default class Trade {
       TOKEN_PROGRAM_ID
     );
 
-    // New flow uses compressed NFTs; payout uses asset id via position page in a separate method.
+    // Load market creator to fetch merkle tree and collection
+    const marketCreator = (await this.program.account.marketState.fetch(marketPda))
+      .marketCreator as PublicKey;
+    const marketCreatorAccount = await this.program.account.marketCreator.fetch(
+      marketCreator
+    );
+    const merkleTree: PublicKey = marketCreatorAccount.merkleTree;
+    const collection: PublicKey = marketCreatorAccount.coreCollection;
+
+    // Derive TreeConfig PDA from merkle tree
+    const treeConfig = getTreeConfigPDA(merkleTree);
+
+    // Fetch asset proof details required by on-chain args
+    const {
+      root: rootBytes,
+      dataHash: dataHashBytes,
+      creatorHash: creatorHashBytes,
+      nonce,
+      index,
+    } = await fetchAssetProofWithRetry(assetId);
 
     try {
-      const marketCreator = (await this.program.account.marketState.fetch(marketPda)).marketCreator as PublicKey;
       const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
       ixs.push(
         await this.program.methods
@@ -594,29 +607,32 @@ export default class Trade {
             pageIndex,
             slotIndex: slotIndex ?? null,
             assetId,
-            root,
-            dataHash,
-            creatorHash,
-            nonce,
-            leafIndex,
+            root: Array.from(rootBytes),
+            dataHash: Array.from(dataHashBytes),
+            creatorHash: Array.from(creatorHashBytes),
+            nonce: new BN(nonce),
+            leafIndex: index,
           })
           .accountsPartial({
             claimer: payer,
             market: marketPda,
+            config: configPda,
             marketCreator,
             positionPage,
             mint: marketMint,
             claimerMintAta: userMintAta,
             marketVault,
-            mplCoreProgram: MPL_CORE_PROGRAM_ID,
-            bubblegumProgram: new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY"),
+            mplCoreProgram: new PublicKey(MPL_CORE_PROGRAM_ID),
+            bubblegumProgram: new PublicKey(MPL_BUBBLEGUM_ID),
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
-            treeConfig: PublicKey.findProgramAddressSync([collectionPda.toBuffer()], new PublicKey("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY"))[0],
-            mplCoreCpiSigner: payer,
-            logWrapperProgram: new PublicKey("mnoopTCrg4p8ry25e4bcWA9XZjbNjMTfgYVGGEdRsf3"),
-            compressionProgram: new PublicKey("mcmt6YrQEMKw8Mw43FmpRLmf7BqRnFMKmAcbxE3xkAW"),
+            merkleTree,
+            collection,
+            treeConfig,
+            mplCoreCpiSigner: new PublicKey(MPL_CORE_CPI_SIGNER),
+            logWrapperProgram: new PublicKey(MPL_NOOP_ID),
+            compressionProgram: new PublicKey(MPL_ACCOUNT_COMPRESSION_ID),
           })
           .instruction()
       );
