@@ -240,7 +240,7 @@ export default class Trade {
    * @param args.payer - The payer of the Order
    * @param args.metadataUri - The metadata URI of the Order NFT
    * @param options - RPC options
-   * @returns Transaction, addressLookupTableAccounts || null (if no swap)
+   * @returns Transaction, addressLookupTableAccounts, nftMint || null (if no swap)
    */
   async openPosition(
     { marketId, amount, direction, token, payer, metadataUri }: OpenOrderArgs,
@@ -340,7 +340,7 @@ export default class Trade {
       console.log("error", error);
       throw error;
     }
-    return { ixs, addressLookupTableAccounts };
+    return { ixs, addressLookupTableAccounts, nftMint: positionNftPDA };
   }
 
   /**
