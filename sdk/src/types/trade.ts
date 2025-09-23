@@ -71,6 +71,15 @@ export type OpenOrderArgs = {
   payer: PublicKey,
   feeVaultAccount: PublicKey,
   metadataUri: string
+  pageIndex: number
+}
+
+export type PayoutArgs = {
+  marketId: number
+  payer: PublicKey
+  pageIndex: number
+  assetId: PublicKey
+  slotIndex?: number
 }
 
 export enum OracleType {

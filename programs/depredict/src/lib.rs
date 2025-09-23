@@ -5,24 +5,24 @@ mod constants;
 mod constraints;
 mod errors;
 mod events;
-
+mod helpers;
 
 use state::*;
 use instructions::*;
 
-declare_id!("7w43ZtEh1vdmiCFkuVMRni3s1gq7DJiu1N5N5AuRu59r");
+declare_id!("FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33");
 
 #[program]
 pub mod depredict {
     use super::*;
 
     // CONFIG INSTRUCTIONS
-    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u64) -> Result<()> {
+    pub fn initialize_config(ctx: Context<InitConfigContext>, fee_amount: u16) -> Result<()> {
         ctx.accounts.init_config(fee_amount, &ctx.bumps)?;
         Ok(())
     }
 
-    pub fn update_fee_amount(ctx: Context<UpdateConfigContext>, fee_amount: u64) -> Result<()> {
+    pub fn update_fee_amount(ctx: Context<UpdateConfigContext>, fee_amount: u16) -> Result<()> {
         ctx.accounts.update_fee_amount(fee_amount)?;
         Ok(())
     }
@@ -37,14 +37,50 @@ pub mod depredict {
         Ok(())
     }
 
+    pub fn update_base_uri(ctx: Context<UpdateConfigContext>, base_uri: [u8; 200]) -> Result<()> {
+        ctx.accounts.update_base_uri(base_uri)?;
+        Ok(())
+    }
+
     pub fn close_config(ctx: Context<CloseConfigContext>) -> Result<()> {
         ctx.accounts.close_config()?;
         Ok(())
     }
 
+    // MARKET CREATOR INSTRUCTIONS
+    pub fn create_market_creator(ctx: Context<CreateMarketCreatorContext>, args: CreateMarketCreatorArgs) -> Result<()> {
+        ctx.accounts.create_market_creator(args, &ctx.bumps)?;
+        Ok(())
+    }
+
+    pub fn verify_market_creator(ctx: Context<VerifyMarketCreatorContext>, args: VerifyMarketCreatorArgs) -> Result<()> {
+        ctx.accounts.verify_market_creator(args)?;
+        Ok(())
+    }
+
+    pub fn update_creator_name(ctx: Context<UpdateMarketCreatorDetailsContext>, name: String) -> Result<()> {
+        ctx.accounts.update_creator_name(name)?;
+        Ok(())
+    }
+
+    pub fn update_creator_fee_vault(ctx: Context<UpdateMarketCreatorDetailsContext>, current_fee_vault: Pubkey, new_fee_vault: Pubkey) -> Result<()> {
+        ctx.accounts.update_creator_fee_vault(current_fee_vault, new_fee_vault)?;
+        Ok(())
+    }
+
+    pub fn update_creator_fee(ctx: Context<UpdateMarketCreatorDetailsContext>, creator_fee: u16) -> Result<()> {
+        ctx.accounts.update_creator_fee(creator_fee)?;
+        Ok(())
+    }
+
+    pub fn update_merkle_tree(ctx: Context<UpdateMarketCreatorTreeContext>, new_tree: Pubkey) -> Result<()> {
+        ctx.accounts.update_merkle_tree(new_tree)?;
+        Ok(())
+    }
+
     // MARKET INSTRUCTIONS
 
-    pub fn create_market(ctx: Context<MarketContext>, args: CreateMarketArgs) -> Result<()> {
+    pub fn create_market(ctx: Context<CreateMarketContext>, args: CreateMarketArgs) -> Result<()> {
         ctx.accounts.create_market(args, &ctx.bumps)?;
         Ok(())
     }
@@ -66,18 +102,28 @@ pub mod depredict {
 
     // POSITION INSTRUCTIONS
 
-    pub fn create_sub_position_account(ctx: Context<SubPositionContext>, sub_position_key: Pubkey) -> Result<()> {
-        ctx.accounts.create_sub_position_account(sub_position_key, &ctx.bumps)?;
+    pub fn open_position(ctx: Context<OpenPositionContext>, args: OpenPositionArgs) -> Result<()> {
+        ctx.accounts.open_position(args)?;
         Ok(())
     }
 
-    pub fn create_position(ctx: Context<PositionContext>, args: OpenPositionArgs) -> Result<()> {
-        ctx.accounts.open_position(args, &ctx.bumps)?;
+    pub fn settle_position(ctx: Context<SettlePositionContext>, args: SettlePositionArgs) -> Result<()> {
+        ctx.accounts.settle_position(args)?;
         Ok(())
     }
 
-    pub fn settle_position(ctx: Context<PayoutNftContext>) -> Result<()> {
-        ctx.accounts.payout_position()?;
+    pub fn ensure_position_page(ctx: Context<EnsurePositionPageContext>, args: EnsurePageArgs) -> Result<()> {
+        ctx.accounts.ensure(args)?;
+        Ok(())
+    }
+
+    pub fn prune_position(ctx: Context<PrunePositionContext>, args: PrunePositionArgs) -> Result<()> {
+        ctx.accounts.prune(args)?;
+        Ok(())
+    }
+
+    pub fn close_position_page(ctx: Context<ClosePositionPageContext>, args: ClosePositionPageArgs) -> Result<()> {
+        ctx.accounts.close_page(args)?;
         Ok(())
     }
 }

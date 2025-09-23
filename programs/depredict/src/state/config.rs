@@ -6,10 +6,11 @@ pub struct Config {
     pub bump: u8,
     pub authority: Pubkey,
     pub fee_vault: Pubkey,
-    pub fee_amount: u64,
-    pub version: u64,
+    pub fee_amount: u16, 
+    pub version: u16,
     pub next_market_id: u64,
-    pub num_markets: u64,
+    pub global_markets: u64,
+    pub base_uri: [u8; 200],
 }
 
 impl Config {

@@ -1,22 +1,15 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey, Keypair } from "@solana/web3.js";
-import {
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
-import { assert } from "chai";
+import { PublicKey} from "@solana/web3.js";
 import { 
   getNetworkConfig, 
+  updateMarketIds,
+} from "./helpers";
+import {
   ADMIN, 
-  FEE_VAULT, 
   program, 
   provider, 
   LOCAL_MINT, 
-  ORACLE_KEY, 
-  updateMarketIds,
-  extractErrorCode 
-} from "./helpers";
-import { MPL_CORE_PROGRAM_ID } from "@metaplex-foundation/mpl-core";
+} from "./constants";
 
 describe("Market Setup", () => {
   let configPda: PublicKey;
@@ -37,6 +30,16 @@ describe("Market Setup", () => {
       program.programId
     )[0];
   });
+
+  async function getCurrentUnixTime(): Promise<number> {
+    try {
+      const currentSlot = await provider.connection.getSlot();
+      const blockTime = await provider.connection.getBlockTime(currentSlot);
+      if (blockTime) return blockTime;
+    } catch (e) {}
+    // Surfpool or some RPCs may not return block times; fall back to wall-clock
+    return Math.floor(Date.now() / 1000);
+  }
 
   async function createMarket({
     questionStr,
@@ -67,18 +70,20 @@ describe("Market Setup", () => {
       [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
-    const [marketPositionsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("position"), marketId.toArrayLike(Buffer, "le", 8)],
-      program.programId
-    );
-    const [collectionPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("collection"), marketId.toArrayLike(Buffer, "le", 8)],
-      program.programId
-    );
 
     const question = Array.from(Buffer.from(questionStr));
 
     try {
+      const cfg: any = await program.account.config.fetch(configPda);
+      let MARKET_CREATOR = "market_creator";
+      // market creator pda
+      const seeds = [Buffer.from(MARKET_CREATOR), ADMIN.publicKey.toBytes()];
+      const [marketCreatorpda, bump] = await PublicKey.findProgramAddressSync(
+        seeds,
+        // owned by solana program id
+        program.programId
+      );
+      
       const tx = await program.methods
         .createMarket({
           question,
@@ -89,43 +94,19 @@ describe("Market Setup", () => {
           marketType,
           bettingStart,
         })
-        .accountsPartial({
+        .accounts({
           payer: ADMIN.publicKey,
-          feeVault: FEE_VAULT.publicKey,
-          market: marketPda,
-          collection: collectionPda,
-          marketPositionsAccount: marketPositionsPda,
+          feeVault: cfg.feeVault,
           oraclePubkey: oraclePubkey,
-          usdcMint: LOCAL_MINT.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
           config: configPda,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          mplCoreProgram: MPL_CORE_PROGRAM_ID,
+          marketCreator: marketCreatorpda,
+          mint: LOCAL_MINT.publicKey,
         })
         .signers([ADMIN])
         .rpc();
-
-      console.log(`✅ Created ${description} market:`, marketId.toString());
-      console.log("Transaction:", tx);
-      console.log(`   Market Start: ${marketStart.toNumber()}`);
-      console.log(`   Market End: ${marketEnd.toNumber()}`);
-      console.log(`   Betting Start: ${bettingStart.toNumber()}`);
       
       return { marketId, marketPda, tx };
     } catch (error) {
-      console.error(`❌ Failed to create ${description} market:`, error);
-      if (error.logs) {
-        console.error("Program logs:", error.logs);
-      }
-      
-      // On localnet, MPL Core should now be available
-      if (isLocalnet && (error.toString().includes("Unsupported program id") || error.toString().includes("MPL"))) {
-        console.log(`❌ MPL Core error on localnet for ${description} market`);
-        console.log(`   Make sure to run ./tests/setup-localnet.sh to load MPL Core`);
-        console.log(`   Error: ${error.toString()}`);
-      }
-      
       throw error;
     }
   }
@@ -135,11 +116,7 @@ describe("Market Setup", () => {
       console.log("Creating market on localnet (MPL Core may fail but market logic will be tested)");
     }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
-
-    console.log("Current time:", currentTime);
+    const currentTime = await getCurrentUnixTime();
 
     // Create a market that's currently active for betting
     // For an active market: current time should be between betting_start and market_end
@@ -170,9 +147,7 @@ describe("Market Setup", () => {
       console.log("Creating closed market on localnet (MPL Core may fail but market logic will be tested)");
     }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
+    const currentTime = await getCurrentUnixTime();
 
     // Create a market that's closed for betting (betting period ended)
     // For a closed market: current time should be after market_end but before market_start
@@ -204,9 +179,7 @@ describe("Market Setup", () => {
       console.log("Creating manual resolution market on localnet (MPL Core may fail but market logic will be tested)");
     }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
+    const currentTime = await getCurrentUnixTime();
 
     // Create a manual resolution market that's currently active
     const marketStart = new anchor.BN(currentTime + 3600); // Starts in 1 hour
@@ -232,13 +205,8 @@ describe("Market Setup", () => {
   });
 
   it("Creates resolved market", async function() {
-    if (isLocalnet) {
-      console.log("Creating resolved market on localnet (MPL Core may fail but market logic will be tested)");
-    }
 
-    const currentSlot = await provider.connection.getSlot();
-    const currentTime = await provider.connection.getBlockTime(currentSlot);
-    if (!currentTime) assert.fail("Could not fetch validator block time.");
+    const currentTime = await getCurrentUnixTime();
 
     // Create a market that will be resolved
     // For a resolved market: current time should be within the betting period but market has a winner
@@ -274,6 +242,16 @@ describe("Market Setup", () => {
       // For manual resolution, we need to pass oracle_value: 11 for "Yes" or 10 for "No"
       const mockOracleValue = 11; // Yes/True
 
+      // Use the existing market creator setup
+      let MARKET_CREATOR = "market_creator";
+      // market creator pda
+      const seeds = [Buffer.from(MARKET_CREATOR), ADMIN.publicKey.toBytes()];
+      const [marketCreatorpda, bump] = await PublicKey.findProgramAddressSync(
+        seeds,
+        // owned by solana program id
+        program.programId
+      );
+
       const resolveTx = await program.methods
         .resolveMarket({
           oracleValue: mockOracleValue,
@@ -281,47 +259,24 @@ describe("Market Setup", () => {
         .accounts({
           signer: ADMIN.publicKey,
           market: marketPda,
+          marketCreator: marketCreatorpda,
           oraclePubkey: ADMIN.publicKey, // Use ADMIN for manual resolution
         })
         .signers([ADMIN])
         .rpc();
 
       console.log("✅ Resolved market:", result.marketId.toString());
-      console.log("Resolution transaction:", resolveTx);
     } catch (error) {
-      console.error("❌ Failed to resolve market:", error);
-      if (error.logs) {
-        console.error("Program logs:", error.logs);
-      }
+      
       // For now, we'll still track this as a resolved market
       // In a real scenario, you'd want to ensure resolution succeeds
       console.log("⚠️  Market created but resolution failed - will test against unresolved market");
       
-      // Check if the market was actually resolved by fetching it
-      try {
-        const [marketPda] = PublicKey.findProgramAddressSync(
-          [Buffer.from("market"), result.marketId.toArrayLike(Buffer, "le", 8)],
-          program.programId
-        );
-        const marketAccount = await program.account.marketState.fetch(marketPda);
-        console.log("Market state after resolution attempt:", marketAccount.marketState);
-        console.log("Winning direction:", marketAccount.winningDirection);
-        
-        if (marketAccount.winningDirection.toString() !== "None") {
-          console.log("✅ Market was actually resolved successfully!");
-        } else {
-          console.log("❌ Market was not resolved - winning direction is still None");
-        }
-      } catch (fetchError) {
-        console.error("Could not fetch market account:", fetchError);
-      }
+
     }
   });
 
   it("Updates market-id.json with all created markets", async function() {
-    if (isLocalnet) {
-      console.log("Updating market IDs on localnet");
-    }
 
     // Update the file with any markets that were created (even if partially failed)
     if (Object.keys(createdMarkets).length > 0) {

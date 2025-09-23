@@ -1,41 +1,9 @@
-import { PublicKey, Keypair, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as fs from "fs";
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { Depredict } from "../target/types/depredict";
 import * as path from "path";
-
-// Load the local mint keypair that we'll use for testing
-const LOCAL_MINT = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/local-mint.json", "utf-8")))
-);
-
-// Oracle Key
-const ORACLE_KEY = new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL");
-
-const METAPLEX_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
-// Initialize provider and program
-// The provider will be set based on the Anchor.toml configuration
-// or command line arguments when the tests are run
-const provider = anchor.AnchorProvider.env();
-anchor.setProvider(provider);
-
-const program = anchor.workspace.Depredict as Program<Depredict>;
-
-// Load keypairs
-const ADMIN = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/keypair.json", "utf-8")))
-);
-const FEE_VAULT = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/fee-vault.json", "utf-8")))
-);
-
-const USER = Keypair.fromSecretKey(
-  Buffer.from(JSON.parse(fs.readFileSync("./tests/keys/user.json", "utf-8")))
-);
-
-// Export provider, program, and keypairs for use in tests
-export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT, ORACLE_KEY };
+import { provider } from "./constants";
+import { LOCAL_MINT, ADMIN, program } from "./constants";
 
 /**
  * Gets the current market ID for testing
@@ -45,7 +13,7 @@ export { provider, program, ADMIN, FEE_VAULT, METAPLEX_ID, USER, LOCAL_MINT, ORA
 export async function getCurrentMarketId(): Promise<anchor.BN> {
   try {
     // Try to read from a market ID file first
-    const marketIdPath = path.join(__dirname, 'market-id.json');
+    const marketIdPath = path.join(process.cwd(), 'tests', 'market-id.json');
     if (fs.existsSync(marketIdPath)) {
       const marketIdData = JSON.parse(fs.readFileSync(marketIdPath, "utf-8"));
       
@@ -67,13 +35,26 @@ export async function getCurrentMarketId(): Promise<anchor.BN> {
 }
 
 /**
+ * Returns a current unix timestamp in seconds using validator block time when available,
+ * otherwise falls back to wall-clock time. This supports Surfpool or RPCs that don't implement getBlockTime.
+ */
+export async function getCurrentUnixTime(): Promise<number> {
+  try {
+    const currentSlot = await provider.connection.getSlot();
+    const blockTime = await provider.connection.getBlockTime(currentSlot);
+    if (blockTime) return blockTime;
+  } catch (_) {}
+  return Math.floor(Date.now() / 1000);
+}
+
+/**
  * Gets a specific market ID by state
  * @param state The market state to get ('active', 'closed', 'resolved', 'manual')
  * @returns {Promise<anchor.BN>} The market ID for the specified state
  */
 export async function getMarketIdByState(state: string): Promise<anchor.BN> {
   try {
-    const marketIdPath = path.join(__dirname, 'market-id.json');
+    const marketIdPath = path.join(process.cwd(), 'tests', 'market-id.json');
     if (fs.existsSync(marketIdPath)) {
       const marketIdData = JSON.parse(fs.readFileSync(marketIdPath, 'utf-8'));
       
@@ -215,3 +196,207 @@ export function extractErrorCode(error) {
   }
   return null;
 }
+
+/**
+ * Gets the market creator details for testing
+ * @returns {Promise<{marketCreator: PublicKey; coreCollection: PublicKey; verified: boolean}>} Market creator details
+ */
+export async function getMarketCreatorDetails(): Promise<{
+  marketCreator: PublicKey;
+  coreCollection: PublicKey;
+  verified: boolean;
+}> {
+  // Create the market creator account PDA
+  const [marketCreatorPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
+    program.programId
+  );
+
+  try {
+    // Try to fetch existing market creator
+    const marketCreatorAccount = await program.account.marketCreator.fetch(marketCreatorPda);
+    console.log("✅ Market creator found:", marketCreatorPda.toString());
+    console.log("   Verified:", marketCreatorAccount.verified);
+    return {
+      marketCreator: marketCreatorPda,
+      coreCollection: marketCreatorAccount.coreCollection,
+      verified: marketCreatorAccount.verified,
+    };
+  } catch (error) {
+    console.log("❌ Market creator not found:", marketCreatorPda.toString());
+    console.log("   Error:", error.message);
+    console.log("   Please run setup-market-creator.ts first to create the market creator account");
+    throw new Error("Market creator not found. Run setup-market-creator.ts first.");
+  }
+}
+
+/**
+ * Creates a market creator account if it doesn't exist
+ * @returns {Promise<{marketCreator: PublicKey; coreCollection: PublicKey}>} Market creator details
+ */
+export async function ensureMarketCreatorExists(): Promise<{
+  marketCreator: PublicKey;
+  coreCollection: PublicKey;
+}> {
+  try {
+    return await getMarketCreatorDetails();
+  } catch (error) {
+    console.log("Market creator doesn't exist, creating it now...");
+    
+    // Import the setup function dynamically to avoid circular dependencies
+    const { execSync } = require('child_process');
+    try {
+      // Try the simple test first
+      console.log("Trying simple market creator setup...");
+      execSync('yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/test-market-creator-simple.ts', { 
+        stdio: 'inherit',
+        cwd: process.cwd()
+      });
+      
+      // Try to fetch again
+      return await getMarketCreatorDetails();
+    } catch (simpleSetupError) {
+      console.log("Simple setup failed, trying full setup...");
+      try {
+        execSync('yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/setup-market-creator.ts', { 
+          stdio: 'inherit',
+          cwd: process.cwd()
+        });
+        
+        // Try to fetch again
+        return await getMarketCreatorDetails();
+      } catch (fullSetupError) {
+        console.error("Both simple and full setup failed:", fullSetupError);
+        throw new Error("Could not create market creator automatically. Please run setup-market-creator.ts manually.");
+      }
+    }
+  }
+}
+
+/**
+ * Creates a market creator account (step 1 of 2)
+ * @param name The name of the market creator
+ * @param feeVault The fee vault public key
+ * @returns {Promise<{marketCreator: PublicKey}>} Market creator details
+ */
+export async function createMarketCreator(name: string, feeVault: PublicKey): Promise<{
+  marketCreator: any;
+}> {
+  // Create the market creator account PDA
+  const [marketCreatorPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
+    program.programId
+  );
+  try {
+    // Check if already exists
+    await program.account.marketCreator.fetch(marketCreatorPda);
+    console.log("✅ Market creator already exists:", marketCreatorPda.toString());
+    return { marketCreator: marketCreatorPda };
+  } catch (error) {
+    // Create the market creator account
+    console.log("Creating market creator account...");
+    
+    const tx = await program.methods
+      .createMarketCreator({
+        name: name,
+        feeVault: feeVault,
+        creatorFeeBps: 100,
+      })
+      .accountsPartial({
+        signer: ADMIN.publicKey,
+        marketCreator: marketCreatorPda,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([ADMIN])
+      .rpc({ commitment: "confirmed" });
+
+    console.log("✅ Market creator created (unverified):", marketCreatorPda.toString());
+    console.log("   Transaction:", tx);
+    
+    return { marketCreator: marketCreatorPda };
+  }
+}
+
+/**
+ * Verifies a market creator with a collection (step 2 of 2)
+ * @param marketCreator The market creator PDA
+ * @param coreCollection The core collection public key
+ * @returns {Promise<void>}
+ */
+export async function verifyMarketCreator(marketCreator: PublicKey, coreCollection: PublicKey, merkleTree: PublicKey): Promise<void> {
+  console.log("Verifying market creator with collection...");
+  
+  console.log("Market creator:", marketCreator.toString());
+  console.log("Core collection:", coreCollection.toString());
+  console.log("Merkle tree:", merkleTree.toString());
+  
+// sanitise the input to ensure base58 encoding
+marketCreator = new PublicKey(marketCreator.toString());
+coreCollection = new PublicKey(coreCollection.toString());
+merkleTree = new PublicKey(merkleTree.toString());
+
+  const tx = await program.methods
+    .verifyMarketCreator({
+      coreCollection: coreCollection,
+      merkleTree: merkleTree,
+    })
+    .accountsPartial({
+      signer: ADMIN.publicKey,
+      marketCreator: marketCreator,
+      coreCollection: coreCollection,
+      merkleTree: merkleTree,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    })
+    .signers([ADMIN])
+    .rpc({ commitment: "confirmed" });
+
+  console.log("✅ Market creator verified with collection:", coreCollection.toString());
+  console.log("   Transaction:", tx);
+}
+
+export async function getConfigPda(): Promise<PublicKey> {
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    program.programId
+  );
+  return configPda;
+}
+
+/**
+ * Gets the collection information from market-id.json
+ * @returns {Promise<{address: PublicKey; keypair?: Buffer; owner: PublicKey}>} Collection details
+ */
+export async function getCollectionDetails(): Promise<{
+  address: PublicKey;
+  keypair?: Buffer;
+  owner: PublicKey;
+}> {
+  try {
+    const marketIdPath = path.join(process.cwd(), 'tests', 'market-id.json');
+    if (fs.existsSync(marketIdPath)) {
+      const marketData = JSON.parse(fs.readFileSync(marketIdPath, 'utf8'));
+      
+      if (marketData.collection) {
+        console.log("✅ Collection details found in market-id.json");
+        console.log("   Collection:", marketData.collection.address);
+        console.log("   Owner:", marketData.collection.owner);
+        
+        return {
+          address: new PublicKey(marketData.collection.address),
+          keypair: marketData.collection.keypair ? Buffer.from(Object.values(marketData.collection.keypair)) : undefined,
+          owner: new PublicKey(marketData.collection.owner)
+        };
+      }
+    }
+  } catch (error) {
+    console.log("Could not read collection details from market-id.json:", error.message);
+  }
+  
+  // Fallback to default collection (this will cause constraint errors)
+  console.log("⚠️  Using default collection - this may cause constraint errors");
+  return {
+    address: new PublicKey("11111111111111111111111111111111"),
+    owner: new PublicKey("11111111111111111111111111111111")
+  };
+}
+

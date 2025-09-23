@@ -1,70 +1,136 @@
-use anchor_lang::prelude::*;
-use anchor_lang::system_program::{ transfer, Transfer };
-use anchor_spl::token::{Token, TransferChecked, transfer_checked};
+// anchor includes
+use anchor_lang::{
+    prelude::*
+};
+use anchor_spl::{ 
+    associated_token::AssociatedToken, 
+    token_interface::{ 
+        Mint, TokenAccount 
+    },
+    token::{
+        Token, 
+        TransferChecked, 
+        transfer_checked
+    } 
+};
 
-use anchor_spl::{ associated_token::AssociatedToken, token_interface::{ Mint, TokenAccount } };
-
-use switchboard_on_demand::prelude::rust_decimal::Decimal;
-use crate::constants::{MARKET, NFT};
-use crate::state::{Config, MarketStates, MarketType, OpenPositionArgs, Position, PositionAccount, PositionDirection, PositionStatus};
+// crate includes
 use crate::{
-    errors::DepredictError,
-    state::{ MarketState, WinningDirection },
+    constants::{
+        BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE, MAX_CREATOR_POSITIONS, POSITIONS_PER_PAGE, CONFIG
+    }, errors::DepredictError, state::{
+        SettlePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES, Config
+    },
+    helpers::compute_dual_fees_sequential,
 };
-use mpl_core::{
-    fetch_plugin,
-    accounts::{
-        BaseAssetV1
-    },
-    ID as MPL_CORE_ID,
-    instructions::{
-        CreateV2CpiBuilder,
-        BurnV1CpiBuilder,
-    },
-    types::{
-        Attribute, 
-        Attributes, 
-        Plugin, 
-        PluginAuthorityPair,
-    },
+
+// metaplex includes
+use mpl_bubblegum::{
+    instructions::{MintV2CpiBuilder},
+    programs::MPL_BUBBLEGUM_ID,
+    types::{MetadataArgsV2, TokenStandard},
+    accounts::TreeConfig
 };
+// use mpl_bubblegum::types::LeafSchema; // adjust path if needed
+// use mpl_bubblegum::utils::hash_leaf_v1;            // adjust path if needed
+use mpl_core::programs::{
+    MPL_CORE_ID
+};
+
+//misc includes
+use borsh::BorshDeserialize;
+use std::str::FromStr;
+use switchboard_on_demand::prelude::rust_decimal::Decimal;
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct EnsurePageArgs {
+    pub page_index: u16,
+}
 
 #[derive(Accounts)]
-pub struct PositionContext<'info> {
+#[instruction(args: EnsurePageArgs)]
+pub struct EnsurePositionPageContext<'info> {
     #[account(mut)]
-    pub signer: Signer<'info>,
-
-    /// CHECK: multisig fee vault account
-    #[account(
-        mut, 
-        constraint = fee_vault.key() == config.fee_vault @ DepredictError::InvalidFeeVault
-    )]
-    pub fee_vault: AccountInfo<'info>,
-
-    #[account(
-        mut,
-        constraint = market_positions_account.market_id == market.market_id @ DepredictError::InvalidMarketId
-    )]
-    pub market_positions_account: Box<Account<'info, PositionAccount>>,
-
-    /// CHECK: This account will be created by the CPI to mpl_core
-    #[account(
-        mut,
-        seeds = [ 
-            NFT.as_bytes(), 
-            market_positions_account.market_id.to_le_bytes().as_ref(), 
-            market.next_position_id.to_le_bytes().as_ref(),
-        ],
-        bump
-    )]
-    pub position_nft_account: AccountInfo<'info>,
-
+    pub payer: Signer<'info>,
 
     #[account(mut,
-        seeds = [MARKET.as_bytes(), &market_positions_account.market_id.to_le_bytes()],
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market: Box<Account<'info, MarketState>>, 
+
+    /// CHECK: must match market.market_creator
+    #[account(mut, constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator)]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
+
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 8 + PositionPage::INIT_SPACE,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
+        bump
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
+
+    pub system_program: Program<'info, System>,
+}
+
+impl<'info> EnsurePositionPageContext<'info> {
+    pub fn ensure(&mut self, args: EnsurePageArgs) -> Result<()> {
+        // Enforce creator-wide page budget: pages_allocated + 1 <= MAX_CREATOR_POSITIONS / POSITIONS_PER_PAGE
+        let max_pages = MAX_CREATOR_POSITIONS
+            .checked_div(POSITIONS_PER_PAGE)
+            .ok_or(DepredictError::ArithmeticOverflow)?;
+        require!((self.market_creator.pages_allocated as u32) < max_pages, DepredictError::Overflow);
+
+        // When init_if_needed triggers, Anchor allocates space and zeros the account.
+        // Populate minimal header fields so downstream code can rely on them.
+        self.position_page.market_id = self.market.market_id;
+        self.position_page.page_index = args.page_index;
+        // Accounted as one page allocation for the creator if this was a new init; best-effort detect via count==0 and market_id/page_index zero check
+        // In Anchor, we cannot directly know if init_if_needed ran, so we increment conservatively if header is zeroed.
+        if self.position_page.count == 0 {
+            self.market.pages_allocated = self
+                .market
+                .pages_allocated
+                .checked_add(1)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+            self.market_creator.pages_allocated = self
+                .market_creator
+                .pages_allocated
+                .checked_add(1)
+                .ok_or(DepredictError::ArithmeticOverflow)?;
+        }
+        Ok(())
+    }
+}
+
+
+#[derive(Accounts)]
+#[instruction(args: OpenPositionArgs)]
+pub struct OpenPositionContext<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    /// current page PDA; program verifies/derives and uses it
+    #[account(mut)]
+    pub position_page: Box<Account<'info, PositionPage>>,
+
+    /// next page PDA; program verifies/derives and must be pre-created by authority
+    #[account(mut)]
+    pub position_page_next: Box<Account<'info, PositionPage>>,
+
+    #[account(mut,
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
         bump
     )]
     pub market: Box<Account<'info, MarketState>>,
+
+    /// CHECK: Market creator account that owns this market
+    #[account(
+        mut,
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidCollection
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>,
 
     #[account(
         mut, 
@@ -74,9 +140,9 @@ pub struct PositionContext<'info> {
 
     #[account(
         init_if_needed,
-        payer = signer,
+        payer = user,
         associated_token::mint = mint,
-        associated_token::authority = signer,
+        associated_token::authority = user,
         associated_token::token_program = token_program
     )]
     pub user_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -89,36 +155,71 @@ pub struct PositionContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    pub config: Box<Account<'info, Config>>,
-    
-    /// CHECK: this account is checked by the address constraint and in MPL core.
-    #[account(
-        mut,
-        constraint = collection.key() == market.nft_collection.unwrap() @ DepredictError::InvalidCollection
-    )]
+    /// CHECK: merkle tree account (must be writable; Bubblegum updates it)
+    #[account(mut, constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
+    pub merkle_tree: AccountInfo<'info>,
+
+    /// CHECK: collection account (writable; may be touched by CPI)
+    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
     pub collection: AccountInfo<'info>,
 
-    /// CHECK: this account is checked by the address constraint and in MPL core.
+    /// CHECK: TreeConfig PDA for the merkle tree (writable)
+    #[account(mut)]
+    pub tree_config: AccountInfo<'info>,
+
+    /// CHECK: MPL Core CPI signer
+    #[account(mut)]
+    pub mpl_core_cpi_signer: AccountInfo<'info>,
+
+    /// CHECK: MPL Core program
     #[account(address = MPL_CORE_ID)]
     pub mpl_core_program: AccountInfo<'info>,
 
+    /// CHECK: Bubblegum program
+    #[account(address = MPL_BUBBLEGUM_ID)]
+    pub bubblegum_program: AccountInfo<'info>,
+
+    /// CHECK: Log wrapper (mpl-noop)
+    #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
+    pub log_wrapper_program: AccountInfo<'info>,
+
+    /// CHECK: Account compression program (mpl-account-compression)
+    #[account(address = Pubkey::from_str(MPL_ACCOUNT_COMPRESSION_ID).unwrap())]
+    pub compression_program: AccountInfo<'info>,
+
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct PayoutNftContext<'info> {
+#[instruction(args: SettlePositionArgs)]
+pub struct SettlePositionContext<'info> {
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub claimer: Signer<'info>,
 
     #[account(mut)]
     pub market: Box<Account<'info, MarketState>>,
 
+    // Global protocol config (for protocol fee and fee vault)
+    #[account(
+        seeds = [CONFIG.as_bytes()],
+        bump = config.bump
+    )]
+    pub config: Box<Account<'info, Config>>,
+
+    /// CHECK: ensure the passed market creator matches the market's configured market_creator
+    #[account(
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
+
     #[account(
         mut,
-        constraint = market_positions_account.market_id == market.market_id @ DepredictError::InvalidMarketId)]
-    pub market_positions_account: Box<Account<'info, PositionAccount>>,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
+        bump
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
 
     #[account(
         mut, 
@@ -128,12 +229,12 @@ pub struct PayoutNftContext<'info> {
 
     #[account(
         init_if_needed,
-        payer = signer,
+        payer = claimer,
         associated_token::mint = mint,
-        associated_token::authority = signer,
+        associated_token::authority = claimer,
         associated_token::token_program = token_program
     )]
-    pub user_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub claimer_mint_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -143,384 +244,443 @@ pub struct PayoutNftContext<'info> {
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    // TODO: Check nft_mint address against the position.mint address.
-    /// CHECK: this account is checked by the address constraint
-    #[account(mut)]
-    pub nft_mint: AccountInfo<'info>,
+    /// CHECK: MPL Core program
+    #[account(address = MPL_CORE_ID)]
+    pub mpl_core_program: AccountInfo<'info>,
+    
+    /// CHECK: Bubblegum program
+    #[account(address = MPL_BUBBLEGUM_ID)]
+    pub bubblegum_program: AccountInfo<'info>,
 
-    /// CHECK: this account is checked by the address constraint
-    #[account(
-        mut,
-        constraint = collection.key() == market.nft_collection.unwrap() @ DepredictError::InvalidCollection
-    )]
-    pub collection: AccountInfo<'info>,
-
-    /// CHECK: this account is checked by the address constraint and in MPL core.
-     #[account(
-        address = MPL_CORE_ID,
-        constraint = mpl_core_program.key() == MPL_CORE_ID @ DepredictError::InvalidMplCoreProgram
-    )]
-     pub mpl_core_program: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: merkle tree account
+    #[account(mut, constraint = merkle_tree.key() == market_creator.merkle_tree @ DepredictError::InvalidTree)]
+    pub merkle_tree: AccountInfo<'info>,
+
+    /// CHECK: collection account
+    #[account(mut, constraint = collection.key() == market_creator.core_collection @ DepredictError::InvalidCollection)]
+    pub collection: AccountInfo<'info>,
+
+    /// CHECK: TreeConfig PDA for the merkle tree
+    #[account(mut)]
+    pub tree_config: AccountInfo<'info>,
+
+    /// CHECK: MPL Core CPI signer
+    #[account(mut)]
+    pub mpl_core_cpi_signer: AccountInfo<'info>,
+
+    /// CHECK: Log wrapper (mpl-noop)
+    #[account(address = Pubkey::from_str(MPL_NOOP_ID).unwrap())]
+    pub log_wrapper_program: AccountInfo<'info>,
+
+    /// CHECK: Account compression program (mpl-account-compression)
+    #[account(address = Pubkey::from_str(MPL_ACCOUNT_COMPRESSION_ID).unwrap())]
+    pub compression_program: AccountInfo<'info>,
 }
 
 
-impl<'info> PositionContext<'info> {
-    pub fn open_position(&mut self, args: OpenPositionArgs, bumps: &PositionContextBumps) -> Result<()> {
-        let next_position_id = self.market.next_position_id; // Store before increment
+impl<'info> OpenPositionContext<'info> {
+    pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<(Pubkey, u64)> {
+
         let market = &mut self.market;
+        let next_position_id = market.next_position_id();
         let market_type = market.market_type;
-        let market_positions_account = &mut self.market_positions_account;
         let ts = Clock::get()?.unix_timestamp;
-    
+
+
+
+
 
         if market_type == MarketType::Future {
             require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
-        } 
+        }
 
         require!(market.market_end > ts, DepredictError::BettingPeriodEnded);
-        require!(
-            market.winning_direction == WinningDirection::None,
-            DepredictError::MarketAlreadyResolved
-        );
-    
-        // this ensures multiple orders are not created at the same time
+        require!(market.winning_direction == WinningDirection::None, DepredictError::MarketAlreadyResolved);
         require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
-    
+
         let net_amount = args.amount;
-    
-        let ( current_liquidity, otherside_current_liquidity) = match args.direction {
+
+        let (current_liquidity, otherside_current_liquidity) = match args.direction {
             PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
             PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
         };
+
         msg!("current liquidity {:?}", current_liquidity);
         msg!("otherside current liquidity {:?}", otherside_current_liquidity);
         msg!("Net Amount {:?}", net_amount);
-    
+
         let new_directional_liquidity = current_liquidity.checked_add(net_amount).unwrap();
         msg!("new directional liquidity {:?}", new_directional_liquidity);
-        let markets_liquidity = new_directional_liquidity
-            .checked_add(otherside_current_liquidity)
-            .unwrap();
+        let markets_liquidity = new_directional_liquidity.checked_add(otherside_current_liquidity).unwrap();
         msg!("markets liquidity {:?}", markets_liquidity);
-        
-        // Add debug logging for positions
-        msg!("Checking position slots:");
-        for (i, pos) in market_positions_account.positions.iter().enumerate() {
-            msg!("Position {}: status = {:?}", i, pos.position_status);
-        }
-    
-        let position_index = market_positions_account.positions
-            .iter()
-            .position(
-                |position|
-                    position.position_status == PositionStatus::Init
-            )
-            .ok_or(DepredictError::NoAvailablePositionSlot)?;
-    
-            
-        msg!("Position Index {:?}", position_index);
 
-        let position_nonce = market_positions_account.get_position_nonce();
-        msg!("Position Nonce {:?}", position_nonce);
-        market_positions_account.positions[position_index] = Position {
-            ts,
-            position_id: market.next_position_id(),
-            market_id: market.market_id,
-            position_status: PositionStatus::Open,
-            amount: net_amount,
-            direction: args.direction,
-            mint: Some(self.position_nft_account.key()),
-            created_at: ts,
-            version: 0,
-            position_nonce: position_nonce,
-            padding: [0; 3],
+        // Ensure headers are populated
+        self.position_page.market_id = market.market_id;
+
+        // Pick target page and slot
+        let mut use_next_page = false;
+        let mut slot_index: Option<usize> = None;
+
+        // search current page first
+        for i in 0..POSITION_PAGE_ENTRIES {
+            if self.position_page.entries[i].status == PositionStatus::Init { slot_index = Some(i); break; }
+        }
+
+        if slot_index.is_none() {
+            // no free slot on current; mark prewarm and use next page
+            self.position_page.prewarm_next = true;
+            self.position_page_next.market_id = market.market_id;
+            for i in 0..POSITION_PAGE_ENTRIES {
+                if self.position_page_next.entries[i].status == PositionStatus::Init { slot_index = Some(i); break; }
+            }
+            require!(slot_index.is_some(), DepredictError::NoAvailablePositionSlot);
+            use_next_page = true;
+        }
+
+        let idx = slot_index.unwrap();
+        msg!("Position Index {:?} (page {:?})", idx, if use_next_page { self.position_page_next.page_index } else { self.position_page.page_index });
+
+        // Snapshot existing entry status to determine if we increment count
+        let was_init = if use_next_page {
+            self.position_page_next.entries[idx].status == PositionStatus::Init
+        } else {
+            self.position_page.entries[idx].status == PositionStatus::Init
         };
-    
-        market.volume = market.volume.checked_add(net_amount).unwrap();
 
+        // Build local position to avoid borrow conflicts across CPIs
+        let mut position = if use_next_page {
+            self.position_page_next.entries[idx]
+        } else {
+            self.position_page.entries[idx]
+        };
+        position.amount = net_amount;
+        position.direction = args.direction;
+        position.status = PositionStatus::Open;
+        position.position_id = next_position_id;
+        position.created_at = ts;
+
+        // Market accounting
+        market.volume = market.volume.checked_add(net_amount).unwrap();
         match args.direction {
-            PositionDirection::Yes => {
-                market.yes_liquidity = market.yes_liquidity.checked_add(net_amount).unwrap();
-            }
-            PositionDirection::No => {
-                market.no_liquidity = market.no_liquidity.checked_add(net_amount).unwrap();
-            }
+            PositionDirection::Yes => { market.yes_liquidity = market.yes_liquidity.checked_add(net_amount).unwrap(); }
+            PositionDirection::No => { market.no_liquidity = market.no_liquidity.checked_add(net_amount).unwrap(); }
         }
 
+        // Transfer funds in
         transfer_checked(
             CpiContext::new(self.token_program.to_account_info(), TransferChecked {
                 from: self.user_mint_ata.to_account_info(),
                 mint: self.mint.to_account_info(),
                 to: self.market_vault.to_account_info(),
-                authority: self.signer.to_account_info(),
+                authority: self.user.to_account_info(),
             }),
             net_amount,
             self.mint.decimals
         )?;
-    
-        let current_position = market_positions_account.positions[position_index];    
-        market_positions_account.emit_position_event(current_position)?;
-    
-        let fee = self.config.fee_amount;
-    
-        let transfer_result = transfer(
-            CpiContext::new(self.system_program.to_account_info(), Transfer {
-                from: self.signer.to_account_info(),
-                to: self.fee_vault.to_account_info(),
-            }),
-            fee
-        );
-    
-        if let Err(_) = transfer_result {
-            return Err(DepredictError::InsufficientFunds.into());
-        }
-    
-        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
-    
-        market.update_ts = ts;
-    
-        market.emit_market_event()?;
+        msg!("Transferred funds to market vault");
 
-        msg!("Position created");
-
-        msg!("Creating NFT");
-
-
-        // Add attributes to the NFT
-        msg!("Adding attributes to NFT");
-        let attributes = Attributes {
-            attribute_list: vec![
-                Attribute {
-                    key: "market_id".to_string(),
-                    value: market_positions_account.market_id.to_string(),
-                },
-                Attribute {
-                    key: "position_id".to_string(),
-                    value: current_position.position_id.to_string(),
-                },
-                Attribute {
-                    key: "position_nonce".to_string(),
-                    value: current_position.position_nonce.to_string(),
-                },
-                Attribute {
-                    key: "position_amount".to_string(),
-                    value: current_position.amount.to_string(),
-                },
-                Attribute {
-                    key: "bet_direction".to_string(),
-                    value: current_position.direction.to_string(),
-                },
-            ],
+        // Mint cNFT to user and collection
+        msg!("Minting cNFT");
+        let uri = format!("{}/{}/{}.json", BASE_URI, market.market_id, next_position_id);
+        let name = format!("DEPREDICT-{}-{}", market.market_id, next_position_id);
+        let metadata = MetadataArgsV2 {
+            name,
+            symbol: String::from(""),
+            uri,
+            seller_fee_basis_points: 0,
+            primary_sale_happened: false,
+            is_mutable: false,
+            token_standard: Some(TokenStandard::NonFungible),
+            collection: Some(self.market_creator.core_collection),
+            creators: vec![],
         };
-       
-        
-        let position_nft_account_bump = bumps.position_nft_account;
-        let market_id = &market_positions_account.market_id.to_le_bytes();
-
-        let nft_signer_seeds: &[&[u8]] = &[
-            NFT.as_bytes(),
-            market_id,
-            &next_position_id.to_le_bytes(),
-            &[position_nft_account_bump],
+        let market_creator = &self.market_creator.to_account_info();
+        let payer = self.user.to_account_info();
+        let leaf_owner = self.user.to_account_info();
+        let system = self.system_program.to_account_info();
+        let market_creator_seeds = &[
+            MARKET_CREATOR.as_bytes(),
+            &self.market_creator.authority.to_bytes(),
+            &[self.market_creator.bump],
         ];
+        let market_creator_signer_seeds: &[&[&[u8]]] = &[&market_creator_seeds[..]];
+        let mut builder = MintV2CpiBuilder::new(&self.bubblegum_program);
+        builder
+            .tree_config(&self.tree_config)
+            .payer(&payer)
+            .tree_creator_or_delegate(Some(market_creator))
+            .collection_authority(Some(market_creator))
+            .leaf_owner(&leaf_owner)
+            .leaf_delegate(Some(&payer))
+            .merkle_tree(&self.merkle_tree)
+            .core_collection(Some(&self.collection))
+            .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
+            .log_wrapper(&self.log_wrapper_program)
+            .compression_program(&self.compression_program)
+            .mpl_core_program(&self.mpl_core_program)
+            .system_program(&system)
+            .metadata(metadata);
+        builder.invoke_signed(market_creator_signer_seeds)?;
 
-        let market_signer_seeds: &[&[u8]] = &[
-            MARKET.as_bytes(),
-            &self.market.market_id.to_le_bytes(),
-            &[bumps.market],
-        ];
+        // Fetch leaf index and asset id
+        let mut tree_config_data: &[u8] = &self.tree_config.try_borrow_data()?;
+        let tree_account = TreeConfig::deserialize(&mut tree_config_data)?;
+        let leaf_index = tree_account.num_minted - 1;
+        let (asset_id, _bump) = Pubkey::find_program_address(
+            &[b"asset", self.merkle_tree.key().as_ref(), &leaf_index.to_le_bytes()],
+            &MPL_BUBBLEGUM_ID,
+        );
+        msg!("Position created; Assset ID {:?}", asset_id);
 
-        msg!("NFT Signer Seeds: {:?}", nft_signer_seeds);
-        msg!("market_id: {:?}", market_id);
-        msg!("position_id: {:?}", &next_position_id.to_le_bytes());
-        msg!("position_nft_account_bump: {:?}", position_nft_account_bump);
+        // Complete local position and persist to chosen page
+        position.asset_id = asset_id;
+        position.leaf_index = leaf_index as u64;
+        if use_next_page {
+            self.position_page_next.entries[idx] = position;
+            if was_init { self.position_page_next.count = self.position_page_next.count.saturating_add(1); }
+        } else {
+            self.position_page.entries[idx] = position;
+            if was_init { self.position_page.count = self.position_page.count.saturating_add(1); }
+        }
 
-
-        let nft_name = format!("DEPREDICT MARKET:{}, POS:{}", market_positions_account.market_id, current_position.position_id);
-        let uri = args.metadata_uri;
-        let mpl_core_program = &self.mpl_core_program.to_account_info();
-        
-        msg!("Collection: {:?}", self.collection.key());
-        
-        msg!("Create the asset");
-        let mut create_asset_cpi = CreateV2CpiBuilder::new(mpl_core_program);
-        create_asset_cpi    
-        .asset(&self.position_nft_account.to_account_info())
-        .name(nft_name)
-        .uri(uri)
-        .collection(Some(&self.collection.to_account_info()))
-        .authority(Some(&self.market.to_account_info()))
-        .owner(Some(&self.signer.to_account_info()))
-        .payer(&self.signer.to_account_info())
-        .plugins(vec![PluginAuthorityPair {
-            plugin: Plugin::Attributes(attributes),
-            authority: None,
-        }])
-        .system_program(&self.system_program.to_account_info())
-        .invoke_signed(&[nft_signer_seeds, market_signer_seeds])?;
-
-        msg!("NFT created");
-        Ok(())
+        // Mark update time and return
+        market.update_ts = ts;
+        Ok((asset_id, leaf_index as u64))
     }
 }
 
 
-impl<'info> PayoutNftContext<'info> {
-    pub fn payout_position(&mut self) -> Result<()> {
-
+impl<'info> SettlePositionContext<'info> {
+    pub fn settle_position(&mut self, args: SettlePositionArgs) -> Result<()> {
         let market = &mut self.market;
-        let market_positions_account = &mut self.market_positions_account;
+        let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
-        let payer = &self.signer.to_account_info();
-        let system_program = &self.system_program.to_account_info();
-        let mpl_core_program = &self.mpl_core_program.to_account_info();
+        let asset_id = args.asset_id;
+        let claimer_key = self.claimer.key();
 
-        msg!("Market ID: {}", market.market_id);
-        msg!("Market bump: {}", market.bump);
-        msg!("Market authority: {}", market.authority);
-        msg!("Market vault: {}", self.market_vault.key());
-        msg!("Market vault owner: {}", self.market_vault.owner);
+        // Market must be resolved
+        require!(market.market_state == MarketStates::Resolved, DepredictError::MarketStillActive);
 
-        // Check market is resolved
-        require!(
-            market.winning_direction != WinningDirection::None,
-            DepredictError::MarketStillActive
-        );
-        require!(market.market_state == MarketStates::Resolved, DepredictError::MarketNotAllowedToPayout);
+        // Optional: prevent creator authority from claiming
+        require!(claimer_key != self.market_creator.authority, DepredictError::Unauthorized);
 
-        // check the signer of the tx owns the nft
-        let data = self.nft_mint.try_borrow_data()?;
-        let base_asset: BaseAssetV1 = BaseAssetV1::from_bytes(data.as_ref())?;
+        // Locate slot by provided index or search by asset_id
+        let effective_slot_index: usize = if let Some(idx) = args.slot_index {
+            let idx_usize = idx as usize;
+            require!(idx_usize < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
+            require!(position_page.entries[idx_usize].asset_id == asset_id, DepredictError::InvalidNft);
+            idx_usize
+        } else {
+            let mut found: Option<usize> = None;
+            for i in 0..POSITION_PAGE_ENTRIES {
+                if position_page.entries[i].status == PositionStatus::Open && position_page.entries[i].asset_id == asset_id { found = Some(i); break; }
+            }
+            require!(found.is_some(), DepredictError::PositionNotFound);
+            found.unwrap()
+        };
 
-        msg!("Base asset: {:?}", base_asset.owner);
+        require!(effective_slot_index < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
+        require!(position_page.entries[effective_slot_index].status == PositionStatus::Open, DepredictError::PositionNotFound);
+        require!(position_page.entries[effective_slot_index].asset_id == args.asset_id && position_page.entries[effective_slot_index].asset_id != Pubkey::default(), DepredictError::InvalidNft);
 
-        require!(&base_asset.owner == &self.signer.key(), DepredictError::Unauthorized);
-
-        // Drop the borrow before fetching plugin data
-        drop(data);
-
-        let (_, attribute_list, _) = fetch_plugin::<BaseAssetV1, Attributes>(&self.nft_mint.to_account_info(), mpl_core::types::PluginType::Attributes)?;
-
-        msg!("Attribute list of nft: {:?}", attribute_list);
-
-        // Verify market ID matches
-        require!(attribute_list.attribute_list[0].value.parse::<u64>().unwrap() == market.market_id, DepredictError::InvalidMarketId);
-
-        // Find position with this position ID
-        let position_index = market_positions_account.positions
-            .iter()
-            .position(|pos| {
-                pos.position_id == attribute_list.attribute_list[1].value.parse::<u64>().unwrap() &&
-                pos.position_status == PositionStatus::Open &&
-                pos.amount == attribute_list.attribute_list[3].value.parse::<u64>().unwrap()
-            })
-            .ok_or(DepredictError::PositionNotFound)?;
-
-        // position mint_nft field must match nft_mint address
-        require!(market_positions_account.positions[position_index].mint.unwrap() == self.nft_mint.key(), DepredictError::InvalidNft);
-
-        let position = market_positions_account.positions[position_index];
-        msg!("Found position at index {}", position_index);
-        msg!("Position direction: {:?}", position.direction);
-        msg!("Market winning direction: {:?}", market.winning_direction);
-
-        // Check if position won
-        let is_winner = match (position.direction, market.winning_direction) {
+        // Determine win status and potential payout
+        let position_direction = position_page.entries[effective_slot_index].direction;
+        let is_winner = match (position_direction, market.winning_direction) {
             (PositionDirection::Yes, WinningDirection::Yes) |
             (PositionDirection::No, WinningDirection::No) => true,
             _ => false,
         };
 
-
-        let mut payout = 0;
+        let position_amount_raw = position_page.entries[effective_slot_index].amount;
+        let mut payout: u64 = 0;
         if is_winner {
-
-            let (winning_liquidity, otherside_liquidity) = match position.direction {
+            let (winning_liquidity, otherside_liquidity) = match position_direction {
                 PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
                 PositionDirection::No => (market.no_liquidity, market.yes_liquidity),
             };
-            
 
-            // Convert u64s to Decimals
-            let position_amount = Decimal::from(position.amount);
+            let position_amount = Decimal::from(position_amount_raw);
             let winning_liquidity = Decimal::from(winning_liquidity);
             let otherside_liquidity = Decimal::from(otherside_liquidity);
 
-            // Compute percentage share of the winning pool
             let winning_percentage = position_amount
                 .checked_div(winning_liquidity)
                 .ok_or(DepredictError::ArithmeticOverflow)?;
 
-            // Compute share from otherside pool
             let share_of_otherside = otherside_liquidity
                 .checked_mul(winning_percentage)
                 .ok_or(DepredictError::ArithmeticOverflow)?;
 
-            // Total payout = stake + winnings
             let total_payout = share_of_otherside
                 .checked_add(position_amount)
                 .ok_or(DepredictError::ArithmeticOverflow)?;
 
-            // Convert back to u64 (this floors the value)
             payout = total_payout.try_into().map_err(|_| DepredictError::ArithmeticOverflow)?;
         }
 
+        // // Gate by cNFT ownership/permission: burn first (CPI enforces permission)
+        // BurnV2CpiBuilder::new(&self.bubblegum_program)
+        //     .tree_config(&self.tree_config)
+        //     .payer(&self.claimer)
+        //     .leaf_owner(&self.claimer)
+        //     .merkle_tree(&self.merkle_tree)
+        //     .core_collection(Some(&self.collection))
+        //     .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
+        //     .log_wrapper(&self.log_wrapper_program)
+        //     .compression_program(&self.compression_program)
+        //     .mpl_core_program(&self.mpl_core_program)
+        //     .system_program(&self.system_program)
+        //     .root(args.root)
+        //     .data_hash(args.data_hash)
+        //     .creator_hash(args.creator_hash)
+        //     .nonce(args.nonce)
+        //     .index(args.leaf_index)
+        //     .invoke()?;
+        // msg!("cNFT burned");
+
+        // If winner, transfer payout (after successful burn gating)
         if payout > 0 && is_winner {
-            // Transfer payout
-            let market_signer: &[&[&[u8]]] = &[&[MARKET.as_bytes(), &market.market_id.to_le_bytes(), &[market.bump]]];
-            msg!("Using signer seeds: {:?}", market_signer);
-            msg!("Market vault amount before transfer: {}", self.market_vault.amount);
-            msg!("User ATA amount before transfer: {}", self.user_mint_ata.amount);
-
-            transfer_checked(
-                CpiContext::new_with_signer(
-                    self.token_program.to_account_info(),
-                    TransferChecked {
-                        from: self.market_vault.to_account_info(),
-                        mint: self.mint.to_account_info(),
-                        to: self.user_mint_ata.to_account_info(),
-                        authority: market.to_account_info(),
-                    },
-                    market_signer
-                ),
+            let (_creator_fee, _protocol_fee, net_payout) = compute_dual_fees_sequential(
                 payout,
-                self.mint.decimals
+                self.market_creator.creator_fee_bps,
+                self.config.fee_amount,
             )?;
-
-            let market_signer_seeds: &[&[u8]] = &[
-                MARKET.as_bytes(),
-                &market.market_id.to_le_bytes(),
-                &[market.bump],
-            ];
-
-            msg!("Burning NFT");
-            let mut burn_asset_cpi = BurnV1CpiBuilder::new(mpl_core_program);
-
-            burn_asset_cpi
-            .asset(&self.nft_mint.to_account_info())
-            .collection(Some(&self.collection.to_account_info()))
-            .payer(payer)
-            .authority(Some(payer))
-            .system_program(Some(system_program))
-            .invoke_signed(&[market_signer_seeds])?;
-
-            msg!("NFT burn successful");
+            if net_payout > 0 {
+                let market_signer: &[&[&[u8]]] = &[&[
+                    MARKET.as_bytes(),
+                    &market.market_id.to_le_bytes(),
+                    &[market.bump],
+                ]];
+                transfer_checked(
+                    CpiContext::new_with_signer(
+                        self.token_program.to_account_info(),
+                        TransferChecked {
+                            from: self.market_vault.to_account_info(),
+                            mint: self.mint.to_account_info(),
+                            to: self.claimer_mint_ata.to_account_info(),
+                            authority: market.to_account_info(),
+                        },
+                        market_signer,
+                    ),
+                    net_payout,
+                    self.mint.decimals,
+                )?;
+            }
         }
 
-        // Update position status
-        market_positions_account.positions[position_index].position_status = PositionStatus::Closed;
-        market_positions_account.positions[position_index].ts = ts;
-        market_positions_account.emit_position_event(market_positions_account.positions[position_index])?;
-
+        // Mark as claimed and update timestamp
+        position_page.entries[effective_slot_index].status = PositionStatus::Claimed;
         require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
         market.update_ts = ts;
         market.emit_market_event()?;
-
-        msg!("Payout completed successfully");
         Ok(())
     }
 }
 
+// --- Prune a position entry (market creator authority only) ---
+
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct PrunePositionArgs {
+    pub page_index: u16,
+    pub slot_index: u8,
+}
+
+#[derive(Accounts)]
+#[instruction(args: PrunePositionArgs)]
+pub struct PrunePositionContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(mut,
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market: Box<Account<'info, MarketState>>, 
+
+    #[account(
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator,
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized,
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
+
+    #[account(
+        mut,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
+        bump
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
+}
+
+impl<'info> PrunePositionContext<'info> {
+    pub fn prune(&mut self, args: PrunePositionArgs) -> Result<()> {
+        let page = &mut self.position_page;
+        let idx = args.slot_index as usize;
+        require!(idx < POSITION_PAGE_ENTRIES, DepredictError::PositionNotFound);
+
+        let status = page.entries[idx].status;
+        require!(status == PositionStatus::Claimed || status == PositionStatus::Closed, DepredictError::PositionNotPrunable);
+
+        // Zero the slot fields and decrement count
+        page.entries[idx].asset_id = Pubkey::default();
+        page.entries[idx].amount = 0;
+        page.entries[idx].direction = PositionDirection::default();
+        page.entries[idx].status = PositionStatus::Init;
+        page.entries[idx].position_id = 0;
+        page.entries[idx].leaf_index = 0;
+        page.entries[idx].created_at = 0;
+        page.count = page.count.saturating_sub(1);
+        Ok(())
+    }
+}
+
+// --- Close an empty position page and reclaim rent ---
+
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct ClosePositionPageArgs {
+    pub page_index: u16,
+}
+
+#[derive(Accounts)]
+#[instruction(args: ClosePositionPageArgs)]
+pub struct ClosePositionPageContext<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(mut,
+        seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
+        bump
+    )]
+    pub market: Box<Account<'info, MarketState>>, 
+
+    #[account(
+        mut,
+        constraint = market_creator.key() == market.market_creator @ DepredictError::InvalidMarketCreator,
+        constraint = market_creator.authority == signer.key() @ DepredictError::Unauthorized,
+    )]
+    pub market_creator: Box<Account<'info, MarketCreator>>, 
+
+    #[account(
+        mut,
+        seeds = [POSITION_PAGE.as_bytes(), &market.market_id.to_le_bytes(), &args.page_index.to_le_bytes()],
+        bump,
+        close = signer
+    )]
+    pub position_page: Box<Account<'info, PositionPage>>,
+}
+
+impl<'info> ClosePositionPageContext<'info> {
+    pub fn close_page(&mut self, _args: ClosePositionPageArgs) -> Result<()> {
+        // Page must be empty to close
+        require!(self.position_page.count == 0, DepredictError::PositionPageNotEmpty);
+        // Market must be resolved
+        require!(self.market.market_state == MarketStates::Resolved, DepredictError::MarketStillActive);
+        // Decrement counters/budget
+        self.market.pages_allocated = self.market.pages_allocated.saturating_sub(1);
+        self.market_creator.pages_allocated = self.market_creator.pages_allocated.saturating_sub(1);
+        Ok(())
+    }
+}
