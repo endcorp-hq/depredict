@@ -168,7 +168,7 @@ export async function createCoreCollection(
   }: { name?: string; uri?: string; rpcEndpoint?: string } = {}
 ): Promise<KeypairSigner & { publicKey: string }> {
   const umi = getUmi(rpcEndpoint).use(mplCore());
-  const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority));
+  const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority as any));
   umi.use(signerIdentity(signer, true));
 
   const collection = generateSigner(umi);
@@ -208,7 +208,7 @@ export async function createMerkleTree(
   const umiAuthorityKp = umi.eddsa.createKeypairFromSecretKey(authority.secretKey);
   umi.use(signerIdentity(createSignerFromKeypair(umi, umiAuthorityKp)));
 
-  const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority));
+  const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority as any));
   const merkleTree = generateSigner(umi);
   const builder = await createTreeV2(umi, {
     merkleTree,

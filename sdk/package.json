@@ -1,6 +1,6 @@
 {
   "name": "@endcorp/depredict",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "SDK for interacting with the Depredict Protocol",
   "type": "module",
   "types": "./dist/cjs/index.d.cts",

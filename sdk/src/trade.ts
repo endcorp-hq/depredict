@@ -351,7 +351,7 @@ export default class Trade {
       console.log("error", error);
       throw error;
     }
-    return { ixs, addressLookupTableAccounts, nftMint: positionNftPDA };
+    return { ixs, addressLookupTableAccounts, nftMint: positionPagePDA };
   }
 
   /**
