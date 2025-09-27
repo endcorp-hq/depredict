@@ -7,8 +7,20 @@ import {
 } from "@solana/web3.js";
 
 import { getMarketPDA, getPositionPagePDA } from "./utils/pda/index.js";
-import { RpcOptions } from "./types/index.js";
-import { PositionAccount, PositionStatus } from "./types/position.js";
+export interface PositionPageInfo {
+  pageIndex: number;
+  totalSlots: number;
+  usedSlots: number;
+  availableSlots: number;
+  isFull: boolean;
+  prewarmNext: boolean;
+  exists: boolean;
+}
+
+export interface AvailablePageResult {
+  pageIndex: number;
+  instructions: TransactionInstruction[];
+}
 
 export default class Position {
   constructor(private program: Program<Depredict>) {}
@@ -270,4 +282,145 @@ export default class Position {
   //     throw error;
   //   }
   // }
+
+  /**
+   * Find a page with available slots for a specific market
+   * @param marketId - Market ID
+   * @param payer - Payer public key
+   * @returns {Promise<AvailablePageResult>} - Page info and instructions
+   */
+  async findAvailablePageForMarket(
+    marketId: number, 
+    payer: PublicKey
+  ): Promise<AvailablePageResult> {
+    const instructions: TransactionInstruction[] = [];
+        
+    // Get all pages for THIS market only (much faster)
+    const pages = await this.getAllPositionPagesForMarket(marketId);
+    
+    // Find the page with the MOST available slots
+    let targetPageIndex = -1;
+    let maxAvailableSlots = 0;
+    
+    for (const page of pages) {
+      if (page.availableSlots > maxAvailableSlots) {
+        targetPageIndex = page.pageIndex;
+        maxAvailableSlots = page.availableSlots;
+      }
+    }
+    
+    // If no page with slots found, create a new one
+    if (targetPageIndex === -1) {
+      // Find the next page index to create
+      const maxExistingPage = pages.length > 0 ? Math.max(...pages.map(p => p.pageIndex)) : -1;
+      targetPageIndex = maxExistingPage + 1;
+      
+      // Create the new page
+      const ensureInstructions = await this.ensurePositionPage({
+        marketId,
+        payer,
+        pageIndex: targetPageIndex
+      });
+      instructions.push(...ensureInstructions);
+    }
+    
+    // Only create next page if current page has < 2 slots
+    let needsNextPage = false;
+    if (maxAvailableSlots < 2) {
+      needsNextPage = true;
+    }
+    
+    // Create the next page if needed (pre-warming strategy)
+    if (needsNextPage) {
+      // Find the highest existing page index to determine next page
+      const maxExistingPage = pages.length > 0 ? Math.max(...pages.map(p => p.pageIndex)) : -1;
+      const nextPageIndex = maxExistingPage + 1;
+      const nextPageExists = pages.some(p => p.pageIndex === nextPageIndex);
+      
+      if (!nextPageExists) {
+        const ensureNextInstructions = await this.ensurePositionPage({
+          marketId,
+          payer,
+          pageIndex: nextPageIndex
+        });
+        instructions.push(...ensureNextInstructions);
+      }
+    }
+  
+    return {
+      pageIndex: targetPageIndex,
+      instructions
+    };
+  }
+
+  /**
+   * Get all position pages for a specific market
+   * @param marketId - Market ID
+   * @returns {Promise<PositionPageInfo[]>} - Array of page information
+   */
+  async getAllPositionPagesForMarket(marketId: number): Promise<PositionPageInfo[]> {
+    const pages: PositionPageInfo[] = [];
+    const marketPDA = getMarketPDA(this.program.programId, marketId);
+    
+    try {
+      const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+      const pagesAllocated = marketAccount.pagesAllocated;
+      
+      // Check each page from 0 to pagesAllocated
+      for (let pageIndex = 0; pageIndex < pagesAllocated; pageIndex++) {
+        try {
+          const positionPagePDA = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+          const pageAccount = await this.program.account.positionPage.fetch(positionPagePDA);
+          
+          // Count available slots
+          const availableSlots = pageAccount.entries.filter(
+            entry => 'init' in entry.status
+          ).length;
+          
+          const usedSlots = 16 - availableSlots;
+          
+          pages.push({
+            pageIndex,
+            totalSlots: 16,
+            usedSlots,
+            availableSlots,
+            isFull: availableSlots === 0,
+            prewarmNext: pageAccount.prewarmNext,
+            exists: true
+          });
+        } catch (error) {
+          // Page doesn't exist, but we expected it to (based on pagesAllocated)
+          console.warn(`Page ${pageIndex} expected but not found for market ${marketId}`);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to fetch market ${marketId}:`, error);
+      throw new Error(`Market ${marketId} not found`);
+    }
+    
+    return pages;
+  }
+
+  /**
+   * Get position pages by market creator (for debugging/admin purposes)
+   * @param marketCreator - Market creator public key
+   * @returns {Promise<PositionPageInfo[]>} - Array of page information
+   */
+  async getPositionPagesByCreator(marketCreator: PublicKey): Promise<PositionPageInfo[]> {
+    // This is slower but useful for admin/debugging
+    const allMarkets = await this.program.account.marketState.all();
+    const creatorMarkets = allMarkets.filter(
+      market => market.account.marketCreator.equals(marketCreator)
+    );
+    
+    const allPages: PositionPageInfo[] = [];
+    
+    // Process each market
+    for (const market of creatorMarkets) {
+      const marketPages = await this.getAllPositionPagesForMarket(market.account.marketId.toNumber());
+      allPages.push(...marketPages);
+    }
+    
+    return allPages;
+  }
 }

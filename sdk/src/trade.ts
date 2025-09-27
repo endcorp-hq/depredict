@@ -23,7 +23,7 @@ import {
   getMarketPDA,
   getMarketCreatorPDA,
   getPositionPagePDA,
-    getTreeConfigPDA,
+  getTreeConfigPDA,
 } from "./utils/pda/index.js";
 import createVersionedTransaction from "./utils/sendVersionedTransaction.js";
 import { swap } from "./utils/swap.js";
@@ -32,7 +32,17 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { METAPLEX_ID, DEFAULT_MINT, MPL_BUBBLEGUM_ID, MPL_NOOP_ID as NOOP_PROGRAM_ID, MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID, MPL_CORE_PROGRAM_ID, MPL_CORE_CPI_SIGNER, MPL_NOOP_ID, MPL_ACCOUNT_COMPRESSION_ID } from "./utils/constants.js";
+import {
+  METAPLEX_ID,
+  DEFAULT_MINT,
+  MPL_BUBBLEGUM_ID,
+  MPL_NOOP_ID as NOOP_PROGRAM_ID,
+  MPL_ACCOUNT_COMPRESSION_ID as ACCOUNT_COMPRESSION_ID,
+  MPL_CORE_PROGRAM_ID,
+  MPL_CORE_CPI_SIGNER,
+  MPL_NOOP_ID,
+  MPL_ACCOUNT_COMPRESSION_ID,
+} from "./utils/constants.js";
 import Position from "./position.js";
 import { fetchAssetProofWithRetry } from "./utils/mplHelpers.js";
 
@@ -163,7 +173,11 @@ export default class Trade {
     const marketPDA = getMarketPDA(this.program.programId, marketId);
 
     // Derive position page 0 and market creator PDAs
-    const positionPage0PDA = getPositionPagePDA(this.program.programId, marketId, 0);
+    const positionPage0PDA = getPositionPagePDA(
+      this.program.programId,
+      marketId,
+      0
+    );
     // Market creator PDA is derived from the payer (authority)
     const marketCreatorPDA = getMarketCreatorPDA(this.program.programId, payer);
 
@@ -235,7 +249,15 @@ export default class Trade {
    * @returns Transaction, addressLookupTableAccounts, nftMint || null (if no swap)
    */
   async openPosition(
-    { marketId, amount, direction, token, payer, metadataUri, pageIndex }: OpenOrderArgs,
+    {
+      marketId,
+      amount,
+      direction,
+      token,
+      payer,
+      metadataUri,
+      pageIndex,
+    }: OpenOrderArgs,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
@@ -254,7 +276,21 @@ export default class Trade {
 
     const marketMint = marketAccount.mint;
     const marketCreatorPubkey: PublicKey = marketAccount.marketCreator;
-    const positionPagePDA = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+
+    //this will find the page index with open slots and create a new page if needed (available slots < 2)
+    const positionPageResult = await this.position.findAvailablePageForMarket(
+      marketId,
+      payer
+    );
+    
+    // Add any page creation instructions to the transaction
+    ixs.push(...positionPageResult.instructions);
+    
+    const positionPagePDA = getPositionPagePDA(
+      this.program.programId,
+      marketId,
+      positionPageResult.pageIndex
+    );
 
     // Derive vaults
     const userMintAta = getAssociatedTokenAddressSync(
@@ -288,33 +324,7 @@ export default class Trade {
       BGUM_PROGRAM_ID
     );
 
-
     let amountInMint = amount * 10 ** marketAccount.decimals;
-
-    if (token !== marketMint.toBase58()) {
-      const {
-        setupInstructions,
-        swapIxs,
-        addressLookupTableAccounts: swapAddressLookupTableAccounts,
-        mintAmount,
-      } = await swap({
-        connection: this.program.provider.connection,
-        wallet: payer.toBase58(),
-        inToken: token,
-        amount,
-        mint: marketMint.toBase58(),
-      });
-
-      amountInMint = mintAmount;
-
-      if (swapIxs.length === 0) {
-        return;
-      }
-
-      ixs.push(...setupInstructions);
-      ixs.push(...swapIxs);
-      addressLookupTableAccounts.push(...swapAddressLookupTableAccounts);
-    }
 
     try {
       ixs.push(
@@ -549,7 +559,10 @@ export default class Trade {
     }
   }
 
-  async payoutPosition({ marketId, payer, pageIndex, assetId, slotIndex }: PayoutArgs, options?: RpcOptions) {
+  async payoutPosition(
+    { marketId, payer, pageIndex, assetId, slotIndex }: PayoutArgs,
+    options?: RpcOptions
+  ) {
     const ixs: TransactionInstruction[] = [];
 
     const marketPda = getMarketPDA(this.program.programId, marketId);
@@ -579,8 +592,9 @@ export default class Trade {
     );
 
     // Load market creator to fetch merkle tree and collection
-    const marketCreator = (await this.program.account.marketState.fetch(marketPda))
-      .marketCreator as PublicKey;
+    const marketCreator = (
+      await this.program.account.marketState.fetch(marketPda)
+    ).marketCreator as PublicKey;
     const marketCreatorAccount = await this.program.account.marketCreator.fetch(
       marketCreator
     );
@@ -600,7 +614,11 @@ export default class Trade {
     } = await fetchAssetProofWithRetry(assetId);
 
     try {
-      const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+      const positionPage = getPositionPagePDA(
+        this.program.programId,
+        marketId,
+        pageIndex
+      );
       ixs.push(
         await this.program.methods
           .settlePosition({

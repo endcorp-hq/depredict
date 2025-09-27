@@ -31,7 +31,6 @@ export default class DepredictClient {
     feeVault: PublicKey,
   ) {
 
-    console.log('SDK: this is connection', connection.rpcEndpoint)
     this.program = new Program(
       connection.rpcEndpoint.includes("devnet")
         ? (DEVNET_IDL as Depredict)

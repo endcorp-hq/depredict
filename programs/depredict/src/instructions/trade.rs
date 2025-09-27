@@ -115,10 +115,6 @@ pub struct OpenPositionContext<'info> {
     #[account(mut)]
     pub position_page: Box<Account<'info, PositionPage>>,
 
-    /// next page PDA; program verifies/derives and must be pre-created by authority
-    #[account(mut)]
-    pub position_page_next: Box<Account<'info, PositionPage>>,
-
     #[account(mut,
         seeds = [MARKET.as_bytes(), &market.market_id.to_le_bytes()],
         bump
@@ -321,8 +317,6 @@ impl<'info> OpenPositionContext<'info> {
         // Ensure headers are populated
         self.position_page.market_id = market.market_id;
 
-        // Pick target page and slot
-        let mut use_next_page = false;
         let mut slot_index: Option<usize> = None;
 
         // search current page first
@@ -331,32 +325,20 @@ impl<'info> OpenPositionContext<'info> {
         }
 
         if slot_index.is_none() {
-            // no free slot on current; mark prewarm and use next page
-            self.position_page.prewarm_next = true;
-            self.position_page_next.market_id = market.market_id;
-            for i in 0..POSITION_PAGE_ENTRIES {
-                if self.position_page_next.entries[i].status == PositionStatus::Init { slot_index = Some(i); break; }
-            }
-            require!(slot_index.is_some(), DepredictError::NoAvailablePositionSlot);
-            use_next_page = true;
+            // No available slots in current page
+            msg!("No available slots in current page");
+            return err!(DepredictError::NoAvailablePositionSlot);
         }
-
         let idx = slot_index.unwrap();
-        msg!("Position Index {:?} (page {:?})", idx, if use_next_page { self.position_page_next.page_index } else { self.position_page.page_index });
+        msg!("Position Index {:?} (page {:?})", idx, self.position_page.page_index);
 
         // Snapshot existing entry status to determine if we increment count
-        let was_init = if use_next_page {
-            self.position_page_next.entries[idx].status == PositionStatus::Init
-        } else {
-            self.position_page.entries[idx].status == PositionStatus::Init
-        };
+
+        let was_init = self.position_page.entries[idx].status == PositionStatus::Init;
+
 
         // Build local position to avoid borrow conflicts across CPIs
-        let mut position = if use_next_page {
-            self.position_page_next.entries[idx]
-        } else {
-            self.position_page.entries[idx]
-        };
+        let mut position = self.position_page.entries[idx];
         position.amount = net_amount;
         position.direction = args.direction;
         position.status = PositionStatus::Open;
@@ -439,13 +421,8 @@ impl<'info> OpenPositionContext<'info> {
         // Complete local position and persist to chosen page
         position.asset_id = asset_id;
         position.leaf_index = leaf_index as u64;
-        if use_next_page {
-            self.position_page_next.entries[idx] = position;
-            if was_init { self.position_page_next.count = self.position_page_next.count.saturating_add(1); }
-        } else {
-            self.position_page.entries[idx] = position;
-            if was_init { self.position_page.count = self.position_page.count.saturating_add(1); }
-        }
+        self.position_page.entries[idx] = position;
+        if was_init { self.position_page.count = self.position_page.count.saturating_add(1); }
 
         // Mark update time and return
         market.update_ts = ts;

@@ -51,11 +51,11 @@ describe("Market Creator Two-Step Process", () => {
     console.log("ADMIN KEYPAIR:", ADMIN.publicKey.toString());
     console.log("Creating core collection...");
 
-    const collection = await createCoreCollection(payer);
+    const collection = await createCoreCollection(payer as any);
     coreCollection = new PublicKey(collection.publicKey);
 
     console.log("Creating merkle tree...");
-    let merkleTree = await createMerkleTree(payer);
+    let merkleTree = await createMerkleTree(payer as any);
 
     console.log("Verifying market creator...");
     await verifyMarketCreator(marketCreatorPda, coreCollection, merkleTree);
