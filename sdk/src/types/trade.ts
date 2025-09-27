@@ -77,9 +77,7 @@ export type OpenOrderArgs = {
 export type PayoutArgs = {
   marketId: number
   payer: PublicKey
-  pageIndex: number
   assetId: PublicKey
-  slotIndex?: number
 }
 
 export enum OracleType {

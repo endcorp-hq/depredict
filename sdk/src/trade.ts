@@ -560,7 +560,7 @@ export default class Trade {
   }
 
   async payoutPosition(
-    { marketId, payer, pageIndex, assetId, slotIndex }: PayoutArgs,
+    { marketId, payer, assetId }: PayoutArgs,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
@@ -613,17 +613,52 @@ export default class Trade {
       index,
     } = await fetchAssetProofWithRetry(assetId);
 
+    // Search for the asset ID across all pages
+    const pages = await this.position.getAllPositionPagesForMarket(marketId);
+    let foundPageIndex = -1;
+    let foundSlotIndex = -1;
+
+    for (const page of pages) {
+      try {
+        const positionPagePDA = getPositionPagePDA(
+          this.program.programId,
+          marketId,
+          page.pageIndex
+        );
+        const pageAccount = await this.program.account.positionPage.fetch(positionPagePDA);
+        
+        // Search through all slots in this page
+        for (let slotIndex = 0; slotIndex < pageAccount.entries.length; slotIndex++) {
+          const entry = pageAccount.entries[slotIndex];
+          if (entry.assetId.equals(assetId)) {
+            foundPageIndex = page.pageIndex;
+            foundSlotIndex = slotIndex;
+            break;
+          }
+        }
+        
+        if (foundPageIndex !== -1) break;
+      } catch (error) {
+        // Page might not exist, continue searching
+        continue;
+      }
+    }
+
+    if (foundPageIndex === -1) {
+      throw new Error(`Position with asset ID ${assetId.toBase58()} not found in market ${marketId}`);
+    }
+
     try {
       const positionPage = getPositionPagePDA(
         this.program.programId,
         marketId,
-        pageIndex
+        foundPageIndex
       );
       ixs.push(
         await this.program.methods
           .settlePosition({
-            pageIndex,
-            slotIndex: slotIndex ?? null,
+            pageIndex: foundPageIndex,
+            slotIndex: foundSlotIndex,
             assetId,
             root: Array.from(rootBytes),
             dataHash: Array.from(dataHashBytes),
