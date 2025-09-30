@@ -178,12 +178,12 @@ async function createMarketLut(marketCreatorPda: PublicKey) {
 async function createCoreCollection(authority: Keypair): Promise<KeypairSigner & { publicKey: string }> {
 
 
-  const umi = createUmi("https://api.devnet.solana.com") // todo swap for helius, load from env. 
+  const umi = createUmi(provider.connection.rpcEndpoint)
   .use(mplCore());
   let signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority));
   umi.use(signerIdentity(signer, true))
 
-  const metadataUri = 'https://example.com/metadata.json';
+  const metadataUri = "https://example.com/metadata.json";
   
   // create a collection
   const collection = generateSigner(umi);
@@ -219,7 +219,7 @@ return { ...collection, publicKey: collection.publicKey.toString() } as any;
 
 async function createMerkleTree(authority: Keypair): Promise<PublicKey> {
   
-  const umi = createUmi("https://api.devnet.solana.com"); // todo swap for helius, load from env. 
+  const umi = createUmi(provider.connection.rpcEndpoint);
 
   const umiAuthorityKp = umi.eddsa.createKeypairFromSecretKey(authority.secretKey);
   umi.use(signerIdentity(createSignerFromKeypair(umi, umiAuthorityKp)));
@@ -235,16 +235,10 @@ async function createMerkleTree(authority: Keypair): Promise<PublicKey> {
     treeCreator: signer,
   });
   await builder.sendAndConfirm(umi);
-  // Delegate tree authority to the market creator PDA so program CPI can sign via seeds
-  const [marketCreatorpda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
-    program.programId
-  );
-  await setTreeDelegate(umi, {
-    treeCreator: signer,
-    newTreeDelegate: fromWeb3JsPublicKey(marketCreatorpda),
-    merkleTree: merkleTree.publicKey,
-  }).sendAndConfirm(umi);
+  // Give the network a moment to finalize the TreeConfig account before delegating
+  
+  await new Promise((r) => setTimeout(r, 5000));
+
   
   const treePubkey = new PublicKey(merkleTree.publicKey.toString());
   console.log("Merkle tree created:", treePubkey.toString());
@@ -253,19 +247,51 @@ async function createMerkleTree(authority: Keypair): Promise<PublicKey> {
   
   // Verify the account exists and can be fetched
   try {
-    const accountInfo = await provider.connection.getAccountInfo(treePubkey);
 
-    console.log("Account info:", accountInfo);
+    const treeAccountInfo = await provider.connection.getAccountInfo(treePubkey);
 
-    if (!accountInfo) {
+    console.log("Account info:", treeAccountInfo);
+
+    if (!treeAccountInfo) {
       throw new Error(`Merkle tree account ${treePubkey.toString()} not found after creation`);
     }
+      // Delegate tree authority to the market creator PDA so program CPI can sign via seeds. 
+  const [marketCreatorpda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("market_creator"), ADMIN.publicKey.toBytes()],
+    program.programId
+  );
+
+  console.log(marketCreatorpda);
+  
+  let delegated = false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await setTreeDelegate(umi, {
+        merkleTree: merkleTree.publicKey,
+        treeCreator: signer,
+        newTreeDelegate: fromWeb3JsPublicKey(marketCreatorpda),
+      }).sendAndConfirm(umi);
+      delegated = true;
+      break;
+    } catch (e) {
+      console.log(`setTreeDelegate attempt ${attempt} failed. ${attempt < 3 ? 'Retrying in 4s...' : 'No more retries.'}`);
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 4000));
+      } else {
+        throw e;
+      }
+    }
+  }
+
   } catch (error) {
+
     console.error(`❌ Failed to verify merkle tree account:`, error);
     throw error;
+  
   }
   
   return treePubkey;
+
 }
 
 export { createCoreCollection, createMerkleTree };
