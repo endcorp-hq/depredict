@@ -17,7 +17,11 @@ import {
   MPL_CORE_ID, 
   MPL_NOOP_ID, 
   ACCOUNT_COMPRESSION_ID,
-  FEE_VAULT
+  MARKET_SEED,
+  MARKET_CREATOR_SEED,
+  MPL_CORE_CPI_SIGNER,
+  POSITION_PAGE_SEED,
+  CONFIG_SEED
 } from "../constants";
 import { getCurrentMarketId, getMarketIdByState, getCurrentUnixTime, ensureAccountBalance, getNetworkConfig } from "../helpers";
 
@@ -35,19 +39,15 @@ describe("depredict", () => {
   let testMarketCreator: PublicKey;
   let testCoreCollection: PublicKey;
   let testMerkleTree: PublicKey;
-
-  const MARKET_CREATOR_SEED = "market_creator";
-  // Shared signer used when CPI-ing into MPL Core
-  const mplCoreCpiSigner = new PublicKey("CbNY3JiXdXNE9tPNEk1aRZVEkWdj2v7kfJLNQwZZgpXk");
+  let marketCreatorAccount: any;
+  let marketCreatorpda: PublicKey;
+  let bump: number;
 
   // Load local wallet from ~/.config/solana/id.json
   const localKeypair = Keypair.fromSecretKey(
     Buffer.from(JSON.parse(fs.readFileSync(`${process.env.HOME}/.config/solana/id.json`, "utf-8")))
   );
 
-  let marketCreatorAccount: any;
-  let marketCreatorpda: PublicKey;
-  let bump: number;
 
   // Load and cache the Market Creator once for all tests in this file
   async function ensureMarketCreatorLoaded() {
@@ -118,7 +118,7 @@ describe("depredict", () => {
     if (!marketPdaToUse) {
       const marketId = await getCurrentMarketId();
       marketPdaToUse = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from(MARKET_SEED), marketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       )[0];
     }
@@ -136,7 +136,7 @@ describe("depredict", () => {
     const pageIndexToUse = pageIndex ?? 0;
     const pageIndexBuf = Buffer.from(new Uint16Array([pageIndexToUse]).buffer);
     const [positionPagePda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pos_page"), marketIdForPage.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+      [Buffer.from(POSITION_PAGE_SEED), marketIdForPage.toArrayLike(Buffer, "le", 8), pageIndexBuf],
       program.programId
     );
     const pageInfo = await provider.connection.getAccountInfo(positionPagePda);
@@ -167,7 +167,7 @@ describe("depredict", () => {
           userMintAta: userTokenAccount,
           marketVault: marketVaultToUse!,
           marketCreator: marketCreator!,
-          mplCoreCpiSigner: mplCoreCpiSigner,
+          mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
           merkleTree: merkleTree!,
           treeConfig,
           collection: coreCollection!,
@@ -249,9 +249,6 @@ describe("depredict", () => {
 
   });
 
-
-
-
   describe("Trade", () => {
 
     it("Creates an order in an existing market", async function () {
@@ -263,7 +260,7 @@ describe("depredict", () => {
       // Get the market PDA
       const [marketPda] = PublicKey.findProgramAddressSync(
         [
-          Buffer.from("market"),
+          Buffer.from(MARKET_SEED),
           marketId.toArrayLike(Buffer, "le", 8),
         ],
         program.programId
@@ -295,8 +292,6 @@ describe("depredict", () => {
       const marketAccount = await program.account.marketState.fetch(marketPda);
       const marketVault = marketAccount.marketVault;
 
-
-      
       // Final check: Ensure USER has sufficient SOL for NFT creation
       const userSolBalance = await provider.connection.getBalance(USER.publicKey);
       console.log("USER SOL balance before position creation:", userSolBalance / LAMPORTS_PER_SOL, "SOL");
@@ -307,11 +302,11 @@ describe("depredict", () => {
         console.error("Minimum required: 1.5 SOL");
         throw new Error("Insufficient SOL in USER account for NFT creation");
       }
-      // Using shared mplCoreCpiSigner defined at the top
+      // Using shared MPL_CORE_CPI_SIGNER defined at the top
       // Derive position page PDA (pageIndex = 0) and capture pre state for rent analysis
       const pageIndexBuf = Buffer.from(new Uint16Array([0]).buffer);
       const [positionPagePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+        [Buffer.from(POSITION_PAGE_SEED), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
         program.programId
       );
       const pagePre = await provider.connection.getAccountInfo(positionPagePda);
@@ -359,7 +354,7 @@ describe("depredict", () => {
            userMintAta: userTokenAccount,
            marketVault: marketVault,
            marketCreator: marketCreatorpda,
-           mplCoreCpiSigner: mplCoreCpiSigner,
+           mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
            merkleTree: marketCreatorAccount.merkleTree,
            treeConfig: PublicKey.findProgramAddressSync(
              [marketCreatorAccount.merkleTree.toBuffer()],
@@ -424,14 +419,14 @@ describe("depredict", () => {
     it("Fails if market is already resolved", async () => {
       // Create a fresh manual-resolution market, resolve it, then ensure order creation fails
       const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
+        [Buffer.from(CONFIG_SEED)],
         program.programId
       );
       const cfgAccount: any = await program.account.config.fetch(configPda);
       const marketId = cfgAccount.nextMarketId as anchor.BN;
 
       const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from(MARKET_SEED), marketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
@@ -585,7 +580,7 @@ describe("depredict", () => {
       
       // Derive PDAs for closed market
       const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), closedMarketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from(MARKET_SEED), closedMarketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
       
@@ -603,7 +598,7 @@ describe("depredict", () => {
       
       const marketVault = marketAccount.marketVault;
       const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
+        [Buffer.from(CONFIG_SEED)],
         program.programId
       );
       
@@ -635,7 +630,7 @@ describe("depredict", () => {
       
       // Derive PDAs for resolved market
       const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), resolvedMarketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from(MARKET_SEED), resolvedMarketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
       
@@ -654,7 +649,7 @@ describe("depredict", () => {
       
       const marketVault = marketAccount.marketVault;
       const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
+        [Buffer.from(CONFIG_SEED)],
         program.programId
       );
       
@@ -694,7 +689,7 @@ describe("depredict", () => {
       
       // Derive PDAs for manual market
       const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), manualMarketId.toArrayLike(Buffer, "le", 8)],
+        [Buffer.from(MARKET_SEED), manualMarketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
       
@@ -713,7 +708,7 @@ describe("depredict", () => {
       
       const marketVault = marketAccount.marketVault;
       const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
+        [Buffer.from(CONFIG_SEED)],
         program.programId
       );
       
