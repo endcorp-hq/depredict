@@ -468,13 +468,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@noble/hashes@npm:^2.0.0":
-  version: 2.0.0
-  resolution: "@noble/hashes@npm:2.0.0"
-  checksum: 10c0/4c619df392164ea8655c630e753e791e1afb5f38cb746463d36509f684a197c3c653858b6a78135a0b54c80270a66f28003d5999ec1ad06cec0d658bf720a03f
-  languageName: node
-  linkType: hard
-
 "@npmcli/agent@npm:^3.0.0":
   version: 3.0.0
   resolution: "@npmcli/agent@npm:3.0.0"
@@ -2968,7 +2961,7 @@ __metadata:
     "@metaplex-foundation/umi-bundle-defaults": "npm:^1.4.1"
     "@metaplex-foundation/umi-rpc-web3js": "npm:^1.4.1"
     "@metaplex-foundation/umi-web3js-adapters": "npm:^1.2.0"
-    "@noble/hashes": "npm:^2.0.0"
+    "@noble/hashes": "npm:^1.3.1"
     "@solana/spl-token": "npm:^0.4.13"
     "@solana/web3.js": "npm:^1.98.4"
     "@switchboard-xyz/common": "npm:^3.4.1"
