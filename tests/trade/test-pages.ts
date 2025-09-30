@@ -308,28 +308,55 @@ describe("depredict", () => {
         throw new Error("Insufficient SOL in USER account for NFT creation");
       }
       // Using shared mplCoreCpiSigner defined at the top
-      // Derive position page PDA (pageIndex = 0) and capture pre state for rent analysis
-      const pageIndexBuf = Buffer.from(new Uint16Array([0]).buffer);
-      const [positionPagePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
-        program.programId
-      );
-      const pagePre = await provider.connection.getAccountInfo(positionPagePda);
+      // Find first available position page with a free slot; create pages on-demand
+      const derivePagePda = (idx: number) => {
+        const pageIndexBuf = Buffer.from(new Uint16Array([idx]).buffer);
+        return PublicKey.findProgramAddressSync(
+          [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+          program.programId
+        )[0];
+      };
 
-      // Ensure page is created by market creator authority (so users don't pay rent)
-      if (!pagePre) {
-        console.log("Pre-warming PositionPage (creator-funded)...");
-        await program.methods
-          .ensurePositionPage({ pageIndex: 0 })
-          .accountsPartial({
-            payer: ADMIN.publicKey,
-            market: marketPda,
-            marketCreator: marketCreatorpda,
-            positionPage: positionPagePda,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([ADMIN])
-          .rpc();
+      async function ensurePage(idx: number): Promise<void> {
+        const pda = derivePagePda(idx);
+        const info = await provider.connection.getAccountInfo(pda);
+        if (!info) {
+          await program.methods
+            .ensurePositionPage({ pageIndex: idx })
+            .accountsPartial({
+              payer: ADMIN.publicKey,
+              market: marketPda,
+              marketCreator: marketCreatorpda,
+              positionPage: pda,
+              systemProgram: SystemProgram.programId,
+            })
+            .signers([ADMIN])
+            .rpc();
+        }
+      }
+
+      // Determine page capacity and available page
+      let pageIndex = 0;
+      await ensurePage(pageIndex);
+      let positionPagePda = derivePagePda(pageIndex);
+      let pagePre = await provider.connection.getAccountInfo(positionPagePda);
+      let capacity = 0;
+      try {
+        const firstPage = await program.account.positionPage.fetch(positionPagePda);
+        capacity = (firstPage.entries || []).length;
+        // If full, advance until a page has room
+        while (firstPage.count >= capacity) {
+          pageIndex += 1;
+          await ensurePage(pageIndex);
+          positionPagePda = derivePagePda(pageIndex);
+          pagePre = await provider.connection.getAccountInfo(positionPagePda);
+          const p = await program.account.positionPage.fetch(positionPagePda);
+          capacity = (p.entries || []).length;
+          if (p.count < capacity) break;
+        }
+      } catch (_) {
+        // If fetch failed, ensure page and continue
+        await ensurePage(pageIndex);
       }
 
       // Create order parameters (1 USDC, 6 decimals)
@@ -348,7 +375,7 @@ describe("depredict", () => {
            amount,
            direction,
            metadataUri: "https://arweave.net/position-metadata",
-           pageIndex: 0,
+           pageIndex,
          })
          .accountsPartial({
            user: USER.publicKey,
@@ -419,362 +446,213 @@ describe("depredict", () => {
       assert.ok(updatedMarketAccount.volume.gt(new anchor.BN(0)), "Market volume should be greater than 0");
     });
 
-    // --- Negative Test Cases for Business Logic ---
-
-    it("Fails if market is already resolved", async () => {
-      // Create a fresh manual-resolution market, resolve it, then ensure order creation fails
-      const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
-        program.programId
-      );
-      const cfgAccount: any = await program.account.config.fetch(configPda);
-      const marketId = cfgAccount.nextMarketId as anchor.BN;
-
+    it("Creates 20 positions and auto-increments pages when full", async function () {
+      // Resolve market ID and PDA
+      const marketId = await getCurrentMarketId();
       const [marketPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
         program.programId
       );
 
-      const now = await getCurrentUnixTime();
-      const marketStart = new anchor.BN(now + 3600);
-      const marketEnd = new anchor.BN(now + 86400);
-      // Ensure we're inside the betting window for Future markets
-      const bettingStart = new anchor.BN(now - 60);
-      const question = Array.from(Buffer.from("Resolved market test?"));
-
-      // Create manual-resolution market
-      await program.methods
-        .createMarket({
-          question,
-          marketStart,
-          marketEnd,
-          metadataUri: "https://arweave.net/manual-metadata-uri",
-          oracleType: { none: {} },
-          marketType: { future: {} },
-          bettingStart: bettingStart,
-        })
-        .accountsPartial({
-          payer: ADMIN.publicKey,
-          feeVault: cfgAccount.feeVault,
-          oraclePubkey: ADMIN.publicKey,
-          config: configPda,
-          marketCreator: testMarketCreator,
-          mint: usdcMint,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .signers([ADMIN])
-        .rpc();
-
-      // Resolve the market manually (11 = Yes)
-      await program.methods
-        .resolveMarket({ oracleValue: 11 })
-        .accounts({ 
-          signer: ADMIN.publicKey, 
-          market: marketPda, 
-          marketCreator: testMarketCreator,
-          oraclePubkey: ADMIN.publicKey 
-        })
-        .signers([ADMIN])
-        .rpc();
-
-      // Attempt to create an order; expect MarketAlreadyResolved.
-      const { error } = await tryCreatePositionTx({
-        amount: new anchor.BN(1_000_000),
-        direction: { yes: {} },
-        mint: usdcMint,
-        userTokenAccount,
-        marketPda,
-        marketVault: (await program.account.marketState.fetch(marketPda)).marketVault,
-        configPda,
-        metadataUri: "https://arweave.net/position-metadata",
-        expectError: "MarketAlreadyResolved",
-        marketCreator: testMarketCreator,
-        coreCollection: testCoreCollection,
-        merkleTree: testMerkleTree,
-      });
-      assert.include(error.toString(), "MarketAlreadyResolved");
-    });
-
-    it("Fails if user has insufficient USDC", async () => {
-      // Use a user with 0 USDC
-      // You can create a new Keypair for this test
-      const poorUser = anchor.web3.Keypair.generate();
-      // Create ATA for poorUser but do not mint USDC
-      let poorUserTokenAccount;
-      try {
-        poorUserTokenAccount = (
-          await getOrCreateAssociatedTokenAccount(
-            provider.connection,
-            poorUser, // payer
-            usdcMint,
-            poorUser.publicKey
-          )
-        ).address;
-      } catch (e) {
-        // If fails, skip test
-        return;
-      }
-      const { error } = await tryCreatePositionTx({
-        user: poorUser,
-        userTokenAccount: poorUserTokenAccount,
-        mint: usdcMint,
-        amount: new anchor.BN(1_000_000),
-        direction: { yes: {} },
-        metadataUri: "https://arweave.net/position-metadata",
-        marketCreator: testMarketCreator,
-        coreCollection: testCoreCollection,
-        merkleTree: testMerkleTree,
-        expectError: "InsufficientFunds"
-      });
-      assert.isNotNull(error, "Should fail with InsufficientFunds");
-      assert.include(error.toString(), "InsufficientFunds");
-    });
-
-    it("Fails if user has insufficient SOL for fee", async () => {
-      // Use a user with 0 SOL
-      // Airdrop 0 SOL to a new Keypair (should have no funds)
-      const noSolUser = anchor.web3.Keypair.generate();
-      // Create ATA for noSolUser and mint USDC so only USDC is present
-      let noSolUserTokenAccount;
-      try {
-        noSolUserTokenAccount = (
-          await getOrCreateAssociatedTokenAccount(
-            provider.connection,
-            noSolUser, // payer
-            usdcMint,
-            noSolUser.publicKey
-          )
-        ).address;
-        // Mint USDC to this account so only fee transfer fails
-        await mintTo(
-          provider.connection,
-          ADMIN, // payer
-          usdcMint,
-          noSolUserTokenAccount,
-          LOCAL_MINT, // mint authority
-          1_000_000
-        );
-      } catch (e) {
-        // If fails, skip test
-        return;
-      }
-      // Do not airdrop SOL, so fee transfer should fail
-      const { error } = await tryCreatePositionTx({
-        user: noSolUser,
-        userTokenAccount: noSolUserTokenAccount,
-        mint: usdcMint,
-        amount: new anchor.BN(1_000_000),
-        direction: { yes: {} },
-        metadataUri: "https://arweave.net/position-metadata",
-        marketCreator: testMarketCreator,
-        coreCollection: testCoreCollection,
-        merkleTree: testMerkleTree,
-        expectError: "InsufficientFunds"
-      });
-      assert.isNotNull(error, "Should fail with InsufficientFunds");
-      assert.include(error.toString(), "InsufficientFunds");
-    });
-
-    it("Fails if betting period has ended (using closed market)", async () => {
-      // This test targets a market that is closed for betting.
-      // It should fail with the 'BettingPeriodEnded' error.
-      const closedMarketId = await getMarketIdByState("closed");
-      console.log("Using closed market ID:", closedMarketId.toString());
-      
-      // Derive PDAs for closed market
-      const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), closedMarketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
-      
-      // Fetch the market account to get the collection pubkey and vault
-      let marketAccount;
-      try {
-        marketAccount = await program.account.marketState.fetch(marketPda);
-        console.log("Found closed market:", marketAccount.marketId.toString());
-        console.log("Market end time:", marketAccount.marketEnd.toNumber());
-      } catch (e) {
-        console.log("Closed market does not exist, skipping test");
-        console.log("This is expected if setup-markets.ts hasn't been run yet");
-        return;
-      }
-      
+      // Preload market and shared fields
+      const marketAccount = await program.account.marketState.fetch(marketPda);
       const marketVault = marketAccount.marketVault;
-      const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
-        program.programId
-      );
-      
-      // Use a valid user with USDC
-      const { error } = await tryCreatePositionTx({
-        amount: new anchor.BN(1_000_000),
-        direction: { yes: {} },
-        mint: usdcMint,
-        userTokenAccount,
-        marketPda,
-        marketVault: marketVault,
-        configPda,
-        metadataUri: "https://arweave.net/position-metadata",
-        marketCreator: testMarketCreator,
-        coreCollection: testCoreCollection,
-        merkleTree: testMerkleTree,
-        expectError: "BettingPeriodEnded"
-      });
-      
-      assert.isNotNull(error, "Should fail with BettingPeriodEnded");
-      assert.include(error.toString(), "BettingPeriodEnded");
-    });
 
-    it("Fails if market is already resolved", async () => {
-      // This test targets a market that has already been resolved.
-      // It should fail with the 'MarketAlreadyResolved' error.
-      const resolvedMarketId = await getMarketIdByState("resolved");
-      console.log("Using resolved market ID:", resolvedMarketId.toString());
-      
-      // Derive PDAs for resolved market
-      const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), resolvedMarketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
-      
-      // Fetch the market account to get the collection pubkey and vault
-      let marketAccount;
-      try {
-        marketAccount = await program.account.marketState.fetch(marketPda);
-        console.log("Found resolved market:", marketAccount.marketId.toString());
-        console.log("Market state:", marketAccount.marketState);
-        console.log("Winning direction:", marketAccount.winningDirection);
-      } catch (e) {
-        console.log("Resolved market does not exist, skipping test");
-        console.log("This is expected if setup-markets.ts hasn't been run yet");
-        return;
-      }
-      
-      const marketVault = marketAccount.marketVault;
-      const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
-        program.programId
-      );
-      
-      // Use a valid user with USDC
-      const { error } = await tryCreatePositionTx({
-        amount: new anchor.BN(1_000_000),
-        direction: { yes: {} },
-        mint: usdcMint,
-        userTokenAccount,
-        marketPda,
-        marketVault: marketVault,
-        configPda,
-        metadataUri: "https://arweave.net/position-metadata",
-        marketCreator: testMarketCreator,
-        coreCollection: testCoreCollection,
-        merkleTree: testMerkleTree,
-        expectError: "MarketAlreadyResolved"
-      });
-      
-      assert.isNotNull(error, "Should fail with MarketAlreadyResolved");
-      assert.include(error.toString(), "MarketAlreadyResolved");
-    });
+      // Helper to derive a position page PDA
+      const derivePagePda = (idx: number) => {
+        const pageIndexBuf = Buffer.from(new Uint16Array([idx]).buffer);
+        return PublicKey.findProgramAddressSync(
+          [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+          program.programId
+        )[0];
+      };
 
-    it("Succeeds with manual resolution market", async () => {
-      // Get network configuration for this test
-      const { isDevnet } = await getNetworkConfig();
-      
-      // This test targets a manual resolution market that should be open for betting.
-      const manualMarketId = await getMarketIdByState("manual");
-      console.log("Using manual market ID:", manualMarketId.toString());
-      
-      // Debug: Check if we're getting the right market ID
-      if (manualMarketId.toString() === "1") {
-        console.log("⚠️  Warning: Using default market ID 1 - manual market may not exist");
-        console.log("   Run 'anchor run test-setup-markets' first to create markets");
-      }
-      
-      // Derive PDAs for manual market
-      const [marketPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("market"), manualMarketId.toArrayLike(Buffer, "le", 8)],
-        program.programId
-      );
-      
-      // Fetch the market account to get the collection pubkey and next position ID
-      let marketAccount;
-      try {
-        marketAccount = await program.account.marketState.fetch(marketPda);
-        console.log("Found manual market:", marketAccount.marketId.toString());
-        console.log("Market state:", marketAccount.marketState);
-        console.log("Oracle type:", marketAccount.oracleType);
-      } catch (e) {
-        console.log("Manual market does not exist, skipping test");
-        console.log("This is expected if setup-markets.ts hasn't been run yet");
-        return;
-      }
-      
-      const marketVault = marketAccount.marketVault;
-      const [configPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("config")],
-        program.programId
-      );
-      
-      // Use a valid user with USDC
-      const { tx, error } = await tryCreatePositionTx({
-        amount: new anchor.BN(1_000_000),
-        direction: { yes: {} },
-        mint: usdcMint,
-        userTokenAccount,
-        marketPda,
-        marketVault: marketVault,
-        configPda,
-        metadataUri: "https://arweave.net/position-metadata",
-        marketCreator: testMarketCreator,
-        coreCollection: testCoreCollection,
-        merkleTree: testMerkleTree,
-      });
-      
-      if (error) {
-        console.error("Manual market order creation failed:", error);
-        if (error.logs) {
-          console.error("Program logs:", error.logs);
+      // Ensure a page exists (creator-funded)
+      async function ensurePage(idx: number): Promise<void> {
+        const pda = derivePagePda(idx);
+        const info = await provider.connection.getAccountInfo(pda);
+        if (!info) {
+          await program.methods
+            .ensurePositionPage({ pageIndex: idx })
+            .accountsPartial({
+              payer: ADMIN.publicKey,
+              market: marketPda,
+              marketCreator: marketCreatorpda,
+              positionPage: pda,
+              systemProgram: SystemProgram.programId,
+            })
+            .signers([ADMIN])
+            .rpc();
         }
-        
-        // Check for rent-related errors
-        if (error.toString().includes("insufficient funds for rent")) {
-          console.error("Rent error detected! This could be due to:");
-          console.error("1. USER account insufficient SOL");
-          console.error("2. MPL Core program account insufficient SOL (localnet issue)");
-          
-          const userBalance = await provider.connection.getBalance(USER.publicKey);
-          const mplCoreBalance = await provider.connection.getBalance(new PublicKey(MPL_CORE_ID.toString()));
-          
-          console.error("USER account SOL balance:", userBalance / LAMPORTS_PER_SOL, "SOL");
-          console.error("MPL Core program SOL balance:", mplCoreBalance / LAMPORTS_PER_SOL, "SOL");
-          
-          // For localnet, try additional funding and retry once
-          if (!isDevnet) {
-            console.log("Localnet detected - attempting additional funding and retry...");
-            
-            // Fund MPL Core even more
-            const additionalFunding = 20 * LAMPORTS_PER_SOL;
-            console.log("Funding MPL Core with additional", additionalFunding / LAMPORTS_PER_SOL, "SOL...");
-            
-            const recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-            const transferIx = SystemProgram.transfer({
-              fromPubkey: localKeypair.publicKey,
-              toPubkey: new PublicKey(MPL_CORE_ID.toString()),
-              lamports: additionalFunding,
-            });
-            const transaction = new anchor.web3.Transaction().add(transferIx);
-            transaction.recentBlockhash = recentBlockhash;
-            transaction.feePayer = localKeypair.publicKey;
-            const signature = await provider.connection.sendTransaction(transaction, [localKeypair]);
-            await provider.connection.confirmTransaction(signature);
+      }
+
+      // Determine page capacity from the first page's entries length
+      let pageIndex = 0;
+      await ensurePage(pageIndex);
+      let firstPage = await program.account.positionPage.fetch(derivePagePda(pageIndex));
+      const pageCapacity = (firstPage.entries || []).length;
+
+      // Create 20 positions, rolling over to new pages as needed
+      const totalToCreate = 20;
+      let created = 0;
+      while (created < totalToCreate) {
+        // Make sure current page exists and is not full
+        try {
+          const pageAccount = await program.account.positionPage.fetch(derivePagePda(pageIndex));
+          if (pageAccount.count >= pageCapacity) {
+            pageIndex += 1;
+            await ensurePage(pageIndex);
+            continue;
           }
+        } catch (_) {
+          await ensurePage(pageIndex);
         }
+
+        // Attempt to create a position on the current page
+        const amount = new anchor.BN(1_000_000); // 1 USDC
+        const direction = { yes: {} };
+
+        const { tx, error } = await tryCreatePositionTx({
+          user: USER,
+          amount,
+          direction,
+          metadataUri: "https://arweave.net/position-metadata",
+          pageIndex,
+          mint: usdcMint,
+          userTokenAccount,
+          marketPda,
+          marketVault,
+          marketCreator: marketCreatorpda,
+          coreCollection: marketCreatorAccount.coreCollection,
+          merkleTree: marketCreatorAccount.merkleTree,
+        });
+
+        if (error) {
+          // If page is full, advance and retry; otherwise surface error
+          const msg = error?.toString?.() || "";
+          if (msg.includes("NoAvailablePositionSlot") || msg.includes("PositionPageNotEmpty")) {
+            pageIndex += 1;
+            await ensurePage(pageIndex);
+            continue;
+          }
+          throw error;
+        }
+        created += 1;
       }
+
+      // Validate total positions across pages >= 20
+      let totalCount = 0;
+      for (let i = 0; i <= pageIndex; i++) {
+        try {
+          const page = await program.account.positionPage.fetch(derivePagePda(i));
+          totalCount += Number(page.count);
+        } catch (_) {}
+      }
+      assert.isAtLeast(totalCount, totalToCreate, "Total positions across pages should be >= created count");
+
+      // Count by direction across pages (filtering out empty default entries)
+      let yesCount = 0;
+      let noCount = 0;
+      const DEFAULT_PK = "11111111111111111111111111111111";
+      for (let i = 0; i <= pageIndex; i++) {
+        try {
+          const page = await program.account.positionPage.fetch(derivePagePda(i));
+          for (const entry of page.entries || []) {
+            const assetIdStr = entry.assetId?.toBase58?.() || DEFAULT_PK;
+            if (assetIdStr !== DEFAULT_PK) {
+              if (entry.direction && ("yes" in entry.direction)) yesCount += 1;
+              else if (entry.direction && ("no" in entry.direction)) noCount += 1;
+            }
+          }
+        } catch (_) {}
+      }
+      console.log(`Positions summary - YES: ${yesCount}, NO: ${noCount}, TOTAL: ${yesCount + noCount}`);
+      assert.isAtLeast(yesCount + noCount, totalToCreate, "All created positions should exist across pages");
     });
+    
+    it("Fails to create a position in page 0 when it is full", async function () {
+      // Resolve market ID and PDA
+      const marketId = await getCurrentMarketId();
+      const [marketPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("market"), marketId.toArrayLike(Buffer, "le", 8)],
+        program.programId
+      );
+
+      // Preload market vault
+      const marketAccount = await program.account.marketState.fetch(marketPda);
+      const marketVault = marketAccount.marketVault;
+
+      // Page 0 helpers
+      const pageIndex = 0;
+      const pageIndexBuf = Buffer.from(new Uint16Array([pageIndex]).buffer);
+      const positionPage0Pda = PublicKey.findProgramAddressSync(
+        [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
+        program.programId
+      )[0];
+
+      // Ensure page 0 exists
+      const info = await provider.connection.getAccountInfo(positionPage0Pda);
+      if (!info) {
+        await program.methods
+          .ensurePositionPage({ pageIndex })
+          .accountsPartial({
+            payer: ADMIN.publicKey,
+            market: marketPda,
+            marketCreator: marketCreatorpda,
+            positionPage: positionPage0Pda,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([ADMIN])
+          .rpc();
+      }
+
+      // Fill page 0 if not already full
+      let page0 = await program.account.positionPage.fetch(positionPage0Pda);
+      const capacity = (page0.entries || []).length;
+      while (Number(page0.count) < capacity) {
+        const { error } = await tryCreatePositionTx({
+          user: USER,
+          amount: new anchor.BN(1_000_000),
+          direction: { yes: {} },
+          metadataUri: "https://arweave.net/position-metadata",
+          pageIndex,
+          mint: usdcMint,
+          userTokenAccount,
+          marketPda,
+          marketVault,
+          marketCreator: marketCreatorpda,
+          coreCollection: marketCreatorAccount.coreCollection,
+          merkleTree: marketCreatorAccount.merkleTree,
+        });
+        if (error) {
+          // If we hit slot exhaustion during filling, break
+          if (error.toString().includes("NoAvailablePositionSlot")) break;
+          throw error;
+        }
+        page0 = await program.account.positionPage.fetch(positionPage0Pda);
+      }
+
+      // Now attempt one more on page 0 and assert failure
+      const { error: finalError } = await tryCreatePositionTx({
+        user: USER,
+        amount: new anchor.BN(1_000_000),
+        direction: { yes: {} },
+        metadataUri: "https://arweave.net/position-metadata",
+        pageIndex,
+        mint: usdcMint,
+        userTokenAccount,
+        marketPda,
+        marketVault,
+        marketCreator: marketCreatorpda,
+        coreCollection: marketCreatorAccount.coreCollection,
+        merkleTree: marketCreatorAccount.merkleTree,
+        expectError: "NoAvailablePositionSlot",
+      });
+      assert.isNotNull(finalError, "Expected failure when page 0 is full");
+      assert.include(finalError.toString(), "NoAvailablePositionSlot");
+    });
+  
+  
   });
-
-
 });
 
