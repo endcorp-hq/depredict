@@ -8,8 +8,11 @@
     "build": "anchor build",
     "deploy": "anchor deploy",
     "deploy-devnet": "anchor deploy --provider.cluster devnet",
-    "init-mainnet": "ts-node deploy/scripts/init.ts",
-    "read-config": "ts-node deploy/scripts/read-config.ts"
+    "init-config": "ts-node deploy/scripts/init.ts",
+    "read-config": "ts-node deploy/scripts/read-config.ts",
+    "close-config": "ts-node deploy/scripts/close-config.ts",
+    "create-market-creator": "ts-node deploy/scripts/create-market-creator.ts",
+    "verify-market-creator": "ts-node deploy/scripts/verify-market-creator.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

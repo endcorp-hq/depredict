@@ -10,7 +10,7 @@ mod helpers;
 use state::*;
 use instructions::*;
 
-declare_id!("FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33");
+declare_id!("deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU");
 
 #[program]
 pub mod depredict {

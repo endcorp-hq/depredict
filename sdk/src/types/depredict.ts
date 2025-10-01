@@ -5,10 +5,10 @@
  * IDL can be found at `target/idl/depredict.json`.
  */
 export type Depredict = {
-  "address": "FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33",
+  "address": "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU",
   "metadata": {
     "name": "depredict",
-    "version": "0.6.0",
+    "version": "0.6.1",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
@@ -813,13 +813,6 @@ export type Depredict = {
           "name": "positionPage",
           "docs": [
             "current page PDA; program verifies/derives and uses it"
-          ],
-          "writable": true
-        },
-        {
-          "name": "positionPageNext",
-          "docs": [
-            "next page PDA; program verifies/derives and must be pre-created by authority"
           ],
           "writable": true
         },

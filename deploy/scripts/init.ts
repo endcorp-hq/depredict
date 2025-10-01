@@ -103,7 +103,7 @@ async function main() {
       console.log("Current fee amount:", existingConfig.feeAmount.toString());
       console.log("Current version:", existingConfig.version.toString());
       console.log("Next market ID:", existingConfig.nextMarketId.toString());
-      console.log("Number of markets:", existingConfig.numMarkets.toString());
+      console.log("Global markets:", existingConfig.globalMarkets.toString());
       
       console.log("\n❌ Config already initialized. Exiting...");
       process.exit(0);
@@ -144,7 +144,7 @@ async function main() {
     console.log("Fee amount:", configAccount.feeAmount.toString());
     console.log("Version:", configAccount.version.toString());
     console.log("Next market ID:", configAccount.nextMarketId.toString());
-    console.log("Number of markets:", configAccount.numMarkets.toString());
+    console.log("Global markets:", configAccount.globalMarkets.toString());
 
     // Save config info to file
     const configInfo = {
@@ -155,7 +155,7 @@ async function main() {
       feeAmount: feeAmount.toString(),
       version: configAccount.version.toString(),
       nextMarketId: configAccount.nextMarketId.toString(),
-      numMarkets: configAccount.numMarkets.toString(),
+      globalMarkets: configAccount.globalMarkets.toString(),
       transactionSignature: tx,
       initializedAt: new Date().toISOString(),
     };

@@ -28,6 +28,21 @@ function formatFeeAmount(lamports: number): string {
   return `${lamports} lamports (${sol.toFixed(9)} SOL, ~$${usd.toFixed(2)})`;
 }
 
+// Convert Anchor account numeric fields (number | BN | bigint | stringy) to number
+function asNumber(value: any): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'bigint') return Number(value);
+  if (value && typeof value.toNumber === 'function') return value.toNumber();
+  if (value != null) {
+    const n = Number(value);
+    if (!Number.isNaN(n)) return n;
+    const s = value.toString?.();
+    const m = Number(s);
+    if (!Number.isNaN(m)) return m;
+  }
+  throw new Error('Unable to convert value to number');
+}
+
 async function main() {
   console.log("🔍 Reading on-chain config account info...");
   console.log("Program ID:", PROGRAM_ID);
@@ -40,6 +55,24 @@ async function main() {
       new PublicKey(PROGRAM_ID)
     );
     console.log("🔧 Config PDA:", configPda.toString());
+
+    // Preflight: check account exists and has expected size for current layout
+    const info = await connection.getAccountInfo(configPda, "confirmed");
+    if (!info) {
+      console.log("❌ Config account does not exist on-chain");
+      console.log("   Run the init script first: yarn init-mainnet (with devnet RPC/PROGRAM_ID)");
+      process.exit(1);
+    }
+    const expectedSize = 293; // 8 (disc) + 1 + 32 + 32 + 2 + 2 + 8 + 8 + 200
+    console.log(`📦 Account owner: ${info.owner.toBase58()}`);
+    console.log(`📦 Account data length: ${info.data.length} bytes (expected ${expectedSize})`);
+    if (info.data.length !== expectedSize) {
+      console.error("❌ Config account size mismatch with current program layout.");
+      console.error("   The on-chain account was likely created with an older layout.");
+      console.error("   Fix: close the old config and re-initialize it.");
+      console.error("   Steps: yarn close-config -> yarn init-mainnet (using devnet env)");
+      process.exit(1);
+    }
 
     // Initialize provider (we don't need a wallet for reading)
     const provider = new anchor.AnchorProvider(
@@ -60,13 +93,13 @@ async function main() {
       console.log("✅ Config account found!");
       console.log("\n📊 Config Account Details:");
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      console.log(`Authority:     ${configAccount.authority.toString()}`);
-      console.log(`Fee Vault:     ${configAccount.feeVault.toString()}`);
-      console.log(`Fee Amount:    ${formatFeeAmount(configAccount.feeAmount.toNumber())}`);
-      console.log(`Version:       ${configAccount.version.toString()}`);
-      console.log(`Next Market ID: ${configAccount.nextMarketId.toString()}`);
-      console.log(`Num Markets:   ${configAccount.numMarkets.toString()}`);
-      console.log(`Bump:          ${configAccount.bump}`);
+      console.log(`Authority:      ${configAccount.authority.toString()}`);
+      console.log(`Fee Vault:      ${configAccount.feeVault.toString()}`);
+      console.log(`Fee Amount:     ${formatFeeAmount(asNumber(configAccount.feeAmount))}`);
+      console.log(`Version:        ${asNumber(configAccount.version)}`);
+      console.log(`Next Market ID: ${asNumber(configAccount.nextMarketId)}`);
+      console.log(`Global Markets: ${asNumber(configAccount.globalMarkets)}`);
+      console.log(`Bump:           ${asNumber(configAccount.bump)}`);
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
       // Check account balances
@@ -87,10 +120,10 @@ async function main() {
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
       // Calculate total fees collected (if any)
-      if (configAccount.numMarkets.toNumber() > 0) {
-        const estimatedFees = configAccount.numMarkets.toNumber() * configAccount.feeAmount.toNumber();
+      if (asNumber(configAccount.globalMarkets) > 0) {
+        const estimatedFees = asNumber(configAccount.globalMarkets) * asNumber(configAccount.feeAmount);
         console.log(`\n📈 Estimated Total Fees Collected: ${formatFeeAmount(estimatedFees)}`);
-        console.log(`   (Based on ${configAccount.numMarkets.toString()} markets)`);
+        console.log(`   (Based on ${asNumber(configAccount.globalMarkets)} markets)`);
       }
 
       // Check if accounts are funded
