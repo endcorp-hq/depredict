@@ -43,5 +43,6 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },
-  "type": "module"
+  "type": "module",
+  "version": "0.6.0"
 }
