@@ -374,7 +374,7 @@ export default class Position {
           
           // Count available slots
           const availableSlots = pageAccount.entries.filter(
-            entry => 'init' in entry.status
+            (entry: any) => 'init' in entry.status
           ).length;
           
           const usedSlots = 16 - availableSlots;
