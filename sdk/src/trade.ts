@@ -337,7 +337,6 @@ export default class Trade {
           .accountsPartial({
             user: payer,
             positionPage: positionPagePDA,
-            positionPageNext: positionPagePDA,
             market: marketPDA,
             marketCreator: marketCreatorPubkey,
             mint: marketMint,
