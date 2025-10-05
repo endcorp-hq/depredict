@@ -65,52 +65,11 @@ Depredict is built on Solana using the Anchor framework, with three main compone
   - `amount`: Position size
   - `status`: OPEN, WAITING, SETTLED, etc.
 
-### Account Relationships (Diagram)
+### Account Relationships (Three-tier model)
 
-```mermaid
-flowchart LR
-  %% Three tiers: Protocol → Market Creator → Markets/Users
-  subgraph Protocol[Depredict Protocol]
-    Config[(Config)]
-  end
-
-  subgraph CreatorTier[Market Creator Tier]
-    Creator[(Market Creator)]
-    CoreCollection[(MPL Core Collection)]
-    MerkleTree[(Bubblegum Merkle Tree)]
-  end
-
-  subgraph Markets[Markets]
-    Market[(Market State)]
-    Page0[(Position Page 0)]
-    Pages[(Position Pages ...)]
-    Vault[(Market Vault ATA)]
-  end
-
-  subgraph Users[Users]
-    User((User))
-    PositionNFT[(Compressed Position NFT)]
-  end
-
-  %% Creator verification prerequisite
-  Creator -- verifyMarketCreator(coreCollection, merkleTree) --> CoreCollection
-  Creator -- verifyMarketCreator(coreCollection, merkleTree) --> MerkleTree
-
-  %% Market creation requires verified creator and protocol config
-  Config --> Market
-  Creator -->|createMarket| Market
-
-  %% Market internals
-  Market --> Vault
-  Market --> Page0
-  Market --> Pages
-
-  %% Users open positions; NFT minted using creator's collection + tree
-  User -->|openPosition| Market
-  Market -. uses .-> MerkleTree
-  Market -. uses .-> CoreCollection
-  Market --> PositionNFT
-```
+- Protocol Tier: `Config` controls global parameters and the `next_market_id`.
+- Market Creator Tier: `MarketCreator` is verified by linking an MPL Core `core_collection` and Bubblegum `merkle_tree` before creating markets.
+- Markets/Users Tier: Each `MarketState` owns `PositionPage` accounts and a market `vault`. Users open positions that mint compressed NFTs under the creator’s collection/tree.
 
 ---
 
@@ -152,15 +111,6 @@ For broader categories like binary, multi-outcome, scalar, and tournament market
 
 SDK: `client.trade.createMarket({ question, startTime, endTime, oracleType, marketType, bettingStartTime?, metadataUri, payer })`
 
-```mermaid
-flowchart TD
-  A[Start] --> B[Derive PDAs: config, market, position_page_0, market_creator]
-  B --> C[Validate args: timings, question <= 80 chars]
-  C --> D[Create market account]
-  D --> E[Allocate position page 0]
-  E --> F[End]
-```
-
 ### Open Position
 1. Fetch market and its mint, market vault, and market creator
 2. Find or create a position page with available slots
@@ -169,49 +119,17 @@ flowchart TD
 
 SDK: `client.trade.openPosition({ marketId, amount, direction, payer, metadataUri })`
 
-```mermaid
-flowchart TD
-  A[Start] --> B[Fetch market + creator]
-  B --> C[Find available page]
-  C -->|none found| D[Ensure new page]
-  C -->|found| E[Use page]
-  D --> E
-  E --> F[Transfer funds to market vault]
-  F --> G[Mint compressed NFT]
-  G --> H[End]
-```
-
 ### Resolve Market
 1. If manual, pass resolution value; if oracle-driven, read Switchboard result
 2. Update market state and winning direction
 
 SDK: `client.trade.resolveMarket({ marketId, payer, resolutionValue? })`
 
-```mermaid
-flowchart TD
-  A[Start] --> B{Oracle type}
-  B -->|Switchboard| C[Read oracle pubkey]
-  B -->|Manual| D[Use resolutionValue]
-  C --> E[Update market state + winner]
-  D --> E
-  E --> F[End]
-```
-
 ### Settle Position (Payout)
 1. Provide compressed NFT proof (root, hashes, nonce, index)
 2. Burn/mark position as claimed and transfer winnings to claimer
 
 SDK: `client.trade.payoutPosition({ marketId, payer, assetId })`
-
-```mermaid
-flowchart TD
-  A[Start] --> B[Load market + creator]
-  B --> C[Submit compressed NFT proof]
-  C --> D[Locate page + slot for assetId]
-  D --> E[Transfer winnings to claimer]
-  E --> F[Burn/mark claimed]
-  F --> G[End]
-```
 
 ### Close Market
 1. Collect protocol and creator fees
