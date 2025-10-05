@@ -1,0 +1,57 @@
+# Development Environment Setup
+
+How to set up a local development environment for Depredict.
+
+---
+
+## Prerequisites
+- Node.js and Yarn
+- Anchor CLI
+- Solana CLI
+
+---
+
+## Localnet
+
+```bash
+# From repo root
+anchor build
+
+# Run tests sequentially until completion
+anchor run test-runner-continue
+
+# (Optional) deploy to localnet
+anchor deploy
+```
+
+SDK build:
+
+```bash
+cd sdk
+yarn install
+yarn build
+```
+
+Docs site:
+
+```bash
+cd depredict-docs
+yarn install
+yarn dev
+```
+
+---
+
+## IDs and Keys
+- `tests/keys/` contains localnet testing keypairs
+- `target/idl/depredict.json` provides the IDL used by the SDK
+- Use `sdk/src/types/depredict-devnet.json` for devnet
+
+---
+
+## Tips
+- Run individual tests with `anchor run <testname>` if needed
+- Use `tests/setup-localnet.sh` for local validator orchestration
+- For Switchboard and MPL Core, use the provided `.so` artifacts in `tests/`
+
+

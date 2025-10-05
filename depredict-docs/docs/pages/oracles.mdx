@@ -1,0 +1,70 @@
+# Oracles
+
+Depredict supports both manual and oracle-based resolution, with first-class support for Switchboard.
+
+---
+
+## Options
+
+### Manual Resolution
+- **When to use**: Curated or community-driven outcomes
+- **How it works**: Admin calls `resolveMarket` with a resolution value
+- **Cost**: Transaction fees only
+
+### Switchboard Oracle
+- **When to use**: Data-driven outcomes (prices, feeds)
+- **How it works**: Market stores an oracle pubkey; on resolve the program reads oracle data
+- **Cost**: Oracle job cost (roughly ~$0.15) + tx fees
+
+---
+
+## Creating an Oracle Market
+
+1) Choose `OracleType.SWITCHBOARD` and pass an `oraclePubkey` when creating the market.
+2) On resolve, the program fetches the value from the oracle account.
+
+```typescript
+import { OracleType, MarketType } from '@endcorp/depredict';
+
+await client.trade.createMarket({
+  question: 'Will BTC be above $70k at expiry?',
+  startTime,
+  endTime,
+  oracleType: OracleType.SWITCHBOARD,
+  oraclePubkey: new PublicKey('...'),
+  marketType: MarketType.FUTURE,
+  bettingStartTime,
+  metadataUri,
+  payer,
+  feeVaultAccount: feeVault,
+});
+```
+
+Resolution requires no manual input:
+
+```typescript
+await client.trade.resolveMarket({ marketId, payer });
+```
+
+---
+
+## Manual Resolution Example
+
+```typescript
+await client.trade.resolveMarket({
+  marketId,
+  payer,
+  resolutionValue: 10, // YES (11 => NO)
+});
+```
+
+---
+
+## Tips
+- Use manual for subjective outcomes, oracle for objective data
+- Store oracle pubkey at creation time to avoid governance risk
+- Prefer `FUTURE` markets if trading should open before the event starts
+
+See also: [Architecture](/architecture), [SDK API](/sdk-api).
+
+

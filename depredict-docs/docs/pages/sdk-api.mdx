@@ -15,7 +15,8 @@ const client = new DepredictClient(connection, adminKey, feeVault);
 ### Properties
 - `trade`: Market and trading operations
 - `config`: Protocol configuration
-- `position`: Position management
+- `position`: Position page management and utilities
+- `marketCreator`: Market creator lifecycle and updates
 
 ---
 
@@ -23,6 +24,7 @@ const client = new DepredictClient(connection, adminKey, feeVault);
 
 ### Market Operations
 - `getAllMarkets()`: Get all markets
+- `getMarketsByAuthority(authority)`: Get markets created by an authority
 - `getMarketById(marketId)`: Get market by ID
 - `getMarketByAddress(address)`: Get market by PDA address
 - `createMarket(args)`: Create a new market
@@ -31,8 +33,8 @@ const client = new DepredictClient(connection, adminKey, feeVault);
 - `updateMarket(marketId, payer, marketEnd?, marketState?)`: Update a market's end time or state
 
 ### Position Operations
-- `openPosition(args)`: Open a new position/order
-- `payoutPosition(marketId, payer, positionId, positionNonce)`: Settle a position and claim payout
+- `openPosition(args)`: Open a new position (auto-finds/creates position page)
+- `payoutPosition({ marketId, payer, assetId })`: Settle a position and claim payout via compressed NFT
 
 ---
 
@@ -49,10 +51,10 @@ const client = new DepredictClient(connection, adminKey, feeVault);
 
 ## Position Methods
 
-- `getPositionsAccountsForMarket(marketId)`: Get all position accounts for a market
-- `getPositionsAccountPda(marketId, positionNonce?)`: Get PDA for a position account
-- `getPositionAccountIxs(marketId, payer)`: Get instructions for position account creation/lookup
-- `createSubPositionAccount(marketId, payer, marketAddress, options?)`: Create sub-position account
+- `findAvailablePageForMarket(marketId, payer)`: Find or create a position page with available slots
+- `getAllPositionPagesForMarket(marketId)`: List all position pages and slot usage
+- `prunePosition({ marketId, signer, pageIndex, slotIndex })`: Prune a slot (creator-only)
+- `closePositionPage({ marketId, signer, pageIndex })`: Close an empty page (creator-only)
 
 ---
 

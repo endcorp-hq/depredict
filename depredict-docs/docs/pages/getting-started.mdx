@@ -12,7 +12,7 @@ npm install @endcorp/depredict
 
 ```typescript
 import { Connection, PublicKey } from '@solana/web3.js';
-import DepredictClient from '@endcorp/depredict';
+import DepredictClient, { MarketType, OracleType } from '@endcorp/depredict';
 
 // Initialize the client
 const connection = new Connection('https://api.devnet.solana.com');
@@ -21,8 +21,20 @@ const feeVault = new PublicKey('...'); // Your fee vault public key
 
 const client = new DepredictClient(connection, adminKey, feeVault);
 
-// Example: Get all markets
-const markets = await client.trade.getAllMarkets();
+// Example: Get your markets (by authority)
+const myMarkets = await client.trade.getMarketsByAuthority(adminKey);
+
+// Example: Create a LIVE market
+const { tx, marketId } = await client.trade.createMarket({
+  startTime: Math.floor(Date.now()/1000),
+  endTime: Math.floor(Date.now()/1000) + 86400,
+  question: 'Will SOL close above $200 today?',
+  oracleType: OracleType.MANUAL,
+  marketType: MarketType.LIVE,
+  metadataUri: 'https://example.com/metadata.json',
+  payer: adminKey,
+  feeVaultAccount: feeVault,
+});
 ```
 
 ## Features

@@ -1,0 +1,42 @@
+# SDK: What's New
+
+A summary of the latest SDK capabilities and improvements.
+
+---
+
+## Modules Overview
+- **trade**: market lifecycle, positions, payouts
+- **position**: paged storage (ensure, find, prune, close)
+- **config**: protocol config lifecycle and updates
+- **marketCreator**: creator lifecycle (create, verify, update)
+
+---
+
+## Highlights
+- `getMarketsByAuthority(authority)` to query platform-specific markets
+- `createMarket` supports `LIVE` and `FUTURE` with `bettingStartTime`
+- Position pagination with auto page discovery and pre-warming
+- Admin flows: `updateMarket`, `closeMarket`, `resolveMarket`
+- Payouts verify compressed NFT proofs via Bubblegum and MPL Core
+- Market creator updates: name, fee vault, creator fee bps, merkle tree
+
+---
+
+## Example Snippets
+
+```typescript
+// Find or create a page with free slots
+const page = await client.position.findAvailablePageForMarket(marketId, payer);
+
+// Resolve market via oracle or manual value
+await client.trade.resolveMarket({ marketId, payer });
+// or
+await client.trade.resolveMarket({ marketId, payer, resolutionValue: 10 });
+
+// Payout using assetId (compressed NFT)
+await client.trade.payoutPosition({ marketId, payer, assetId });
+```
+
+See the [SDK API](/sdk-api) for full details.
+
+

@@ -30,11 +30,68 @@ All market logic, settlement, and payouts are enforced by smart contracts—no i
 ## Core Features
 
 - **Market Creation:** Launch new markets on any topic, from sports to crypto to world events.
-- **NFT-Powered Positions:** All positions are represented as immutable NFTs using MPL Core.
-- **Trading:** Buy and sell YES/NO positions instantly, with automatic token swapping.
-- **Resolution:** Settle markets based on real outcomes, with support for Switchboard oracles.
-- **SDK & API:** TypeScript SDK for seamless integration and automation.
+- **NFT-Powered Positions:** Positions are represented as NFTs using MPL Core and compressed primitives for scale.
+- **Scalable Position Pages:** Paged storage for positions enables high throughput markets with pre-warming for next pages.
+- **Trading:** Buy and sell YES/NO positions instantly; pay using the market mint (no auto-swap yet).
+- **Resolution:** Settle markets based on real outcomes with manual or Switchboard oracle-based resolution.
+- **SDK & API:** Typed TypeScript SDK with modules for trade, position, config, and market creator operations.
 - **Open Data:** All market and trade data is public and queryable.
+
+---
+
+## What's New in the SDK
+
+The latest SDK unlocks better ergonomics, scalability, and admin tooling.
+
+- **Modules**
+  - **trade**: create/update/resolve/close markets; open positions; payouts
+  - **position**: page management (ensure, prune, close), auto-find available slot/page
+  - **config**: protocol config lifecycle and updates
+  - **marketCreator**: create/verify/update market creators (name, fees, merkle tree)
+
+- **Highlights**
+  - `getMarketsByAuthority(authority)` to query your platform's markets
+  - `createMarket({...})` supports `LIVE` and `FUTURE` markets with optional `bettingStartTime`
+  - Position pagination via `position.findAvailablePageForMarket(...)` with automatic page creation
+  - Admin flows: `updateMarket(...)`, `closeMarket(...)`, `resolveMarket(...)`
+  - Payout flow with NFT proof verification: `payoutPosition({ marketId, assetId, payer })`
+  - Market creator lifecycle: `createMarketCreator`, `verifyMarketCreator`, `updateCreatorFee`, `updateCreatorFeeVault`, `updateMerkleTree`
+
+### Quick SDK Glance
+
+```typescript
+import { Connection, PublicKey } from '@solana/web3.js';
+import DepredictClient, { MarketType, OracleType } from '@endcorp/depredict';
+
+const connection = new Connection('https://api.devnet.solana.com');
+const adminKey = new PublicKey('...');
+const feeVault = new PublicKey('...');
+const client = new DepredictClient(connection, adminKey, feeVault);
+
+// Query your markets
+const myMarkets = await client.trade.getMarketsByAuthority(adminKey);
+
+// Create a LIVE market
+const { tx, marketId } = await client.trade.createMarket({
+  startTime: Math.floor(Date.now()/1000),
+  endTime: Math.floor(Date.now()/1000) + 86400,
+  question: 'Will SOL close above $200 today?',
+  oracleType: OracleType.MANUAL,
+  marketType: MarketType.LIVE,
+  metadataUri: 'https://example.com/metadata.json',
+  payer: adminKey,
+});
+
+// Open a YES position
+await client.trade.openPosition({
+  marketId,
+  amount: 25,
+  direction: { yes: {} },
+  token: 'USDC_MINT',
+  payer: adminKey,
+  metadataUri: 'https://example.com/nft.json',
+});
+```
 
 ---
 

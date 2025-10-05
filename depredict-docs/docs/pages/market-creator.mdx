@@ -1,0 +1,60 @@
+# Guide: Market Creator Setup
+
+This guide shows how to create and verify a Market Creator, then update fields over time.
+
+---
+
+## 1) Create a Market Creator
+
+```typescript
+import DepredictClient from '@endcorp/depredict';
+
+const { ixs, marketCreator } = await client.marketCreator.createMarketCreator({
+  name: 'My Platform',
+  feeVault,
+  creatorFeeBps: 50, // 0.5%
+  signer: adminKey,
+});
+// send ixs using your wallet/tx builder
+```
+
+## 2) Verify Collection and Merkle Tree
+
+```typescript
+await client.marketCreator.verifyMarketCreator({
+  signer: adminKey,
+  coreCollection,
+  merkleTree,
+});
+```
+
+## 3) Update Fields
+
+```typescript
+// Update name
+await client.marketCreator.updateMarketCreatorName({ signer: adminKey, newName: 'New Name' });
+
+// Update fee vault
+await client.marketCreator.updateMarketCreatorFeeVault({
+  signer: adminKey,
+  currentFeeVault: feeVault,
+  newFeeVault,
+});
+
+// Update creator fee (BPS)
+await client.marketCreator.updateMarketCreatorFee({ signer: adminKey, creatorFeeBps: 75 });
+
+// Update merkle tree (validates authority)
+await client.marketCreator.updateMerkleTree({ signer: adminKey, newTree: merkleTree2 });
+```
+
+---
+
+## Notes
+- Creator fee is capped on-chain (2% max)
+- Collection and tree must be set before opening positions (for NFT minting)
+- Use different creators to separate platforms or business lines
+
+See also: [Architecture](/architecture), [SDK API](/sdk-api), [SDK Example](/sdk-example).
+
+

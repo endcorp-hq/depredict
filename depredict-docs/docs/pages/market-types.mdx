@@ -1,0 +1,46 @@
+# Market Types
+
+This page outlines common market structures you can build using Depredict.
+
+---
+
+## Binary (YES/NO)
+- **Description**: Two-outcome markets, the default protocol primitive
+- **Examples**: Will SOL close above $200 today?
+- **Notes**: Highest liquidity and simplest UX
+
+## Multi-Outcome (coming soon)
+- **Description**: More than two outcomes (e.g., A/B/C)
+- **Examples**: Who will win the tournament? Team A, Team B, Team C
+- **Status**: Roadmap item; can be composed by multiple binary markets today
+
+## Scalar (coming soon)
+- **Description**: Continuous outcomes within a range
+- **Examples**: What will BTC price be at expiry?
+- **Status**: Roadmap item; can be approximated using bands or discrete binaries
+
+## Tournament/Bracket (coming soon)
+- **Description**: Hierarchical markets where outcomes depend on earlier rounds
+- **Examples**: March Madness style brackets
+- **Status**: Roadmap item; compose using multiple markets and off-chain orchestration
+
+---
+
+## Live vs Future
+
+### Live Markets
+- Start trading immediately upon creation
+- Use for real-time or ongoing events
+
+### Future Markets
+- Trading opens at `bettingStartTime`, before `marketStart`
+- Use for scheduled events such as elections or sports matches
+
+---
+
+## SDK Notes
+- Use `client.trade.createMarket({ marketType: MarketType.LIVE | MarketType.FUTURE })`
+
+See also: [Architecture](/architecture) and [SDK API](/sdk-api)
+
+

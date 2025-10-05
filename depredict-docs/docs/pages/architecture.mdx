@@ -36,25 +36,81 @@ Depredict is built on Solana using the Anchor framework, with three main compone
   - `oracle_type`: Switchboard or manual resolution
   - `market_type`: Live or future market
   - `yes_liquidity/no_liquidity`: Current liquidity pools
-  - `next_position_id`: Auto-incrementing position ID
-  - `mint`: Token used for trading (defaults to USDC)
+  - `pages_allocated`: Number of allocated position pages
+  - `mint` and `decimals`: Token used for trading and its decimals
+  - `market_vault`: Vault address holding market funds
 
-#### Position Account
-- **Purpose**: User positions within a market
+#### Market Creator Account
+- **Purpose**: Represents a platform/team that creates markets. Holds NFT collection and merkle tree references used for positions.
 - **Key Fields**:
-  - `market_id`: Associated market
-  - `authority`: Position owner
-  - `positions`: Array of individual positions
-  - `nonce`: Account nonce for sub-accounts
+  - `name`: Display name of the market creator
+  - `creator_fee_bps`: Creator fee in basis points (max capped in program)
+  - `fee_vault`: Creator fee vault
+  - `core_collection`: MPL Core collection used for position NFTs
+  - `merkle_tree`: Bubblegum compression tree for scalable minting
+
+#### Position Pages
+- **Purpose**: Scalable, paged storage of positions per market to support high throughput.
+- **Details**:
+  - Each market has multiple `position_page` accounts, with fixed slots (e.g., 16 entries per page)
+  - New pages are created on-demand and may be pre-warmed when capacity is low
+  - SDK auto-discovers or creates a page with available slots when opening a position
 
 #### Position NFT
 - **Purpose**: Individual position representation
-- **Implementation**: MPL Core NFT with metadata
+- **Implementation**: MPL Core NFT (compressed), minted at position open and burned at settlement
 - **Key Fields**:
   - `position_id`: Unique position identifier
   - `direction`: YES or NO position
   - `amount`: Position size
   - `status`: OPEN, WAITING, SETTLED, etc.
+
+### Account Relationships (Diagram)
+
+```mermaid
+flowchart LR
+  %% Three tiers: Protocol → Market Creator → Markets/Users
+  subgraph Protocol[Depredict Protocol]
+    Config[(Config)]
+  end
+
+  subgraph CreatorTier[Market Creator Tier]
+    Creator[(Market Creator)]
+    CoreCollection[(MPL Core Collection)]
+    MerkleTree[(Bubblegum Merkle Tree)]
+  end
+
+  subgraph Markets[Markets]
+    Market[(Market State)]
+    Page0[(Position Page 0)]
+    Pages[(Position Pages ...)]
+    Vault[(Market Vault ATA)]
+  end
+
+  subgraph Users[Users]
+    User((User))
+    PositionNFT[(Compressed Position NFT)]
+  end
+
+  %% Creator verification prerequisite
+  Creator -- verifyMarketCreator(coreCollection, merkleTree) --> CoreCollection
+  Creator -- verifyMarketCreator(coreCollection, merkleTree) --> MerkleTree
+
+  %% Market creation requires verified creator and protocol config
+  Config --> Market
+  Creator -->|createMarket| Market
+
+  %% Market internals
+  Market --> Vault
+  Market --> Page0
+  Market --> Pages
+
+  %% Users open positions; NFT minted using creator's collection + tree
+  User -->|openPosition| Market
+  Market -. uses .-> MerkleTree
+  Market -. uses .-> CoreCollection
+  Market --> PositionNFT
+```
 
 ---
 
@@ -67,6 +123,8 @@ Depredict is built on Solana using the Anchor framework, with three main compone
 ### Future Markets
 - **Start**: Trading begins at a specified future time
 - **Use Case**: Scheduled events, elections, etc.
+
+For broader categories like binary, multi-outcome, scalar, and tournament markets, see [Market Types](/market-types).
 
 ---
 
@@ -84,12 +142,91 @@ Depredict is built on Solana using the Anchor framework, with three main compone
 
 ---
 
+## Instruction Flows
+
+### Create Market
+0. Precondition: The `market_creator` must be verified with a valid MPL Core collection and Bubblegum merkle tree
+1. Derive PDAs for `config`, `market`, `position_page_0`, and `market_creator` (from payer)
+2. Initialize market with question, timings, market type, oracle type, and mint/decimals
+3. Allocate first position page
+
+SDK: `client.trade.createMarket({ question, startTime, endTime, oracleType, marketType, bettingStartTime?, metadataUri, payer })`
+
+```mermaid
+flowchart TD
+  A[Start] --> B[Derive PDAs: config, market, position_page_0, market_creator]
+  B --> C[Validate args: timings, question <= 80 chars]
+  C --> D[Create market account]
+  D --> E[Allocate position page 0]
+  E --> F[End]
+```
+
+### Open Position
+1. Fetch market and its mint, market vault, and market creator
+2. Find or create a position page with available slots
+3. Mint a compressed MPL Core NFT representing the position
+4. Transfer funds into the market vault
+
+SDK: `client.trade.openPosition({ marketId, amount, direction, payer, metadataUri })`
+
+```mermaid
+flowchart TD
+  A[Start] --> B[Fetch market + creator]
+  B --> C[Find available page]
+  C -->|none found| D[Ensure new page]
+  C -->|found| E[Use page]
+  D --> E
+  E --> F[Transfer funds to market vault]
+  F --> G[Mint compressed NFT]
+  G --> H[End]
+```
+
+### Resolve Market
+1. If manual, pass resolution value; if oracle-driven, read Switchboard result
+2. Update market state and winning direction
+
+SDK: `client.trade.resolveMarket({ marketId, payer, resolutionValue? })`
+
+```mermaid
+flowchart TD
+  A[Start] --> B{Oracle type}
+  B -->|Switchboard| C[Read oracle pubkey]
+  B -->|Manual| D[Use resolutionValue]
+  C --> E[Update market state + winner]
+  D --> E
+  E --> F[End]
+```
+
+### Settle Position (Payout)
+1. Provide compressed NFT proof (root, hashes, nonce, index)
+2. Burn/mark position as claimed and transfer winnings to claimer
+
+SDK: `client.trade.payoutPosition({ marketId, payer, assetId })`
+
+```mermaid
+flowchart TD
+  A[Start] --> B[Load market + creator]
+  B --> C[Submit compressed NFT proof]
+  C --> D[Locate page + slot for assetId]
+  D --> E[Transfer winnings to claimer]
+  E --> F[Burn/mark claimed]
+  F --> G[End]
+```
+
+### Close Market
+1. Collect protocol and creator fees
+2. Close market accounts and vaults
+
+SDK: `client.trade.closeMarket(marketId, payer)`
+
+---
+
 ## Token Integration
 
-### Automatic Token Swapping
-- **Feature**: Users can trade with any SPL token
-- **Process**: Automatic conversion to market's base token
-- **Implementation**: Jupiter aggregator integration
+### Automatic Token Swapping (coming soon)
+- **Planned**: Trade with any SPL token
+- **Planned flow**: Convert user token to market mint via Jupiter aggregator
+- **Current behavior**: Users must pay with the market mint; ensure the user's ATA for the market mint is funded
 
 ### Fee Structure
 - **Protocol Fee**: Configurable percentage of trade volume

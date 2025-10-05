@@ -9,9 +9,10 @@
     "preview": "vocs preview"
   },
   "dependencies": {
+    "playwright": "^1.55.1",
     "react": "latest",
     "react-dom": "latest",
-    "vocs": "latest"
+    "vocs": "^1.0.13"
   },
   "devDependencies": {
     "@types/react": "latest",
