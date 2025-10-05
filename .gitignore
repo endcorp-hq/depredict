@@ -18,3 +18,4 @@ sdk/dist/**/*
 validator-ledger/
 .env
 keys/
+dist
