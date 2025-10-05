@@ -4061,7 +4061,6 @@ __metadata:
   resolution: "depredict-docs@workspace:."
   dependencies:
     "@types/react": "npm:latest"
-    playwright: "npm:^1.55.1"
     react: "npm:latest"
     react-dom: "npm:latest"
     typescript: "npm:latest"
@@ -6852,7 +6851,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"playwright@npm:^1.52.0, playwright@npm:^1.55.1":
+"playwright@npm:^1.52.0":
   version: 1.55.1
   resolution: "playwright@npm:1.55.1"
   dependencies:
