@@ -15,6 +15,7 @@ export * from "./types/index.js";
 
 // Re-export constants
 export * from "./utils/constants.js";
+export { getUmi, toWeb3PublicKey, toUmiPublicKey, normalizeResult, buildV0Message } from "./utils/mplHelpers.js";
 
 export default class DepredictClient {
   program: Program<Depredict>;

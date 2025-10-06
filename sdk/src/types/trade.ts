@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js'
+import { AddressLookupTableAccount, PublicKey, TransactionInstruction, VersionedTransaction } from '@solana/web3.js'
 
 export type Market = {
   address: string
@@ -78,6 +78,27 @@ export type PayoutArgs = {
   marketId: number
   payer: PublicKey
   assetId: PublicKey
+  rpcEndpoint?: string
+  returnMode?: 'ixs' | 'message' | 'transaction'
+}
+
+export type PayoutPositionIxResult = {
+  ixs: TransactionInstruction[]
+  alts: (AddressLookupTableAccount | string)[]
+  /** @deprecated use ixs */
+  instructions?: TransactionInstruction[]
+  /** @deprecated use alts */
+  addressLookupTableAccounts?: (AddressLookupTableAccount | string)[]
+}
+
+export type PayoutPositionMessageResult = {
+  message: Uint8Array
+  alts: string[]
+}
+
+export type PayoutPositionTxResult = {
+  transaction: VersionedTransaction
+  alts: string[]
 }
 
 export enum OracleType {

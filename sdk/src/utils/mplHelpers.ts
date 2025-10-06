@@ -8,17 +8,38 @@ import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import { dasApi } from "@metaplex-foundation/digital-asset-standard-api";
 import { generateSigner, signerIdentity, createSignerFromKeypair, publicKeyBytes, type PublicKeyBytes, type KeypairSigner, Pda } from "@metaplex-foundation/umi";
 import { fromWeb3JsKeypair, fromWeb3JsPublicKey } from "@metaplex-foundation/umi-web3js-adapters";
+import type { PublicKey as UmiPublicKey } from "@metaplex-foundation/umi";
 import createVersionedTransaction from "./sendVersionedTransaction.js";
 import { getMarketCreatorPDA } from "./pda/index.js";
 
-const DAS_RPC = process.env.DAS_RPC || "";
-
-function getUmi(rpcEndpoint?: string) {
-  const endpoint = rpcEndpoint && rpcEndpoint.length > 0 ? rpcEndpoint : DAS_RPC;
-  if (!endpoint) {
-    throw new Error("DAS RPC endpoint not provided. Pass rpcEndpoint or set process.env.DAS_RPC");
+export function getUmi(rpcEndpoint?: string) {
+  const endpoint = rpcEndpoint ?? process.env.DAS_RPC ?? process.env.SOLANA_RPC_URL;
+  if (!endpoint || endpoint.length === 0) {
+    throw new Error(
+      "MISSING_DAS_RPC: Provide rpcEndpoint or set DAS_RPC/SOLANA_RPC_URL"
+    );
   }
   return createUmi(endpoint);
+}
+
+export function toWeb3PublicKey(value: any): PublicKey {
+  if (!value) throw new Error("INVALID_PUBLIC_KEY: value is required");
+  if (value instanceof PublicKey) return value;
+  if (typeof (value as any).toBase58 === "function" && typeof (value as any).toString === "function") {
+    // umi public key
+    return new PublicKey((value as any).toString());
+  }
+  if (typeof value === "string") return new PublicKey(value);
+  throw new Error("INVALID_PUBLIC_KEY: Normalize inputs to PublicKey or pass base58 string");
+}
+
+export function toUmiPublicKey(value: any): UmiPublicKey {
+  if (!value) throw new Error("INVALID_PUBLIC_KEY: value is required");
+  if (typeof (value as any).toBase58 === "function" && typeof (value as any).toString === "function" && !(value instanceof PublicKey)) {
+    return value as UmiPublicKey;
+  }
+  const web3Pk = toWeb3PublicKey(value as any);
+  return fromWeb3JsPublicKey(web3Pk);
 }
 
 export const fetchAssetProof = async (
@@ -158,15 +179,52 @@ export async function sendWithLookupV0(
   return { createLutTx, extendLutTxs, mainTx, lookupTableAddress };
 }
 
+export function normalizeResult(result: any): { ixs: TransactionInstruction[]; alts: (AddressLookupTableAccount | string)[] } {
+  const ixs: TransactionInstruction[] =
+    result?.ixs ?? result?.instructions ?? (result?.instruction ? [result.instruction] : []);
+  const alts: (AddressLookupTableAccount | string)[] =
+    result?.alts ?? result?.addressLookupTableAccounts ?? [];
+  return { ixs, alts };
+}
+
+export async function buildV0Message(
+  program: Program<Depredict>,
+  ixs: TransactionInstruction[],
+  payer: PublicKey,
+  alts: (AddressLookupTableAccount | string)[] = [],
+  recentBlockhash?: string
+): Promise<{ message: Uint8Array; alts: string[] }> {
+  const connection = program.provider.connection;
+  const altAccounts: AddressLookupTableAccount[] = [];
+  const altStrings: string[] = [];
+  for (const alt of alts) {
+    if (typeof alt === "string") {
+      const { value } = await connection.getAddressLookupTable(new PublicKey(alt));
+      if (value) {
+        altAccounts.push(value as AddressLookupTableAccount);
+        altStrings.push(alt);
+      }
+    } else {
+      altAccounts.push(alt);
+      altStrings.push(alt.key.toBase58());
+    }
+  }
+  const tx = await createVersionedTransaction(program, ixs, payer, { recentBlockhash } as any, altAccounts);
+  return { message: tx.message.serialize(), alts: altStrings };
+}
+
 export async function createCoreCollection(
   program: Program<Depredict>,
   authority: Keypair,
   {
-    name = "Test Collection",
-    uri = "https://example.com/metadata.json",
+    name,
+    uri,
     rpcEndpoint,
-  }: { name?: string; uri?: string; rpcEndpoint?: string } = {}
+  }: { name: string; uri: string; rpcEndpoint?: string }
 ): Promise<KeypairSigner & { publicKey: string }> {
+  if (!name || !uri || typeof name !== "string" || typeof uri !== "string") {
+    throw new Error("INVALID_COLLECTION_PARAMS: name and uri are required strings");
+  }
   const umi = getUmi(rpcEndpoint).use(mplCore());
   const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(authority as any));
   umi.use(signerIdentity(signer, true));

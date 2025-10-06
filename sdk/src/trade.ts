@@ -15,7 +15,7 @@ import {
   OracleType,
 } from "./types/trade.js";
 import { RpcOptions } from "./types/index.js";
-import { PayoutArgs } from "./types/trade.js";
+import { PayoutArgs, PayoutPositionIxResult, PayoutPositionMessageResult, PayoutPositionTxResult } from "./types/trade.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers.js";
 import {
@@ -44,7 +44,7 @@ import {
   MPL_ACCOUNT_COMPRESSION_ID,
 } from "./utils/constants.js";
 import Position from "./position.js";
-import { fetchAssetProofWithRetry } from "./utils/mplHelpers.js";
+import { fetchAssetProofWithRetry, buildV0Message } from "./utils/mplHelpers.js";
 
 export default class Trade {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
@@ -317,6 +317,8 @@ export default class Trade {
     const BGUM_PROGRAM_ID = new PublicKey(MPL_BUBBLEGUM_ID);
     const MPL_NOOP_ID = new PublicKey(NOOP_PROGRAM_ID);
     const MPL_ACCOUNT_COMPRESSION_ID = new PublicKey(ACCOUNT_COMPRESSION_ID);
+    const CORE_PROGRAM_ID = new PublicKey(MPL_CORE_PROGRAM_ID);
+    const CORE_CPI_SIGNER_ID = new PublicKey(MPL_CORE_CPI_SIGNER);
 
     // Derive TreeConfig PDA (Bubblegum)
     const [treeConfig] = PublicKey.findProgramAddressSync(
@@ -345,8 +347,8 @@ export default class Trade {
             merkleTree: merkleTree,
             collection: collection,
             treeConfig: treeConfig,
-            mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
-            mplCoreProgram: MPL_CORE_PROGRAM_ID,
+            mplCoreCpiSigner: CORE_CPI_SIGNER_ID,
+            mplCoreProgram: CORE_PROGRAM_ID,
             bubblegumProgram: BGUM_PROGRAM_ID,
             logWrapperProgram: MPL_NOOP_ID,
             compressionProgram: MPL_ACCOUNT_COMPRESSION_ID,
@@ -559,9 +561,12 @@ export default class Trade {
   }
 
   async payoutPosition(
-    { marketId, payer, assetId }: PayoutArgs,
+    { marketId, payer, assetId, rpcEndpoint, returnMode = 'ixs' }: PayoutArgs,
     options?: RpcOptions
-  ) {
+  ): Promise<PayoutPositionIxResult | PayoutPositionMessageResult | PayoutPositionTxResult> {
+    // Inputs are web3.PublicKey only
+    const payerPk: PublicKey = payer;
+    const assetPk: PublicKey = assetId;
     const ixs: TransactionInstruction[] = [];
 
     const marketPda = getMarketPDA(this.program.programId, marketId);
@@ -578,7 +583,7 @@ export default class Trade {
 
     const userMintAta = getAssociatedTokenAddressSync(
       marketMint,
-      payer,
+      payerPk,
       false,
       TOKEN_PROGRAM_ID
     );
@@ -604,13 +609,19 @@ export default class Trade {
     const treeConfig = getTreeConfigPDA(merkleTree);
 
     // Fetch asset proof details required by on-chain args
+    // Choose DAS RPC endpoint with precedence
+    const dasEndpoint = rpcEndpoint ?? process.env.DAS_RPC ?? process.env.SOLANA_RPC_URL;
+    if (!dasEndpoint) {
+      throw new Error("MISSING_DAS_RPC: Provide rpcEndpoint or set DAS_RPC/SOLANA_RPC_URL");
+    }
+
     const {
       root: rootBytes,
       dataHash: dataHashBytes,
       creatorHash: creatorHashBytes,
       nonce,
       index,
-    } = await fetchAssetProofWithRetry(assetId);
+    } = await fetchAssetProofWithRetry(assetPk, dasEndpoint);
 
     // Search for the asset ID across all pages
     const pages = await this.position.getAllPositionPagesForMarket(marketId);
@@ -629,7 +640,7 @@ export default class Trade {
         // Search through all slots in this page
         for (let slotIndex = 0; slotIndex < pageAccount.entries.length; slotIndex++) {
           const entry = pageAccount.entries[slotIndex];
-          if (entry.assetId.equals(assetId)) {
+          if (entry.assetId.equals(assetPk)) {
             foundPageIndex = page.pageIndex;
             foundSlotIndex = slotIndex;
             break;
@@ -644,7 +655,7 @@ export default class Trade {
     }
 
     if (foundPageIndex === -1) {
-      throw new Error(`Position with asset ID ${assetId.toBase58()} not found in market ${marketId}`);
+      throw new Error(`Position with asset ID ${assetPk.toBase58()} not found in market ${marketId}`);
     }
 
     try {
@@ -658,7 +669,7 @@ export default class Trade {
           .settlePosition({
             pageIndex: foundPageIndex,
             slotIndex: foundSlotIndex,
-            assetId,
+            assetId: assetPk,
             root: Array.from(rootBytes),
             dataHash: Array.from(dataHashBytes),
             creatorHash: Array.from(creatorHashBytes),
@@ -666,7 +677,7 @@ export default class Trade {
             leafIndex: index,
           })
           .accountsPartial({
-            claimer: payer,
+            claimer: payerPk,
             market: marketPda,
             config: configPda,
             marketCreator,
@@ -693,13 +704,35 @@ export default class Trade {
       throw error;
     }
 
+    if (!ixs || ixs.length === 0) {
+      throw new Error("NO_PAYOUT_INSTRUCTIONS: Builder produced no instructions; check marketId/assetId/payer/feeVault");
+    }
+
+    // Standardize return shapes
+    if (returnMode === 'ixs') {
+      const result: PayoutPositionIxResult = {
+        ixs,
+        alts: [],
+        instructions: ixs,
+        addressLookupTableAccounts: [],
+      };
+      return result;
+    }
+
+    if (returnMode === 'message') {
+      const { message, alts } = await buildV0Message(this.program, ixs, payerPk, []);
+      const result: PayoutPositionMessageResult = { message, alts };
+      return result;
+    }
+
+    // default to transaction
     const tx = await createVersionedTransaction(
       this.program,
       ixs,
-      payer,
+      payerPk,
       options
     );
-
-    return tx;
+    const txResult: PayoutPositionTxResult = { transaction: tx, alts: [] };
+    return txResult;
   }
 }
