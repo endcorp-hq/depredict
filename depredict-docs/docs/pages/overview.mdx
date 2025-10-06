@@ -54,7 +54,7 @@ The latest SDK unlocks better ergonomics, scalability, and admin tooling.
   - `createMarket({...})` supports `LIVE` and `FUTURE` markets with optional `bettingStartTime`
   - Position pagination via `position.findAvailablePageForMarket(...)` with automatic page creation
   - Admin flows: `updateMarket(...)`, `closeMarket(...)`, `resolveMarket(...)`
-  - Payout flow with NFT proof verification: `payoutPosition({ marketId, assetId, payer })`
+  - Payout flow with NFT proof verification: `payoutPosition({ marketId, payer, assetId, rpcEndpoint?, returnMode? })`
   - Market creator lifecycle: `createMarketCreator`, `verifyMarketCreator`, `updateCreatorFee`, `updateCreatorFeeVault`, `updateMerkleTree`
 
 ### Quick SDK Glance

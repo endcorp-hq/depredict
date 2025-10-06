@@ -21,9 +21,17 @@ const { ixs, marketCreator } = await client.marketCreator.createMarketCreator({
 ## 2) Verify Collection and Merkle Tree
 
 ```typescript
+// (Optional) Create an MPL Core collection (off-chain action via UMI under the hood)
+// name and uri are required
+const created = await createCoreCollection(program, adminKey, {
+  name: 'My Collection',
+  uri: 'https://example.com/metadata.json',
+  rpcEndpoint: process.env.DAS_RPC,
+});
+
 await client.marketCreator.verifyMarketCreator({
   signer: adminKey,
-  coreCollection,
+  coreCollection: created ? new PublicKey(created.publicKey) : coreCollection,
   merkleTree,
 });
 ```

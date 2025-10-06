@@ -18,6 +18,9 @@ A summary of the latest SDK capabilities and improvements.
 - Position pagination with auto page discovery and pre-warming
 - Admin flows: `updateMarket`, `closeMarket`, `resolveMarket`
 - Payouts verify compressed NFT proofs via Bubblegum and MPL Core
+  - PublicKey-only inputs (`payer`, `assetId`)
+  - RPC endpoint precedence: param → `DAS_RPC` → `SOLANA_RPC_URL`
+  - Flexible return modes: `'ixs' | 'message' | 'transaction'`
 - Market creator updates: name, fee vault, creator fee bps, merkle tree
 
 ---
@@ -33,8 +36,14 @@ await client.trade.resolveMarket({ marketId, payer });
 // or
 await client.trade.resolveMarket({ marketId, payer, resolutionValue: 10 });
 
-// Payout using assetId (compressed NFT)
-await client.trade.payoutPosition({ marketId, payer, assetId });
+// Payout using assetId (compressed NFT) with explicit DAS RPC and message return
+await client.trade.payoutPosition({
+  marketId,
+  payer,
+  assetId,
+  rpcEndpoint: 'https://your-das.example',
+  returnMode: 'message',
+});
 ```
 
 See the [SDK API](/sdk-api) for full details.

@@ -34,7 +34,22 @@ const client = new DepredictClient(connection, adminKey, feeVault);
 
 ### Position Operations
 - `openPosition(args)`: Open a new position (auto-finds/creates position page)
-- `payoutPosition({ marketId, payer, assetId })`: Settle a position and claim payout via compressed NFT
+- `payoutPosition({ marketId, payer, assetId, rpcEndpoint?, returnMode? })`: Settle a position via compressed NFT proofs
+
+#### payoutPosition details
+- **Inputs**: `marketId: number`, `payer: PublicKey`, `assetId: PublicKey`, `rpcEndpoint?: string`, `returnMode?: 'ixs' | 'message' | 'transaction'` (default `'ixs'`)
+- **RPC precedence**: uses `rpcEndpoint` if provided, otherwise `process.env.DAS_RPC`, otherwise `process.env.SOLANA_RPC_URL`
+- **Returns** (by `returnMode`):
+  - `'ixs'` → `{ ixs: TransactionInstruction[]; alts: (AddressLookupTableAccount | string)[] }`
+  - `'message'` → `{ message: Uint8Array; alts: string[] }`
+  - `'transaction'` → `{ transaction: VersionedTransaction; alts: string[] }`
+- **Errors**:
+  - `MISSING_DAS_RPC`: Provide `rpcEndpoint` or set `DAS_RPC`/`SOLANA_RPC_URL`
+  - `INVALID_ASSET_ID`: Asset must be a valid `PublicKey`
+  - `NO_PAYOUT_INSTRUCTIONS`: Builder produced no instructions (check `marketId/assetId/payer`)
+- **Notes**:
+  - All SDK key inputs are web3.js `PublicKey` (UMI keys are not required)
+  - Helpers available: `buildV0Message(ixs, alts, payer)`, `normalizeResult(res)`
 
 ---
 
