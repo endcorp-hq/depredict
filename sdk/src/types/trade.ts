@@ -60,7 +60,6 @@ export type CreateCustomerArgs = {
 export type OpenOrderArgs = {
   marketId: number
   amount: number
-  token: string
   direction:
     | {
         yes: {}
@@ -71,7 +70,6 @@ export type OpenOrderArgs = {
   payer: PublicKey,
   feeVaultAccount: PublicKey,
   metadataUri: string
-  pageIndex: number
 }
 
 export type PayoutArgs = {
