@@ -253,10 +253,8 @@ export default class Trade {
       marketId,
       amount,
       direction,
-      token,
       payer,
       metadataUri,
-      pageIndex,
     }: OpenOrderArgs,
     options?: RpcOptions
   ) {
