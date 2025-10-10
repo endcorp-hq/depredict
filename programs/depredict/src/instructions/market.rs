@@ -28,6 +28,7 @@ use crate::{constants::{
     }
 };
 use crate::errors::DepredictError;
+use crate::events::MarketEvent;
 
 #[derive(Accounts)]
 #[instruction(args: CreateMarketArgs)]
@@ -199,7 +200,7 @@ pub struct CloseMarketContext<'info> {
 }
 
 impl<'info> CreateMarketContext<'info> {
-    pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &CreateMarketContextBumps) -> Result<()> {
+    pub fn create_market(&mut self, args: CreateMarketArgs, bumps: &CreateMarketContextBumps) -> Result<MarketEvent> {
         let market = &mut self.market;
         let config = &mut self.config;
         let market_type = args.market_type;
@@ -270,13 +271,27 @@ impl<'info> CreateMarketContext<'info> {
             .checked_add(1)
             .ok_or(DepredictError::ArithmeticOverflow)?;
     
-        market.emit_market_event()?;
-        Ok(())
+        let market_event = MarketEvent {
+            market_creator: market.market_creator,
+            market_id: market.market_id,
+            yes_liquidity: market.yes_liquidity,
+            no_liquidity: market.no_liquidity,
+            volume: market.volume,
+            update_ts: market.update_ts,
+            next_position_id: market.next_position_id,
+            winning_direction: market.winning_direction,
+            market_start: market.market_start,
+            market_end: market.market_end,
+            market_state: market.market_state,
+            question: market.question,
+        };
+        emit!(market_event);
+        Ok(market_event)
     }
 }
 
 impl<'info> UpdateMarketContext<'info> {
-    pub fn update_market(&mut self, args: UpdateMarketArgs) -> Result<()> {
+    pub fn update_market(&mut self, args: UpdateMarketArgs) -> Result<MarketEvent> {
         let market = &mut self.market;
         let signer = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
@@ -294,12 +309,27 @@ impl<'info> UpdateMarketContext<'info> {
             market.market_state = args.market_state.unwrap();
         }
         market.update_ts = ts;
-        Ok(())
+        let market_event = MarketEvent {
+            market_creator: market.market_creator,
+            market_id: market.market_id,
+            yes_liquidity: market.yes_liquidity,
+            no_liquidity: market.no_liquidity,
+            volume: market.volume,
+            update_ts: market.update_ts,
+            next_position_id: market.next_position_id,
+            market_state: market.market_state,
+            market_start: market.market_start,
+            market_end: market.market_end,
+            question: market.question,
+            winning_direction: market.winning_direction,
+        };
+        emit!(market_event);
+        Ok(market_event)
     }
 }
 
 impl<'info> ResolveMarketContext<'info> {
-    pub fn resolve_market(&mut self, args: ResolveMarketArgs) -> Result<()> {
+    pub fn resolve_market(&mut self, args: ResolveMarketArgs) -> Result<MarketEvent> {
         let market = &mut self.market;
         let signer = &self.signer;
         let oracle_type = market.oracle_type;
@@ -344,12 +374,27 @@ impl<'info> ResolveMarketContext<'info> {
 
         market.emit_market_event()?;
 
-        Ok(())
+        let market_event = MarketEvent {
+            market_creator: market.market_creator,
+            market_id: market.market_id,
+            yes_liquidity: market.yes_liquidity,
+            no_liquidity: market.no_liquidity,
+            volume: market.volume,
+            update_ts: market.update_ts,
+            next_position_id: market.next_position_id,
+            market_state: market.market_state,
+            market_start: market.market_start,
+            market_end: market.market_end,
+            question: market.question,
+            winning_direction: market.winning_direction,
+        };
+        emit!(market_event);
+        Ok(market_event)
     }
 }
 
 impl<'info> CloseMarketContext<'info> {
-    pub fn close_market(&mut self, args: CloseMarketArgs) -> Result<()> {
+    pub fn close_market(&mut self, args: CloseMarketArgs) -> Result<MarketEvent> {
 
         let market = &mut self.market;
         let signer = &self.signer;
@@ -450,7 +495,7 @@ impl<'info> CloseMarketContext<'info> {
             )
         )?;
 
-        let market_account_info = self.market.to_account_info();
+        let market_account_info = market.to_account_info();
         let fee_vault_info = self.creator_fee_vault_ata.to_account_info();
         let market_lamports = market_account_info.lamports();
 
@@ -463,6 +508,21 @@ impl<'info> CloseMarketContext<'info> {
         // Mark the market account data as closed by zeroizing (optional but good practice)
         market_account_info.resize(0)?; // This might fail if rent epoch not met
         market_account_info.assign(&System::id()); // This reassigns owner
-        Ok(())
+        let market_event = MarketEvent {
+            market_creator: market.market_creator,
+            market_id: market.market_id,
+            yes_liquidity: market.yes_liquidity,
+            no_liquidity: market.no_liquidity,
+            volume: market.volume,
+            update_ts: market.update_ts,
+            next_position_id: market.next_position_id,
+            market_state: market.market_state,
+            market_start: market.market_start,
+            market_end: market.market_end,
+            question: market.question,
+            winning_direction: market.winning_direction,    
+        };
+        emit!(market_event);    
+        Ok(market_event)
     }
 }

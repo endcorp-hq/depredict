@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::state::{ MarketStates, WinningDirection };
+use crate::state::{ MarketStates, WinningDirection, PositionDirection, PositionStatus };
 
 // #[event]
 // pub struct PriceEvent {
@@ -10,18 +10,33 @@ use crate::state::{ MarketStates, WinningDirection };
 //     pub timestamp: i64,
 // }
 
-// #[event]
-// pub struct PositionEvent {
-//     pub position_id: u64,
-//     pub mint: Option<Pubkey>,
-//     pub position_nonce: u32,
-//     pub market_id: u64,
-//     pub amount: u64,
-//     pub direction: PositionDirection,
-//     pub position_status: PositionStatus,
-//     pub ts: i64,
-//     pub created_at: i64,
-// }
+#[event]
+pub struct OpenPositionEvent {
+    pub market_id: u64,
+    pub position_id: u64,
+    pub mint: Option<Pubkey>,
+    pub position_nonce: u32,
+    pub amount: u64,
+    pub direction: PositionDirection,
+    pub position_status: PositionStatus,
+    pub asset_id: Pubkey,
+    pub payer: Pubkey,
+    pub vault: Pubkey,
+    pub currency_decimals: u8,
+    pub ts: i64,
+    pub created_at: i64,
+}
+
+#[event]
+pub struct ClosePositionEvent {
+    pub market_id: u64,
+    pub position_id: u64,
+    pub amount: u64,
+    pub direction: PositionDirection,
+    pub position_status: PositionStatus,
+    pub asset_id: Pubkey,
+    pub currency_decimals: u8,
+}
 
 #[event]
 pub struct MarketEvent {

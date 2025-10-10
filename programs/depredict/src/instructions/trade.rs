@@ -17,13 +17,13 @@ use anchor_spl::{
 // crate includes
 use crate::{
     constants::{
-        BASE_URI, MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE, MAX_CREATOR_POSITIONS, POSITIONS_PER_PAGE, CONFIG
+        MARKET, MARKET_CREATOR, MPL_ACCOUNT_COMPRESSION_ID, MPL_NOOP_ID, POSITION_PAGE, MAX_CREATOR_POSITIONS, POSITIONS_PER_PAGE, CONFIG
     }, errors::DepredictError, state::{
         SettlePositionArgs, MarketCreator, MarketState, MarketStates, MarketType, OpenPositionArgs, PositionDirection, PositionPage, PositionStatus, WinningDirection, POSITION_PAGE_ENTRIES, Config
     },
     helpers::compute_dual_fees_sequential,
 };
-
+use crate::events::{OpenPositionEvent, ClosePositionEvent};
 // metaplex includes
 use mpl_bubblegum::{
     instructions::{MintV2CpiBuilder},
@@ -279,17 +279,14 @@ pub struct SettlePositionContext<'info> {
 
 
 impl<'info> OpenPositionContext<'info> {
-    pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<(Pubkey, u64)> {
+    pub fn open_position(&mut self, args: OpenPositionArgs) -> Result<OpenPositionEvent> {
 
         let market = &mut self.market;
         let next_position_id = market.next_position_id();
         let market_type = market.market_type;
         let ts = Clock::get()?.unix_timestamp;
-
-
-
-
-
+        let net_amount = args.amount;
+        
         if market_type == MarketType::Future {
             require!(ts < market.market_start && ts > market.betting_start, DepredictError::BettingPeriodExceeded);
         }
@@ -297,8 +294,6 @@ impl<'info> OpenPositionContext<'info> {
         require!(market.market_end > ts, DepredictError::BettingPeriodEnded);
         require!(market.winning_direction == WinningDirection::None, DepredictError::MarketAlreadyResolved);
         require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
-
-        let net_amount = args.amount;
 
         let (current_liquidity, otherside_current_liquidity) = match args.direction {
             PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
@@ -367,11 +362,12 @@ impl<'info> OpenPositionContext<'info> {
 
         // Mint cNFT to user and collection
         msg!("Minting cNFT");
-        let uri = format!("{}/{}/{}.json", BASE_URI, market.market_id, next_position_id);
+        let symbol = format!("{}-{}", market.market_id, next_position_id);
+        let uri = args.metadata_uri;
         let name = format!("DEPREDICT-{}-{}", market.market_id, next_position_id);
         let metadata = MetadataArgsV2 {
             name,
-            symbol: String::from(""),
+            symbol: String::from(symbol),
             uri,
             seller_fee_basis_points: 0,
             primary_sale_happened: false,
@@ -426,13 +422,31 @@ impl<'info> OpenPositionContext<'info> {
 
         // Mark update time and return
         market.update_ts = ts;
-        Ok((asset_id, leaf_index as u64))
+
+        let open_position_event = OpenPositionEvent {
+            market_id: market.market_id,
+            position_id: next_position_id,
+            mint: Some(self.mint.key()),
+            position_nonce: 0,
+            position_status: PositionStatus::Open,
+            ts: ts,
+            created_at: ts,
+            amount: net_amount,
+            direction: args.direction,
+            asset_id,
+            payer: self.user.key(),
+            vault: self.market_vault.key(),
+            currency_decimals: self.mint.decimals,
+        };
+
+        emit!(open_position_event);
+        Ok(open_position_event)
     }
 }
 
 
 impl<'info> SettlePositionContext<'info> {
-    pub fn settle_position(&mut self, args: SettlePositionArgs) -> Result<()> {
+    pub fn settle_position(&mut self, args: SettlePositionArgs) -> Result<ClosePositionEvent> {
         let market = &mut self.market;
         let position_page = &mut self.position_page;
         let ts = Clock::get()?.unix_timestamp;
@@ -554,7 +568,18 @@ impl<'info> SettlePositionContext<'info> {
         require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
         market.update_ts = ts;
         market.emit_market_event()?;
-        Ok(())
+
+        let close_position_event = ClosePositionEvent {
+            market_id: market.market_id,
+            position_id: position_page.entries[effective_slot_index].position_id,
+            amount: position_page.entries[effective_slot_index].amount,
+            direction: position_page.entries[effective_slot_index].direction,
+            position_status: PositionStatus::Claimed,
+            asset_id: position_page.entries[effective_slot_index].asset_id,
+            currency_decimals: self.mint.decimals,
+        };
+        emit!(close_position_event);
+        Ok(close_position_event)
     }
 }
 

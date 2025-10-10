@@ -20,7 +20,7 @@ custom-heap = []
 custom-panic = []
 
 [dependencies]
-anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-lang = { version = "0.31.1", features = ["init-if-needed", "event-cpi"] }
 anchor-spl = { version = "0.31.1", features = ["metadata", "associated_token"] }
 switchboard-on-demand = "0.5.1"
 mpl-core = { version = "0.10.1" }
