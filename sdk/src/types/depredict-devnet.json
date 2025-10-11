@@ -2,7 +2,7 @@
   "address": "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU",
   "metadata": {
     "name": "depredict",
-    "version": "0.6.1",
+    "version": "0.6.5",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
@@ -1935,6 +1935,19 @@
   ],
   "events": [
     {
+      "name": "ClosePositionEvent",
+      "discriminator": [
+        198,
+        217,
+        115,
+        95,
+        191,
+        120,
+        142,
+        137
+      ]
+    },
+    {
       "name": "MarketEvent",
       "discriminator": [
         212,
@@ -1945,6 +1958,19 @@
         104,
         52,
         83
+      ]
+    },
+    {
+      "name": "OpenPositionEvent",
+      "discriminator": [
+        83,
+        43,
+        164,
+        147,
+        169,
+        87,
+        81,
+        172
       ]
     }
   ],
@@ -2209,6 +2235,50 @@
           {
             "name": "market_id",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ClosePositionEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_id",
+            "type": "u64"
+          },
+          {
+            "name": "position_id",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "direction",
+            "type": {
+              "defined": {
+                "name": "PositionDirection"
+              }
+            }
+          },
+          {
+            "name": "position_status",
+            "type": {
+              "defined": {
+                "name": "PositionStatus"
+              }
+            }
+          },
+          {
+            "name": "asset_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "currency_decimals",
+            "type": "u8"
           }
         ]
       }
@@ -2679,6 +2749,76 @@
           {
             "name": "metadata_uri",
             "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenPositionEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_id",
+            "type": "u64"
+          },
+          {
+            "name": "position_id",
+            "type": "u64"
+          },
+          {
+            "name": "mint",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "position_nonce",
+            "type": "u32"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "direction",
+            "type": {
+              "defined": {
+                "name": "PositionDirection"
+              }
+            }
+          },
+          {
+            "name": "position_status",
+            "type": {
+              "defined": {
+                "name": "PositionStatus"
+              }
+            }
+          },
+          {
+            "name": "asset_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "currency_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
           }
         ]
       }

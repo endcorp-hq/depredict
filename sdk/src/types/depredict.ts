@@ -8,7 +8,7 @@ export type Depredict = {
   "address": "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU",
   "metadata": {
     "name": "depredict",
-    "version": "0.6.1",
+    "version": "0.6.5",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
@@ -1941,6 +1941,19 @@ export type Depredict = {
   ],
   "events": [
     {
+      "name": "closePositionEvent",
+      "discriminator": [
+        198,
+        217,
+        115,
+        95,
+        191,
+        120,
+        142,
+        137
+      ]
+    },
+    {
       "name": "marketEvent",
       "discriminator": [
         212,
@@ -1951,6 +1964,19 @@ export type Depredict = {
         104,
         52,
         83
+      ]
+    },
+    {
+      "name": "openPositionEvent",
+      "discriminator": [
+        83,
+        43,
+        164,
+        147,
+        169,
+        87,
+        81,
+        172
       ]
     }
   ],
@@ -2215,6 +2241,50 @@ export type Depredict = {
           {
             "name": "marketId",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "closePositionEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "marketId",
+            "type": "u64"
+          },
+          {
+            "name": "positionId",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "direction",
+            "type": {
+              "defined": {
+                "name": "positionDirection"
+              }
+            }
+          },
+          {
+            "name": "positionStatus",
+            "type": {
+              "defined": {
+                "name": "positionStatus"
+              }
+            }
+          },
+          {
+            "name": "assetId",
+            "type": "pubkey"
+          },
+          {
+            "name": "currencyDecimals",
+            "type": "u8"
           }
         ]
       }
@@ -2685,6 +2755,76 @@ export type Depredict = {
           {
             "name": "metadataUri",
             "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "openPositionEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "marketId",
+            "type": "u64"
+          },
+          {
+            "name": "positionId",
+            "type": "u64"
+          },
+          {
+            "name": "mint",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "positionNonce",
+            "type": "u32"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "direction",
+            "type": {
+              "defined": {
+                "name": "positionDirection"
+              }
+            }
+          },
+          {
+            "name": "positionStatus",
+            "type": {
+              "defined": {
+                "name": "positionStatus"
+              }
+            }
+          },
+          {
+            "name": "assetId",
+            "type": "pubkey"
+          },
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "currencyDecimals",
+            "type": "u8"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          },
+          {
+            "name": "createdAt",
+            "type": "i64"
           }
         ]
       }
