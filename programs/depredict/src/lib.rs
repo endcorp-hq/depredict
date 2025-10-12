@@ -134,12 +134,12 @@ use solana_security_txt::security_txt;
 #[cfg(not(feature = "no-entrypoint"))]
 security_txt! {
     name: "dePredict",
-    project_url: "https://github.com/endcorp-hq/depredict",
+    project_url: "https://depredict.xyz",
     contacts: "email:security@endcorp.co",
-    policy: "https://github.com/endcorp-hq/depredict",
+    policy: "https://depredict.xyz/policy",
 
     // Optional Fields
     preferred_languages: "en",
     source_code: "https://github.com/endcorp-hq/depredict",
-    source_revision: "5vJwnLeyjV8uNJSp1zn7VLW8GwiQbcsQbGaVSwRmkE4r"
+    source_revision: "335a26b3b917f9902e530b9358dd686326b3c6fc"
 }
