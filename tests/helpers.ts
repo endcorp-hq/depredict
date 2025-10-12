@@ -170,6 +170,82 @@ export async function getUsdcMint(): Promise<{ mint: PublicKey }> {
   return { mint: LOCAL_MINT.publicKey };
 }
 
+/**
+ * Funds system programs and accounts that need SOL for rent on localnet
+ * This is especially important for MPL Core program which creates accounts
+ */
+export async function fundSystemAccounts(): Promise<void> {
+  const { isDevnet } = await getNetworkConfig();
+  
+  if (isDevnet) {
+    console.log("Skipping system account funding on devnet");
+    return;
+  }
+
+  console.log("Funding system accounts for localnet...");
+  
+  try {
+    // Fund MPL Core program
+    const mplCoreProgram = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
+    const mplCoreBalance = await provider.connection.getBalance(mplCoreProgram);
+    console.log(`MPL Core program balance: ${mplCoreBalance / LAMPORTS_PER_SOL} SOL`);
+    
+    if (mplCoreBalance < 10 * LAMPORTS_PER_SOL) {
+      console.log("Funding MPL Core program with 10 SOL...");
+      const signature = await provider.connection.requestAirdrop(mplCoreProgram, 10 * LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(signature, "confirmed");
+      console.log("MPL Core program funded successfully");
+    }
+
+    // Fund Metaplex program
+    const metaplexProgram = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+    const metaplexBalance = await provider.connection.getBalance(metaplexProgram);
+    console.log(`Metaplex program balance: ${metaplexBalance / LAMPORTS_PER_SOL} SOL`);
+    
+    if (metaplexBalance < 5 * LAMPORTS_PER_SOL) {
+      console.log("Funding Metaplex program with 5 SOL...");
+      const signature = await provider.connection.requestAirdrop(metaplexProgram, 5 * LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(signature, "confirmed");
+      console.log("Metaplex program funded successfully");
+    }
+
+    // Fund Token program
+    const tokenProgram = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    const tokenBalance = await provider.connection.getBalance(tokenProgram);
+    console.log(`Token program balance: ${tokenBalance / LAMPORTS_PER_SOL} SOL`);
+    
+    if (tokenBalance < 5 * LAMPORTS_PER_SOL) {
+      console.log("Funding Token program with 5 SOL...");
+      const signature = await provider.connection.requestAirdrop(tokenProgram, 5 * LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(signature, "confirmed");
+      console.log("Token program funded successfully");
+    }
+
+    console.log("System account funding completed");
+  } catch (error) {
+    console.error("Error funding system accounts:", error);
+    throw error;
+  }
+}
+
+/**
+ * Ensures all necessary accounts have sufficient SOL for testing
+ * This includes user accounts and system programs
+ */
+export async function ensureAllAccountsFunded(): Promise<void> {
+  console.log("Ensuring all accounts are funded...");
+  
+  // Fund system programs first
+  await fundSystemAccounts();
+  
+  // Fund user accounts
+  await ensureAccountBalance(ADMIN.publicKey, 2 * LAMPORTS_PER_SOL);
+  await ensureAccountBalance(USER.publicKey, 2 * LAMPORTS_PER_SOL);
+  await ensureAccountBalance(FEE_VAULT.publicKey, 1 * LAMPORTS_PER_SOL);
+  
+  console.log("All accounts funded successfully");
+}
+
 // Helper to extract Anchor error code from error object/logs
 export function extractErrorCode(error) {
   // Try Anchor error code

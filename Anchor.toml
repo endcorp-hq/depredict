@@ -13,6 +13,9 @@ depredict = "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU"
 [programs.localnet]
 depredict = "FMG8WchQ4AxEirv5nYcVeBoPQfgrwTBqhD2q7mGMvb33"
 
+[programs.mainnet]
+depredict = "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU"
+
 [registry]
 url = "https://api.apr.dev"
 

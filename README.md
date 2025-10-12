@@ -7,12 +7,9 @@ Depredict is a decentralized prediction market protocol on Solana. Anyone can sp
 - [SDK on npm](https://www.npmjs.com/package/@endcorp/depredict)
 - [END Corp.](https://endcorp.co) — Project lead
 
-`Program ID: 7w43ZtEh1vdmiCFkuVMRni3s1gq7DJiu1N5N5AuRu59r`
+`Program ID: deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU`
 
 ## 📁 Repository Map
-
-This is a monorepo containing all components of the Depredict ecosystem:
-
 ### 🏗️ Core Components
 
 | Component | Location | Description | Tech Stack |

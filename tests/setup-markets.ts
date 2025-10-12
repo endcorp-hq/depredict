@@ -24,6 +24,9 @@ describe("Market Setup", () => {
     isLocalnet = !isDevnet;
     console.log(`Setting up markets on ${isDevnet ? "devnet" : "localnet"}`);
 
+    // Ensure all accounts are properly funded
+    await ensureAllAccountsFunded();
+
     // Get config PDA
     configPda = PublicKey.findProgramAddressSync(
       [Buffer.from("config")],

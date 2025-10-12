@@ -11,6 +11,7 @@ use state::*;
 use instructions::*;
 
 declare_id!("deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU");
+declare_id!("deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU");
 
 #[program]
 pub mod depredict {

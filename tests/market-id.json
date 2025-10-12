@@ -1,2 +1,22 @@
 {
+  "markets": {
+    "active": {
+      "id": "20",
+      "description": "Active market open for betting"
+    },
+    "closed": {
+      "id": "16",
+      "description": "Market closed for betting (betting period ended) (manual resolution)"
+    },
+    "manual": {
+      "id": "17",
+      "description": "Manual resolution market"
+    },
+    "resolved": {
+      "id": "18",
+      "description": "Market that has been resolved with a winner"
+    }
+  },
+  "currentActive": "20",
+  "timestamp": "2025-08-07T01:59:26.336Z"
 }
