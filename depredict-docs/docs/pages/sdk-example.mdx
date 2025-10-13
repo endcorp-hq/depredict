@@ -6,7 +6,7 @@ Depredict is designed for builders. You can use the SDK to create your own custo
 
 ```typescript
 import { Connection, PublicKey } from '@solana/web3.js';
-import DepredictClient from '@endcorp/depredict';
+import DepredictClient, { MarketType, OracleType } from '@endcorp/depredict';
 
 const connection = new Connection('https://api.devnet.solana.com');
 const adminKey = new PublicKey('...'); // Your admin public key
@@ -33,6 +33,7 @@ await client.trade.createMarket({
   payer: adminKey,
   oracleType: OracleType.MANUAL, // or OracleType.SWITCHBOARD
   marketType: MarketType.LIVE, // or MarketType.FUTURE
+  // bettingStartTime required for FUTURE markets
 });
 ```
 
@@ -41,9 +42,8 @@ await client.trade.createMarket({
 ```typescript
 await client.trade.openPosition({
   marketId: 1, // The market you want to trade on
-  amount: 100, // Amount in USDC
+  amount: 100, // Amount in market token; decimals auto-handled
   direction: { yes: {} }, // or { no: {} }
-  token: 'USDC_DEVNET_ADDRESS', // Must be the market mint (no auto-swap yet)
   payer: /* user's public key */,
   metadataUri: 'https://your-nft-metadata',
 });
@@ -78,7 +78,6 @@ async function createDailyMarkets(client: DepredictClient, payer: PublicKey, day
       marketType: MarketType.LIVE,
       metadataUri: 'https://example.com/metadata.json',
       payer,
-      feeVaultAccount: feeVault,
     });
     // send tx using your wallet adapter / connection
   }

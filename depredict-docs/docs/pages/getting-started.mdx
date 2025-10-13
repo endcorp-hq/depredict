@@ -33,7 +33,7 @@ const { tx, marketId } = await client.trade.createMarket({
   marketType: MarketType.LIVE,
   metadataUri: 'https://example.com/metadata.json',
   payer: adminKey,
-  feeVaultAccount: feeVault,
+  // bettingStartTime required for FUTURE markets
 });
 ```
 

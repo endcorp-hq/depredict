@@ -27,24 +27,23 @@ const client = new DepredictClient(connection, adminKey, feeVault);
 - `getMarketsByAuthority(authority)`: Get markets created by an authority
 - `getMarketById(marketId)`: Get market by ID
 - `getMarketByAddress(address)`: Get market by PDA address
-- `createMarket(args)`: Create a new market
+- `createMarket(args)`: Create a new market (supports `mintAddress?`, `bettingStartTime?`)
 - `resolveMarket({ marketId, payer, resolutionValue? })`: Resolve a market
 - `closeMarket(marketId, payer)`: Close a market and collect remaining liquidity
 - `updateMarket(marketId, payer, marketEnd?, marketState?)`: Update a market's end time or state
 
 ### Position Operations
-- `openPosition(args)`: Open a new position (auto-finds/creates position page)
-- `payoutPosition({ marketId, payer, assetId, rpcEndpoint?, returnMode? })`: Settle a position via compressed NFT proofs
+- `openPosition(args)`: Open a new position (auto-finds/creates position page; mint derived from market)
+- `payoutPosition({ marketId, payer, assetId, rpcEndpoint, returnMode? })`: Settle a position via compressed NFT proofs
 
 #### payoutPosition details
-- **Inputs**: `marketId: number`, `payer: PublicKey`, `assetId: PublicKey`, `rpcEndpoint?: string`, `returnMode?: 'ixs' | 'message' | 'transaction'` (default `'ixs'`)
-- **RPC precedence**: uses `rpcEndpoint` if provided, otherwise `process.env.DAS_RPC`, otherwise `process.env.SOLANA_RPC_URL`
+- **Inputs**: `marketId: number`, `payer: PublicKey`, `assetId: PublicKey`, `rpcEndpoint: string`, `returnMode?: 'ixs' | 'message' | 'transaction'` (default `'ixs'`)
 - **Returns** (by `returnMode`):
   - `'ixs'` → `{ ixs: TransactionInstruction[]; alts: (AddressLookupTableAccount | string)[] }`
   - `'message'` → `{ message: Uint8Array; alts: string[] }`
   - `'transaction'` → `{ transaction: VersionedTransaction; alts: string[] }`
 - **Errors**:
-  - `MISSING_DAS_RPC`: Provide `rpcEndpoint` or set `DAS_RPC`/`SOLANA_RPC_URL`
+  - `MISSING_DAS_RPC`: Provide `rpcEndpoint`
   - `INVALID_ASSET_ID`: Asset must be a valid `PublicKey`
   - `NO_PAYOUT_INSTRUCTIONS`: Builder produced no instructions (check `marketId/assetId/payer`)
 - **Notes**:

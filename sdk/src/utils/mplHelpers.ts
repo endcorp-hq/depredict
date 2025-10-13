@@ -13,10 +13,10 @@ import createVersionedTransaction from "./sendVersionedTransaction.js";
 import { getMarketCreatorPDA } from "./pda/index.js";
 
 export function getUmi(rpcEndpoint?: string) {
-  const endpoint = rpcEndpoint ?? process.env.DAS_RPC ?? process.env.SOLANA_RPC_URL;
+  const endpoint = rpcEndpoint;
   if (!endpoint || endpoint.length === 0) {
     throw new Error(
-      "MISSING_DAS_RPC: Provide rpcEndpoint or set DAS_RPC/SOLANA_RPC_URL"
+      "MISSING_DAS_RPC: Provide rpcEndpoint"
     );
   }
   return createUmi(endpoint);

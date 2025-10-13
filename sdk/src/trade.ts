@@ -211,10 +211,17 @@ export default class Trade {
             oraclePubkey:
               oracleType == OracleType.SWITCHBOARD
                 ? oraclePubkey
-                : "HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL", //if manual resolution, just pass in a dummy oracle ID. This is not used anywhere in the code.
+                : new PublicKey("HX5YhqFV88zFhgPxEzmR1GFq8hPccuk2gKW58g1TLvbL"), // if manual resolution, pass a dummy oracle pubkey
             market: marketPDA,
             positionPage0: positionPage0PDA,
             mint: marketMint,
+            // Include derived market vault ATA as required by IDL (authority = market PDA)
+            marketVault: getAssociatedTokenAddressSync(
+              marketMint,
+              marketPDA,
+              true,
+              TOKEN_PROGRAM_ID
+            ),
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
@@ -469,9 +476,13 @@ export default class Trade {
     );
 
     const marketCreatorPubkey = marketAccount.marketCreator;
+    // creator_fee_vault_ata must be for authority = marketCreator.feeVault
+    const marketCreatorAccount = await this.program.account.marketCreator.fetch(
+      marketCreatorPubkey
+    );
     const creatorFeeVaultAta = getAssociatedTokenAddressSync(
       marketMint,
-      marketCreatorPubkey,
+      marketCreatorAccount.feeVault,
       true,
       TOKEN_PROGRAM_ID
     );
@@ -539,9 +550,10 @@ export default class Trade {
                 ? { resolving: {} }
                 : null,
           })
-          .accounts({
+          .accountsPartial({
             signer: payer,
             market: getMarketPDA(this.program.programId, marketId),
+            systemProgram: anchor.web3.SystemProgram.programId,
           })
           .instruction()
       );
@@ -608,9 +620,9 @@ export default class Trade {
 
     // Fetch asset proof details required by on-chain args
     // Choose DAS RPC endpoint with precedence
-    const dasEndpoint = rpcEndpoint ?? process.env.DAS_RPC ?? process.env.SOLANA_RPC_URL;
+    const dasEndpoint = rpcEndpoint;
     if (!dasEndpoint) {
-      throw new Error("MISSING_DAS_RPC: Provide rpcEndpoint or set DAS_RPC/SOLANA_RPC_URL");
+      throw new Error("MISSING_DAS_RPC: Provide rpcEndpoint");
     }
 
     const {

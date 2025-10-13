@@ -12,19 +12,6 @@ A summary of the latest SDK capabilities and improvements.
 
 ---
 
-## Highlights
-- `getMarketsByAuthority(authority)` to query platform-specific markets
-- `createMarket` supports `LIVE` and `FUTURE` with `bettingStartTime`
-- Position pagination with auto page discovery and pre-warming
-- Admin flows: `updateMarket`, `closeMarket`, `resolveMarket`
-- Payouts verify compressed NFT proofs via Bubblegum and MPL Core
-  - PublicKey-only inputs (`payer`, `assetId`)
-  - RPC endpoint precedence: param → `DAS_RPC` → `SOLANA_RPC_URL`
-  - Flexible return modes: `'ixs' | 'message' | 'transaction'`
-- Market creator updates: name, fee vault, creator fee bps, merkle tree
-
----
-
 ## Example Snippets
 
 ```typescript
