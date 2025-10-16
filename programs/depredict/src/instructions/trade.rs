@@ -75,7 +75,10 @@ impl<'info> EnsurePositionPageContext<'info> {
         let max_pages = MAX_CREATOR_POSITIONS
             .checked_div(POSITIONS_PER_PAGE)
             .ok_or(DepredictError::ArithmeticOverflow)?;
-        require!((self.market_creator.pages_allocated as u32) < max_pages, DepredictError::Overflow);
+        require!(
+            (self.market_creator.pages_allocated as u32) < max_pages,
+            DepredictError::Overflow
+        );
 
         // When init_if_needed triggers, Anchor allocates space and zeros the account.
         // Populate minimal header fields so downstream code can rely on them.
@@ -124,7 +127,7 @@ pub struct OpenPositionContext<'info> {
 
     #[account(
         mut,
-        constraint = mint.key() == market.mint.unwrap() @ DepredictError::InvalidMint
+        constraint = market.mint == Some(mint.key()) @ DepredictError::InvalidMint
     )]
     pub mint: Box<InterfaceAccount<'info, Mint>>,
 
@@ -141,7 +144,8 @@ pub struct OpenPositionContext<'info> {
         mut,
         associated_token::mint = mint,
         associated_token::authority = market,
-        associated_token::token_program = token_program
+        associated_token::token_program = token_program,
+        constraint = market.market_vault == Some(market_vault.key()) @ DepredictError::InvalidFeeVault
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -213,7 +217,7 @@ pub struct SettlePositionContext<'info> {
 
     #[account(
         mut,
-        constraint = mint.key() == market.mint.unwrap() @ DepredictError::InvalidMint
+        constraint = market.mint == Some(mint.key()) @ DepredictError::InvalidMint
     )]
     pub mint: Box<InterfaceAccount<'info, Mint>>,
 
@@ -230,7 +234,8 @@ pub struct SettlePositionContext<'info> {
         mut,
         associated_token::mint = mint,
         associated_token::authority = market,
-        associated_token::token_program = token_program
+        associated_token::token_program = token_program,
+        constraint = market.market_vault == Some(market_vault.key()) @ DepredictError::InvalidFeeVault
     )]
     pub market_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -303,6 +308,14 @@ impl<'info> OpenPositionContext<'info> {
                 DepredictError::ConcurrentTransaction
             );
         }
+        require!(
+            self.market_creator.verified,
+            DepredictError::MarketCreatorInactive
+        );
+        require!(
+            self.position_page.market_id == market.market_id,
+            DepredictError::InvalidMarketId
+        );
 
         let (current_liquidity, otherside_current_liquidity) = match args.direction {
             PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
@@ -498,6 +511,14 @@ impl<'info> SettlePositionContext<'info> {
         require!(
             claimer_key != self.market_creator.authority,
             DepredictError::Unauthorized
+        );
+        require!(
+            self.market_creator.verified,
+            DepredictError::MarketCreatorInactive
+        );
+        require!(
+            position_page.market_id == market.market_id,
+            DepredictError::InvalidMarketId
         );
 
         // Locate slot by provided index or search by asset_id
