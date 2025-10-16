@@ -193,7 +193,9 @@ impl<'info> CreateMarketContext<'info> {
         let market = &mut self.market;
         let config = &mut self.config;
         let market_type = args.market_type;
-        let ts = Clock::get()?.unix_timestamp;
+        let clock = Clock::get()?;
+        let ts = clock.unix_timestamp;
+        let slot = clock.slot;
         let oracle_pubkey: Option<Pubkey>;
 
         match args.oracle_type {
@@ -237,6 +239,7 @@ impl<'info> CreateMarketContext<'info> {
             market_end: args.market_end,
             question: args.question,
             update_ts: ts,
+            last_update_slot: slot,
             market_vault: Some(self.market_vault.key()),
             mint: Some(self.mint.key()),
             decimals: self.mint.decimals,
@@ -292,7 +295,9 @@ impl<'info> UpdateMarketContext<'info> {
     pub fn update_market(&mut self, args: UpdateMarketArgs) -> Result<MarketEvent> {
         let market = &mut self.market;
         let signer = &self.signer;
-        let ts = Clock::get()?.unix_timestamp;
+        let clock = Clock::get()?;
+        let ts = clock.unix_timestamp;
+        let slot = clock.slot;
 
         // only the market creator can update the market
         require!(
@@ -313,6 +318,7 @@ impl<'info> UpdateMarketContext<'info> {
             market.market_state = args.market_state.unwrap();
         }
         market.update_ts = ts;
+        market.last_update_slot = slot;
         let market_event = MarketEvent {
             market_creator: market.market_creator,
             market_id: market.market_id,
@@ -338,7 +344,9 @@ impl<'info> ResolveMarketContext<'info> {
         let signer = &self.signer;
         let oracle_type = market.oracle_type;
 
-        let ts = Clock::get()?.unix_timestamp;
+        let clock = Clock::get()?;
+        let ts = clock.unix_timestamp;
+        let slot = clock.slot;
 
         // Check if the signer is the authority of the market creator
         require!(
@@ -387,6 +395,7 @@ impl<'info> ResolveMarketContext<'info> {
         market.winning_direction = winning_direction;
         market.market_state = MarketStates::Resolved;
         market.update_ts = ts;
+        market.last_update_slot = slot;
 
         market.emit_market_event()?;
 

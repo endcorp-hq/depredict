@@ -28,8 +28,9 @@ pub struct MarketState {
     pub market_end: i64,    //market question period ends
     pub question: [u8; 80],
     pub winning_direction: WinningDirection,
+    pub last_update_slot: u64,
     pub version: u64,
-    pub padding: [u8; 20],
+    pub padding: [u8; 12],
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
@@ -117,8 +118,9 @@ impl Default for MarketState {
             padding_1: [0; 7],
             winning_direction: WinningDirection::None,
             question: [0; 80],
+            last_update_slot: 0,
             version: 0,
-            padding: [0; 20],
+            padding: [0; 12],
         }
     }
 }

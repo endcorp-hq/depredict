@@ -276,7 +276,9 @@ impl<'info> OpenPositionContext<'info> {
         let market = &mut self.market;
         let next_position_id = market.next_position_id();
         let market_type = market.market_type;
-        let ts = Clock::get()?.unix_timestamp;
+        let clock = Clock::get()?;
+        let ts = clock.unix_timestamp;
+        let slot = clock.slot;
         let net_amount = args.amount;
 
         if market_type == MarketType::Future {
@@ -291,7 +293,16 @@ impl<'info> OpenPositionContext<'info> {
             market.winning_direction == WinningDirection::None,
             DepredictError::MarketAlreadyResolved
         );
-        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
+        require!(
+            slot >= market.last_update_slot,
+            DepredictError::ConcurrentTransaction
+        );
+        if slot == market.last_update_slot {
+            require!(
+                ts >= market.update_ts,
+                DepredictError::ConcurrentTransaction
+            );
+        }
 
         let (current_liquidity, otherside_current_liquidity) = match args.direction {
             PositionDirection::Yes => (market.yes_liquidity, market.no_liquidity),
@@ -444,6 +455,7 @@ impl<'info> OpenPositionContext<'info> {
 
         // Mark update time and return
         market.update_ts = ts;
+        market.last_update_slot = slot;
 
         let open_position_event = OpenPositionEvent {
             market_id: market.market_id,
@@ -470,7 +482,9 @@ impl<'info> SettlePositionContext<'info> {
     pub fn settle_position(&mut self, args: SettlePositionArgs) -> Result<ClosePositionEvent> {
         let market = &mut self.market;
         let position_page = &mut self.position_page;
-        let ts = Clock::get()?.unix_timestamp;
+        let clock = Clock::get()?;
+        let ts = clock.unix_timestamp;
+        let slot = clock.slot;
         let asset_id = args.asset_id;
         let claimer_key = self.claimer.key();
 
@@ -615,8 +629,18 @@ impl<'info> SettlePositionContext<'info> {
 
         // Mark as claimed and update timestamp
         position_page.entries[effective_slot_index].status = PositionStatus::Claimed;
-        require!(ts > market.update_ts, DepredictError::ConcurrentTransaction);
+        require!(
+            slot >= market.last_update_slot,
+            DepredictError::ConcurrentTransaction
+        );
+        if slot == market.last_update_slot {
+            require!(
+                ts >= market.update_ts,
+                DepredictError::ConcurrentTransaction
+            );
+        }
         market.update_ts = ts;
+        market.last_update_slot = slot;
         market.emit_market_event()?;
 
         let close_position_event = ClosePositionEvent {
