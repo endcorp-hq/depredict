@@ -1,15 +1,13 @@
 use anchor_lang::prelude::*;
 
-use crate::{
-    events::MarketEvent,
-};
+use crate::events::MarketEvent;
 
 #[account]
 #[derive(InitSpace)]
 pub struct MarketState {
     pub bump: u8,
     pub market_id: u64,
-    pub market_creator: Pubkey,      // Reference to the market creator who owns this market
+    pub market_creator: Pubkey, // Reference to the market creator who owns this market
     pub market_type: MarketType,
     pub oracle_type: OracleType,
     pub oracle_pubkey: Option<Pubkey>,
@@ -26,16 +24,15 @@ pub struct MarketState {
     pub pages_allocated: u32,
     pub market_state: MarketStates,
     pub betting_start: i64, //voting begins (same as market_start if live market)
-    pub market_start: i64, //voting ends, market question period starts
-    pub market_end: i64,  //market question period ends
+    pub market_start: i64,  //voting ends, market question period starts
+    pub market_end: i64,    //market question period ends
     pub question: [u8; 80],
     pub winning_direction: WinningDirection,
     pub version: u64,
     pub padding: [u8; 20],
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
-#[derive(InitSpace)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum WinningDirection {
     None,
     Yes,
@@ -43,11 +40,10 @@ pub enum WinningDirection {
     Draw,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
-#[derive(InitSpace)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum OracleType {
     None,
-    Switchboard
+    Switchboard,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
@@ -95,7 +91,6 @@ pub enum MarketType {
     Future, //these markets end betting before the market start time
 }
 
-
 impl Default for MarketState {
     fn default() -> Self {
         Self {
@@ -127,7 +122,6 @@ impl Default for MarketState {
         }
     }
 }
-
 
 impl MarketState {
     pub fn next_position_id(&mut self) -> u64 {
@@ -249,7 +243,7 @@ impl MarketState {
     // }
 
     pub fn emit_market_event(&self) -> Result<()> {
-            emit!(MarketEvent {
+        emit!(MarketEvent {
             market_creator: self.market_creator,
             market_id: self.market_id,
             yes_liquidity: self.yes_liquidity,

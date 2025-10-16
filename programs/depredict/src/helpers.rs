@@ -1,5 +1,5 @@
-use crate::errors::DepredictError;
 use crate::constants::FEE_BPS_DENOMINATOR;
+use crate::errors::DepredictError;
 use anchor_lang::prelude::*;
 
 pub fn compute_fee_bps(amount_lamports: u64, fee_bps: u16) -> Result<u64> {
@@ -113,7 +113,8 @@ mod tests {
     #[test]
     fn dual_fees_sequential_basic() {
         let amount = 1_000_000_000u64; // 1 SOL
-        let (creator_fee, protocol_fee, net) = compute_dual_fees_sequential(amount, 25, 25).unwrap();
+        let (creator_fee, protocol_fee, net) =
+            compute_dual_fees_sequential(amount, 25, 25).unwrap();
         let expected_creator = compute_fee_bps(amount, 25).unwrap();
         let after_creator = amount - expected_creator;
         let expected_protocol = compute_fee_bps(after_creator, 25).unwrap();
@@ -134,7 +135,8 @@ mod tests {
     #[test]
     fn dual_fees_sequential_u64_max_small_bps() {
         let amount = u64::MAX;
-        let (creator_fee, protocol_fee, net) = compute_dual_fees_sequential(amount, 25, 25).unwrap();
+        let (creator_fee, protocol_fee, net) =
+            compute_dual_fees_sequential(amount, 25, 25).unwrap();
         // Validate against stepwise reference using u128
         let expected_creator = ((amount as u128) * 25u128) / (FEE_BPS_DENOMINATOR as u128);
         let after_creator = (amount as u128) - expected_creator;
@@ -148,7 +150,8 @@ mod tests {
     #[test]
     fn dual_fees_sequential_full_creator_fee() {
         let amount = 987_654_321u64;
-        let (creator_fee, protocol_fee, net) = compute_dual_fees_sequential(amount, 10_000, 25).unwrap();
+        let (creator_fee, protocol_fee, net) =
+            compute_dual_fees_sequential(amount, 10_000, 25).unwrap();
         assert_eq!(creator_fee, amount);
         assert_eq!(protocol_fee, 0);
         assert_eq!(net, 0);
@@ -158,7 +161,8 @@ mod tests {
     fn dual_fees_sequential_full_protocol_fee_on_remainder() {
         let amount = 987_654_321u64;
         // creator 25 bps, protocol 100% of remainder
-        let (creator_fee, protocol_fee, net) = compute_dual_fees_sequential(amount, 25, 10_000).unwrap();
+        let (creator_fee, protocol_fee, net) =
+            compute_dual_fees_sequential(amount, 25, 10_000).unwrap();
         let expected_creator = compute_fee_bps(amount, 25).unwrap();
         let after_creator = amount - expected_creator;
         assert_eq!(creator_fee, expected_creator);

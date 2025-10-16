@@ -1,7 +1,7 @@
-use anchor_lang::prelude::*;
-use crate::state::{MarketCreator, CreateMarketCreatorArgs, VerifyMarketCreatorArgs};
 use crate::constants::*;
 use crate::errors::*;
+use crate::state::{CreateMarketCreatorArgs, MarketCreator, VerifyMarketCreatorArgs};
+use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 #[instruction(args: CreateMarketCreatorArgs)]
@@ -35,7 +35,7 @@ pub struct UpdateMarketCreatorTreeContext<'info> {
     /// CHECK: Global Merkle Tree account reference (created off-chain)
     #[account(mut)]
     pub merkle_tree: AccountInfo<'info>,
-    
+
     /// CHECK: Tree Config PDA - we'll validate its authority
     #[account(
         mut,
@@ -92,7 +92,11 @@ pub struct VerifyMarketCreatorContext<'info> {
 }
 
 impl<'info> CreateMarketCreatorContext<'info> {
-    pub fn create_market_creator(&mut self, args: CreateMarketCreatorArgs, bump: &CreateMarketCreatorContextBumps) -> Result<()> {
+    pub fn create_market_creator(
+        &mut self,
+        args: CreateMarketCreatorArgs,
+        bump: &CreateMarketCreatorContextBumps,
+    ) -> Result<()> {
         let market_creator = &mut self.market_creator;
         let auth = &self.signer;
         let ts = Clock::get()?.unix_timestamp;
@@ -101,7 +105,7 @@ impl<'info> CreateMarketCreatorContext<'info> {
             bump: bump.market_creator,
             authority: auth.key(),
             core_collection: Pubkey::default(), // Will be set during verification
-            merkle_tree: Pubkey::default(), // Will be set during verification
+            merkle_tree: Pubkey::default(),     // Will be set during verification
             name: args.name,
             created_at: ts,
             num_markets: 0,
@@ -118,7 +122,6 @@ impl<'info> CreateMarketCreatorContext<'info> {
 }
 
 impl<'info> UpdateMarketCreatorDetailsContext<'info> {
-
     pub fn update_creator_name(&mut self, name: String) -> Result<()> {
         let market_creator = &mut self.market_creator;
 
@@ -128,11 +131,15 @@ impl<'info> UpdateMarketCreatorDetailsContext<'info> {
             DepredictError::Unauthorized
         );
         market_creator.name = name;
- 
+
         Ok(())
     }
 
-    pub fn update_creator_fee_vault(&mut self, current_fee_vault: Pubkey, new_fee_vault: Pubkey) -> Result<()> {
+    pub fn update_creator_fee_vault(
+        &mut self,
+        current_fee_vault: Pubkey,
+        new_fee_vault: Pubkey,
+    ) -> Result<()> {
         let market_creator = &mut self.market_creator;
         require!(
             market_creator.authority == *self.signer.key,
@@ -170,17 +177,10 @@ impl<'info> UpdateMarketCreatorDetailsContext<'info> {
 
         Ok(())
     }
-
-    
-
 }
 
 impl<'info> UpdateMarketCreatorTreeContext<'info> {
-    pub fn update_merkle_tree(
-        &mut self,
-        new_tree: Pubkey,
-    ) -> Result<()> {
-        
+    pub fn update_merkle_tree(&mut self, new_tree: Pubkey) -> Result<()> {
         let market_creator = &mut self.market_creator;
         let tree_config_data = self.tree_config.data.borrow();
 
@@ -189,38 +189,32 @@ impl<'info> UpdateMarketCreatorTreeContext<'info> {
             market_creator.authority == *self.signer.key,
             DepredictError::Unauthorized
         );
-        
+
         // check that the tree_config account exists and has data
-        require!(
-            tree_config_data.len() > 0,
-            DepredictError::InvalidTree
-        );
+        require!(tree_config_data.len() > 0, DepredictError::InvalidTree);
 
         // Extract tree_creator directly from the TreeConfig account data
         let tree_creator_bytes = &tree_config_data[8..40];
-            
+
         match Pubkey::try_from_slice(tree_creator_bytes) {
-            Ok(tree_creator) => {                        
+            Ok(tree_creator) => {
                 // Validate tree authority matches our program's authority
                 require!(
                     tree_creator == market_creator.authority,
                     DepredictError::Unauthorized
                 );
-                
+
                 // Update the merkle tree reference
                 market_creator.merkle_tree = new_tree;
 
                 return Ok(());
-            },
+            }
             Err(_) => {
                 return Err(DepredictError::Unauthorized.into());
             }
         }
-
     }
-
 }
-
 
 impl<'info> VerifyMarketCreatorContext<'info> {
     pub fn verify_market_creator(&mut self, args: VerifyMarketCreatorArgs) -> Result<()> {
@@ -253,7 +247,10 @@ impl<'info> VerifyMarketCreatorContext<'info> {
         market_creator.merkle_tree = args.merkle_tree;
         market_creator.verified = true;
 
-        msg!("Market creator verified successfully with collection: {}", args.core_collection);
+        msg!(
+            "Market creator verified successfully with collection: {}",
+            args.core_collection
+        );
         Ok(())
     }
 }
