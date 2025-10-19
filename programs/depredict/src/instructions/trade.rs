@@ -24,7 +24,7 @@ use crate::{
 // metaplex includes
 use mpl_bubblegum::{
     accounts::TreeConfig,
-    instructions::MintV2CpiBuilder,
+    instructions::{BurnV2CpiBuilder, MintV2CpiBuilder},
     programs::MPL_BUBBLEGUM_ID,
     types::{MetadataArgsV2, TokenStandard},
 };
@@ -492,7 +492,11 @@ impl<'info> OpenPositionContext<'info> {
 }
 
 impl<'info> SettlePositionContext<'info> {
-    pub fn settle_position(&mut self, args: SettlePositionArgs) -> Result<ClosePositionEvent> {
+    pub fn settle_position(
+        &mut self,
+        args: SettlePositionArgs,
+        proof_accounts: &[AccountInfo<'info>],
+    ) -> Result<ClosePositionEvent> {
         let market = &mut self.market;
         let position_page = &mut self.position_page;
         let clock = Clock::get()?;
@@ -560,6 +564,10 @@ impl<'info> SettlePositionContext<'info> {
                 && position_page.entries[effective_slot_index].asset_id != Pubkey::default(),
             DepredictError::InvalidNft
         );
+        require!(
+            position_page.entries[effective_slot_index].leaf_index == u64::from(args.leaf_index),
+            DepredictError::InvalidNft
+        );
 
         // Determine win status and potential payout
         let position_direction = position_page.entries[effective_slot_index].direction;
@@ -598,25 +606,40 @@ impl<'info> SettlePositionContext<'info> {
                 .map_err(|_| DepredictError::ArithmeticOverflow)?;
         }
 
-        // // Gate by cNFT ownership/permission: burn first (CPI enforces permission)
-        // BurnV2CpiBuilder::new(&self.bubblegum_program)
-        //     .tree_config(&self.tree_config)
-        //     .payer(&self.claimer)
-        //     .leaf_owner(&self.claimer)
-        //     .merkle_tree(&self.merkle_tree)
-        //     .core_collection(Some(&self.collection))
-        //     .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
-        //     .log_wrapper(&self.log_wrapper_program)
-        //     .compression_program(&self.compression_program)
-        //     .mpl_core_program(&self.mpl_core_program)
-        //     .system_program(&self.system_program)
-        //     .root(args.root)
-        //     .data_hash(args.data_hash)
-        //     .creator_hash(args.creator_hash)
-        //     .nonce(args.nonce)
-        //     .index(args.leaf_index)
-        //     .invoke()?;
-        // msg!("cNFT burned");
+        // Gate by cNFT ownership/permission: burn first (CPI enforces permission)
+        {
+            let claimer_info = self.claimer.to_account_info();
+            let system_info = self.system_program.to_account_info();
+            let mut burn_builder = BurnV2CpiBuilder::new(&self.bubblegum_program);
+            burn_builder
+                .tree_config(&self.tree_config)
+                .payer(&claimer_info)
+                .authority(Some(&claimer_info))
+                .leaf_owner(&claimer_info)
+                .merkle_tree(&self.merkle_tree)
+                .core_collection(Some(&self.collection))
+                .mpl_core_cpi_signer(Some(&self.mpl_core_cpi_signer))
+                .log_wrapper(&self.log_wrapper_program)
+                .compression_program(&self.compression_program)
+                .mpl_core_program(&self.mpl_core_program)
+                .system_program(&system_info)
+                .root(args.root)
+                .data_hash(args.data_hash)
+                .creator_hash(args.creator_hash)
+                .nonce(args.nonce)
+                .index(args.leaf_index);
+
+            if !proof_accounts.is_empty() {
+                let mut proof_meta: Vec<(&AccountInfo<'info>, bool, bool)> =
+                    Vec::with_capacity(proof_accounts.len());
+                for account in proof_accounts {
+                    proof_meta.push((account, account.is_writable, account.is_signer));
+                }
+                burn_builder.add_remaining_accounts(&proof_meta);
+            }
+            burn_builder.invoke()?;
+        }
+        msg!("cNFT burned");
 
         // If winner, transfer payout (after successful burn gating)
         if payout > 0 && is_winner {

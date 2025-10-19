@@ -10,7 +10,7 @@ pub mod state;
 use instructions::*;
 use state::*;
 
-declare_id!("deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU");
+declare_id!("DwWe7ycNKzCy8j9kiUasYMgPT6P26NJnjFRgCro69Eri");
 
 #[program]
 pub mod depredict {
@@ -130,11 +130,16 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn settle_position(
-        ctx: Context<SettlePositionContext>,
+    pub fn settle_position<'info>(
+        ctx: Context<'_, '_, '_, 'info, SettlePositionContext<'info>>,
         args: SettlePositionArgs,
     ) -> Result<()> {
-        ctx.accounts.settle_position(args)?;
+        let Context {
+            accounts,
+            remaining_accounts,
+            ..
+        } = ctx;
+        accounts.settle_position(args, remaining_accounts)?;
         Ok(())
     }
 

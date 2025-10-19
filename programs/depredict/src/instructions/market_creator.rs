@@ -183,6 +183,8 @@ impl<'info> UpdateMarketCreatorTreeContext<'info> {
     pub fn update_merkle_tree(&mut self, new_tree: Pubkey) -> Result<()> {
         let market_creator = &mut self.market_creator;
         let tree_config_data = self.tree_config.data.borrow();
+        // Implement a check that the tree_config account has data
+        // require!(tree_config_data.len() >= 40, DepredictError::InvalidTree);
 
         // check that the signer is the authority
         require!(
