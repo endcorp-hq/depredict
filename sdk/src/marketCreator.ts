@@ -4,7 +4,7 @@ import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.j
 import { getMarketCreatorPDA, getTreeConfigPDA } from "./utils/pda/index.js";
 
 export default class MarketCreatorSDK {
-  constructor(private program: Program<Depredict>, private adminKey: PublicKey) {}
+  constructor(private program: Program<Depredict>) {}
 
   /**
    * Create a MarketCreator account (owned by signer)

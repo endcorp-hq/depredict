@@ -15,7 +15,12 @@ import {
   OracleType,
 } from "./types/trade.js";
 import { RpcOptions } from "./types/index.js";
-import { PayoutArgs, PayoutPositionIxResult, PayoutPositionMessageResult, PayoutPositionTxResult } from "./types/trade.js";
+import {
+  PayoutArgs,
+  PayoutPositionIxResult,
+  PayoutPositionMessageResult,
+  PayoutPositionTxResult,
+} from "./types/trade.js";
 import BN from "bn.js";
 import { encodeString, formatMarket } from "./utils/helpers.js";
 import {
@@ -44,20 +49,15 @@ import {
   MPL_ACCOUNT_COMPRESSION_ID,
 } from "./utils/constants.js";
 import Position from "./position.js";
-import { fetchAssetProofWithRetry, buildV0Message } from "./utils/mplHelpers.js";
+import {
+  fetchAssetProofWithRetry,
+  buildV0Message,
+} from "./utils/mplHelpers.js";
 
 export default class Trade {
   METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_ID);
   position: Position;
-  ADMIN_KEY: PublicKey;
-  FEE_VAULT: PublicKey;
-  constructor(
-    private program: Program<Depredict>,
-    adminKey: PublicKey,
-    feeVault: PublicKey
-  ) {
-    this.ADMIN_KEY = adminKey;
-    this.FEE_VAULT = feeVault;
+  constructor(private program: Program<Depredict>) {
     this.position = new Position(this.program);
   }
 
@@ -256,13 +256,7 @@ export default class Trade {
    * @returns Transaction, addressLookupTableAccounts, nftMint || null (if no swap)
    */
   async openPosition(
-    {
-      marketId,
-      amount,
-      direction,
-      payer,
-      metadataUri,
-    }: OpenOrderArgs,
+    { marketId, amount, direction, payer, metadataUri }: OpenOrderArgs,
     options?: RpcOptions
   ) {
     const ixs: TransactionInstruction[] = [];
@@ -287,10 +281,10 @@ export default class Trade {
       marketId,
       payer
     );
-    
+
     // Add any page creation instructions to the transaction
     ixs.push(...positionPageResult.instructions);
-    
+
     const positionPagePDA = getPositionPagePDA(
       this.program.programId,
       marketId,
@@ -443,38 +437,6 @@ export default class Trade {
       throw new Error(`Market ${marketId} does not have a mint configured`);
     }
     const marketMint = marketAccount.mint;
-
-    const configPDA = getConfigPDA(this.program.programId);
-
-    // legacy positions PDA no longer needed
-
-    /** DO NOT UMCOMMENT OR CALL METHOD IF NOT IMPLEMENTED THOROUGHLY */
-
-    // close any sub position accounts (need to write code)
-    // const subPositionAccounts = await this.position.getPositionsAccountsForMarket(marketId);
-    // for (const subPositionAccount of subPositionAccounts) {
-    //   ixs.push(
-    //     await this.program.methods
-    //       .closeSubPositionAccount(subPositionAccount.subPositionAccount)
-    //       .accountsPartial({})
-    //       .instruction()
-    //   );
-    // }
-
-    const feeVaultMintAta = getAssociatedTokenAddressSync(
-      marketMint,
-      this.FEE_VAULT,
-      true,
-      TOKEN_PROGRAM_ID
-    );
-
-    const marketVault = getAssociatedTokenAddressSync(
-      marketMint,
-      marketPDA,
-      true,
-      TOKEN_PROGRAM_ID
-    );
-
     const marketCreatorPubkey = marketAccount.marketCreator;
     // creator_fee_vault_ata must be for authority = marketCreator.feeVault
     const marketCreatorAccount = await this.program.account.marketCreator.fetch(
@@ -487,6 +449,26 @@ export default class Trade {
       TOKEN_PROGRAM_ID
     );
 
+    const configPDA = getConfigPDA(this.program.programId);
+
+    const configAccount = await this.program.account.config.fetch(configPDA);
+    const protocolFeeVault = configAccount.feeVault;
+
+
+    const feeVaultMintAta = getAssociatedTokenAddressSync(
+      marketMint,
+      protocolFeeVault,
+      true,
+      TOKEN_PROGRAM_ID
+    );
+
+    const marketVault = getAssociatedTokenAddressSync(
+      marketMint,
+      marketPDA,
+      true,
+      TOKEN_PROGRAM_ID
+    );
+
     try {
       ixs.push(
         await this.program.methods
@@ -495,7 +477,7 @@ export default class Trade {
           })
           .accountsPartial({
             signer: payer,
-            protocolFeeVault: this.FEE_VAULT,
+            protocolFeeVault: protocolFeeVault,
             protocolFeeVaultAta: feeVaultMintAta,
             marketCreator: marketCreatorPubkey,
             creatorFeeVaultAta: creatorFeeVaultAta,
@@ -571,9 +553,13 @@ export default class Trade {
   }
 
   async payoutPosition(
-    { marketId, payer, assetId, rpcEndpoint, returnMode = 'ixs' }: PayoutArgs,
+    { marketId, payer, assetId, rpcEndpoint, returnMode = "ixs" }: PayoutArgs,
     options?: RpcOptions
-  ): Promise<PayoutPositionIxResult | PayoutPositionMessageResult | PayoutPositionTxResult> {
+  ): Promise<
+    | PayoutPositionIxResult
+    | PayoutPositionMessageResult
+    | PayoutPositionTxResult
+  > {
     // Inputs are web3.PublicKey only
     const payerPk: PublicKey = payer;
     const assetPk: PublicKey = assetId;
@@ -645,10 +631,16 @@ export default class Trade {
           marketId,
           page.pageIndex
         );
-        const pageAccount = await this.program.account.positionPage.fetch(positionPagePDA);
-        
+        const pageAccount = await this.program.account.positionPage.fetch(
+          positionPagePDA
+        );
+
         // Search through all slots in this page
-        for (let slotIndex = 0; slotIndex < pageAccount.entries.length; slotIndex++) {
+        for (
+          let slotIndex = 0;
+          slotIndex < pageAccount.entries.length;
+          slotIndex++
+        ) {
           const entry = pageAccount.entries[slotIndex];
           if (entry.assetId.equals(assetPk)) {
             foundPageIndex = page.pageIndex;
@@ -656,7 +648,7 @@ export default class Trade {
             break;
           }
         }
-        
+
         if (foundPageIndex !== -1) break;
       } catch (error) {
         // Page might not exist, continue searching
@@ -665,7 +657,9 @@ export default class Trade {
     }
 
     if (foundPageIndex === -1) {
-      throw new Error(`Position with asset ID ${assetPk.toBase58()} not found in market ${marketId}`);
+      throw new Error(
+        `Position with asset ID ${assetPk.toBase58()} not found in market ${marketId}`
+      );
     }
 
     try {
@@ -715,11 +709,13 @@ export default class Trade {
     }
 
     if (!ixs || ixs.length === 0) {
-      throw new Error("NO_PAYOUT_INSTRUCTIONS: Builder produced no instructions; check marketId/assetId/payer/feeVault");
+      throw new Error(
+        "NO_PAYOUT_INSTRUCTIONS: Builder produced no instructions; check marketId/assetId/payer/feeVault"
+      );
     }
 
     // Standardize return shapes
-    if (returnMode === 'ixs') {
+    if (returnMode === "ixs") {
       const result: PayoutPositionIxResult = {
         ixs,
         alts: [],
@@ -729,8 +725,13 @@ export default class Trade {
       return result;
     }
 
-    if (returnMode === 'message') {
-      const { message, alts } = await buildV0Message(this.program, ixs, payerPk, []);
+    if (returnMode === "message") {
+      const { message, alts } = await buildV0Message(
+        this.program,
+        ixs,
+        payerPk,
+        []
+      );
       const result: PayoutPositionMessageResult = { message, alts };
       return result;
     }
