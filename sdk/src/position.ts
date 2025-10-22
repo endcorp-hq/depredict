@@ -25,19 +25,76 @@ export interface AvailablePageResult {
 export default class Position {
   constructor(private program: Program<Depredict>) {}
 
-  /** 
+  /**
+   * Get position account data by assetId
+   * @param marketId - Market ID
+   * @param assetId - Asset ID to search for
+   * @returns Position account data or null if not found
+   */
+  async getAccountByAssetAndMarket(marketId: number, assetId: PublicKey) {
+    const pages = await this.getAllPositionPagesForMarket(marketId);
+
+    for (const page of pages) {
+      try {
+        const positionPagePDA = getPositionPagePDA(
+          this.program.programId,
+          marketId,
+          page.pageIndex
+        );
+        const pageAccount = await this.program.account.positionPage.fetch(
+          positionPagePDA
+        );
+
+        // Search through all slots in this page
+        for (
+          let slotIndex = 0;
+          slotIndex < pageAccount.entries.length;
+          slotIndex++
+        ) {
+          const entry = pageAccount.entries[slotIndex];
+          if (entry.assetId.equals(assetId)) {
+            return {
+              pageIndex: page.pageIndex,
+              slotIndex,
+              entry,
+              positionPagePDA,
+            };
+          }
+        }
+      } catch (error) {
+        // Continue to next page if this one fails
+        continue;
+      }
+    }
+
+    return null; // Position not found
+  }
+
+  /**
    * Ensure a position page exists (and initialize header if needed)
    * @param marketId - Market ID
    * @param payer - Payer public key
    * @param pageIndex - Page index
    * @returns {Promise<{ixs: TransactionInstruction[]}>} - Transaction instructions
    */
-  async ensurePositionPage({ marketId, payer, pageIndex }: { marketId: number; payer: PublicKey; pageIndex: number; }) {
+  async ensurePositionPage({
+    marketId,
+    payer,
+    pageIndex,
+  }: {
+    marketId: number;
+    payer: PublicKey;
+    pageIndex: number;
+  }) {
     const ixs: TransactionInstruction[] = [];
     const market = getMarketPDA(this.program.programId, marketId);
     const marketAccount = await this.program.account.marketState.fetch(market);
     const marketCreator = marketAccount.marketCreator as PublicKey;
-    const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+    const positionPage = getPositionPagePDA(
+      this.program.programId,
+      marketId,
+      pageIndex
+    );
 
     ixs.push(
       await this.program.methods
@@ -54,7 +111,7 @@ export default class Position {
     return ixs;
   }
 
-  /** 
+  /**
    * Prune a position slot (creator only)
    * @param marketId - Market ID
    * @param signer - Signer public key
@@ -62,12 +119,26 @@ export default class Position {
    * @param slotIndex - Slot index
    * @returns {Promise<{ixs: TransactionInstruction[]}>} - Transaction instructions
    */
-  async prunePosition({ marketId, signer, pageIndex, slotIndex }: { marketId: number; signer: PublicKey; pageIndex: number; slotIndex: number; }) {
+  async prunePosition({
+    marketId,
+    signer,
+    pageIndex,
+    slotIndex,
+  }: {
+    marketId: number;
+    signer: PublicKey;
+    pageIndex: number;
+    slotIndex: number;
+  }) {
     const ixs: TransactionInstruction[] = [];
     const market = getMarketPDA(this.program.programId, marketId);
     const marketAccount = await this.program.account.marketState.fetch(market);
     const marketCreator = marketAccount.marketCreator as PublicKey;
-    const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+    const positionPage = getPositionPagePDA(
+      this.program.programId,
+      marketId,
+      pageIndex
+    );
 
     ixs.push(
       await this.program.methods
@@ -83,19 +154,31 @@ export default class Position {
     return ixs;
   }
 
-  /** 
+  /**
    * Close an empty position page (creator only)
    * @param marketId - Market ID
    * @param signer - Signer public key
    * @param pageIndex - Page index
    * @returns {Promise<{ixs: TransactionInstruction[]}>} - Transaction instructions
    */
-  async closePositionPage({ marketId, signer, pageIndex }: { marketId: number; signer: PublicKey; pageIndex: number; }) {
+  async closePositionPage({
+    marketId,
+    signer,
+    pageIndex,
+  }: {
+    marketId: number;
+    signer: PublicKey;
+    pageIndex: number;
+  }) {
     const ixs: TransactionInstruction[] = [];
     const market = getMarketPDA(this.program.programId, marketId);
     const marketAccount = await this.program.account.marketState.fetch(market);
     const marketCreator = marketAccount.marketCreator as PublicKey;
-    const positionPage = getPositionPagePDA(this.program.programId, marketId, pageIndex);
+    const positionPage = getPositionPagePDA(
+      this.program.programId,
+      marketId,
+      pageIndex
+    );
 
     ixs.push(
       await this.program.methods
@@ -290,66 +373,68 @@ export default class Position {
    * @returns {Promise<AvailablePageResult>} - Page info and instructions
    */
   async findAvailablePageForMarket(
-    marketId: number, 
+    marketId: number,
     payer: PublicKey
   ): Promise<AvailablePageResult> {
     const instructions: TransactionInstruction[] = [];
-        
+
     // Get all pages for THIS market only (much faster)
     const pages = await this.getAllPositionPagesForMarket(marketId);
-    
+
     // Find the page with the MOST available slots
     let targetPageIndex = -1;
     let maxAvailableSlots = 0;
-    
+
     for (const page of pages) {
       if (page.availableSlots > maxAvailableSlots) {
         targetPageIndex = page.pageIndex;
         maxAvailableSlots = page.availableSlots;
       }
     }
-    
+
     // If no page with slots found, create a new one
     if (targetPageIndex === -1) {
       // Find the next page index to create
-      const maxExistingPage = pages.length > 0 ? Math.max(...pages.map(p => p.pageIndex)) : -1;
+      const maxExistingPage =
+        pages.length > 0 ? Math.max(...pages.map((p) => p.pageIndex)) : -1;
       targetPageIndex = maxExistingPage + 1;
-      
+
       // Create the new page
       const ensureInstructions = await this.ensurePositionPage({
         marketId,
         payer,
-        pageIndex: targetPageIndex
+        pageIndex: targetPageIndex,
       });
       instructions.push(...ensureInstructions);
     }
-    
+
     // Only create next page if current page has < 2 slots
     let needsNextPage = false;
     if (maxAvailableSlots < 2) {
       needsNextPage = true;
     }
-    
+
     // Create the next page if needed (pre-warming strategy)
     if (needsNextPage) {
       // Find the highest existing page index to determine next page
-      const maxExistingPage = pages.length > 0 ? Math.max(...pages.map(p => p.pageIndex)) : -1;
+      const maxExistingPage =
+        pages.length > 0 ? Math.max(...pages.map((p) => p.pageIndex)) : -1;
       const nextPageIndex = maxExistingPage + 1;
-      const nextPageExists = pages.some(p => p.pageIndex === nextPageIndex);
-      
+      const nextPageExists = pages.some((p) => p.pageIndex === nextPageIndex);
+
       if (!nextPageExists) {
         const ensureNextInstructions = await this.ensurePositionPage({
           marketId,
           payer,
-          pageIndex: nextPageIndex
+          pageIndex: nextPageIndex,
         });
         instructions.push(...ensureNextInstructions);
       }
     }
-  
+
     return {
       pageIndex: targetPageIndex,
-      instructions
+      instructions,
     };
   }
 
@@ -358,27 +443,37 @@ export default class Position {
    * @param marketId - Market ID
    * @returns {Promise<PositionPageInfo[]>} - Array of page information
    */
-  async getAllPositionPagesForMarket(marketId: number): Promise<PositionPageInfo[]> {
+  async getAllPositionPagesForMarket(
+    marketId: number
+  ): Promise<PositionPageInfo[]> {
     const pages: PositionPageInfo[] = [];
     const marketPDA = getMarketPDA(this.program.programId, marketId);
-    
+
     try {
-      const marketAccount = await this.program.account.marketState.fetch(marketPDA);
+      const marketAccount = await this.program.account.marketState.fetch(
+        marketPDA
+      );
       const pagesAllocated = marketAccount.pagesAllocated;
-      
+
       // Check each page from 0 to pagesAllocated
       for (let pageIndex = 0; pageIndex < pagesAllocated; pageIndex++) {
         try {
-          const positionPagePDA = getPositionPagePDA(this.program.programId, marketId, pageIndex);
-          const pageAccount = await this.program.account.positionPage.fetch(positionPagePDA);
-          
+          const positionPagePDA = getPositionPagePDA(
+            this.program.programId,
+            marketId,
+            pageIndex
+          );
+          const pageAccount = await this.program.account.positionPage.fetch(
+            positionPagePDA
+          );
+
           // Count available slots
           const availableSlots = pageAccount.entries.filter(
-            (entry: any) => 'init' in entry.status
+            (entry: any) => "init" in entry.status
           ).length;
-          
+
           const usedSlots = 16 - availableSlots;
-          
+
           pages.push({
             pageIndex,
             totalSlots: 16,
@@ -386,18 +481,20 @@ export default class Position {
             availableSlots,
             isFull: availableSlots === 0,
             prewarmNext: pageAccount.prewarmNext,
-            exists: true
+            exists: true,
           });
         } catch (error) {
           // Page doesn't exist, but we expected it to (based on pagesAllocated)
-          console.warn(`Page ${pageIndex} expected but not found for market ${marketId}`);
+          console.warn(
+            `Page ${pageIndex} expected but not found for market ${marketId}`
+          );
         }
       }
     } catch (error) {
       console.error(`Failed to fetch market ${marketId}:`, error);
       throw new Error(`Market ${marketId} not found`);
     }
-    
+
     return pages;
   }
 
@@ -406,21 +503,25 @@ export default class Position {
    * @param marketCreator - Market creator public key
    * @returns {Promise<PositionPageInfo[]>} - Array of page information
    */
-  async getPositionPagesByCreator(marketCreator: PublicKey): Promise<PositionPageInfo[]> {
+  async getPositionPagesByCreator(
+    marketCreator: PublicKey
+  ): Promise<PositionPageInfo[]> {
     // This is slower but useful for admin/debugging
     const allMarkets = await this.program.account.marketState.all();
-    const creatorMarkets = allMarkets.filter(
-      market => market.account.marketCreator.equals(marketCreator)
+    const creatorMarkets = allMarkets.filter((market) =>
+      market.account.marketCreator.equals(marketCreator)
     );
-    
+
     const allPages: PositionPageInfo[] = [];
-    
+
     // Process each market
     for (const market of creatorMarkets) {
-      const marketPages = await this.getAllPositionPagesForMarket(market.account.marketId.toNumber());
+      const marketPages = await this.getAllPositionPagesForMarket(
+        market.account.marketId.toNumber()
+      );
       allPages.push(...marketPages);
     }
-    
+
     return allPages;
   }
 }

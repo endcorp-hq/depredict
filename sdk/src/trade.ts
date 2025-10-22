@@ -31,7 +31,6 @@ import {
   getTreeConfigPDA,
 } from "./utils/pda/index.js";
 import createVersionedTransaction from "./utils/sendVersionedTransaction.js";
-import { swap } from "./utils/swap.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
