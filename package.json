@@ -47,5 +47,5 @@
     "typescript": "^5.7.3"
   },
   "type": "module",
-  "version": "0.0.1"
+  "version": "0.0.2"
 }
