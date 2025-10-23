@@ -23,13 +23,9 @@ export default class DepredictClient {
   config: Config;
   position: Position;
   marketCreator: MarketCreator
-  ADMIN_KEY: PublicKey;
-  FEE_VAULT: PublicKey;
 
   constructor(
     connection: Connection,
-    adminKey: PublicKey,
-    feeVault: PublicKey,
   ) {
 
     this.program = new Program(
@@ -38,11 +34,9 @@ export default class DepredictClient {
         : (MAINNET_IDL as Depredict),
       { connection }
     );
-    this.trade = new Trade(this.program, adminKey, feeVault);
+    this.trade = new Trade(this.program);
     this.position = new Position(this.program);
-    this.config = new Config(this.program, adminKey, feeVault);
-    this.marketCreator = new MarketCreator(this.program, adminKey)
-    this.ADMIN_KEY = adminKey;
-    this.FEE_VAULT = feeVault;
+    this.config = new Config(this.program);
+    this.marketCreator = new MarketCreator(this.program)
   }
 }
