@@ -43,6 +43,14 @@ export function toUmiPublicKey(value: any): UmiPublicKey {
   return fromWeb3JsPublicKey(web3Pk);
 }
 
+/**
+ * Requests the DAS proof for a compressed asset and returns it in the shape
+ * that `trade.claimPosition` expects.
+ *
+ * @example
+ * const proof = await fetchAssetProofWithRetry(assetId, connection.rpcEndpoint);
+ * const remainingAccounts = proofToRemainingAccounts(proof.proof, proof.canopyDepth);
+ */
 export const fetchAssetProof = async (
   assetId: PublicKey,
   rpcEndpoint?: string
@@ -85,6 +93,10 @@ export const fetchAssetProof = async (
   };
 };
 
+/**
+ * Convenience wrapper around {@link fetchAssetProof} that retries when the DAS
+ * endpoint has not indexed the cNFT yet.
+ */
 export async function fetchAssetProofWithRetry(
   assetId: PublicKey,
   rpcEndpoint?: string,
@@ -103,11 +115,19 @@ export async function fetchAssetProofWithRetry(
   throw lastErr;
 }
 
+/**
+ * Trims canopy nodes off a proof. Usually you should hand the canopy depth
+ * returned by {@link fetchAssetProof} straight into this helper.
+ */
 export function truncateProof(proof: string[], canopyDepth = 0): string[] {
   if (!canopyDepth || canopyDepth <= 0) return proof;
   return proof.slice(0, Math.max(0, proof.length - canopyDepth));
 }
 
+/**
+ * Converts a trimmed proof into Anchor `remainingAccounts`, ready to be passed
+ * to `program.methods.settlePosition(...).remainingAccounts(...)`.
+ */
 export function proofToRemainingAccounts(proof: string[], canopyDepth = 0) {
   const truncated = truncateProof(proof, canopyDepth);
   return truncated.map((p) => ({

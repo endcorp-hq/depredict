@@ -17,7 +17,7 @@ import {
 import { RpcOptions } from "./types/index.js";
 import { PayoutArgs, PayoutPositionIxResult, PayoutPositionMessageResult, PayoutPositionTxResult } from "./types/trade.js";
 import BN from "bn.js";
-import { encodeString, formatMarket } from "./utils/helpers.js";
+import { encodeString, formatMarket, dedupePubkeys } from "./utils/helpers.js";
 import {
   getConfigPDA,
   getMarketPDA,
@@ -368,6 +368,166 @@ export default class Trade {
       throw error;
     }
     return { ixs, addressLookupTableAccounts, nftMint: positionPagePDA };
+  }
+
+  async buildSettleInstructionWithProof({
+    marketId,
+    claimer,
+    assetId,
+    pageIndex,
+    slotIndex,
+    proof,
+  }: {
+    marketId: number;
+    claimer: PublicKey;
+    assetId: PublicKey;
+    pageIndex: number;
+    slotIndex?: number | null;
+    proof: {
+      root: number[] | Uint8Array;
+      dataHash: number[] | Uint8Array;
+      creatorHash: number[] | Uint8Array;
+      nonce: number | BN;
+      leafIndex: number;
+      proofNodes: (string | PublicKey)[];
+    };
+  }): Promise<{
+    instruction: TransactionInstruction;
+    lookupAddresses: PublicKey[];
+    resolvedSlotIndex: number;
+    resolvedPageIndex: number;
+  }> {
+    const configPda = getConfigPDA(this.program.programId);
+    const marketPda = getMarketPDA(this.program.programId, marketId);
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPda
+    );
+    const marketCreator = marketAccount.marketCreator as PublicKey;
+    const marketMint = marketAccount.mint as PublicKey;
+    const marketVault = marketAccount.marketVault as PublicKey;
+
+    const claimerMintAta = getAssociatedTokenAddressSync(
+      marketMint,
+      claimer,
+      false,
+      TOKEN_PROGRAM_ID
+    );
+
+    // Fetch market creator to access merkleTree and coreCollection
+    const marketCreatorAccount = await this.program.account.marketCreator.fetch(
+      marketCreator
+    );
+    const merkleTree = marketCreatorAccount.merkleTree as PublicKey;
+    const collection = marketCreatorAccount.coreCollection as PublicKey;
+    const treeConfig = getTreeConfigPDA(merkleTree);
+
+    const resolvedPageIndex = pageIndex;
+    let resolvedSlotIndex = slotIndex ?? null;
+
+    const positionPage = getPositionPagePDA(
+      this.program.programId,
+      marketId,
+      resolvedPageIndex
+    );
+    const pageAccount = await this.program.account.positionPage.fetch(
+      positionPage
+    );
+
+    if (resolvedSlotIndex === null || resolvedSlotIndex === undefined) {
+      for (let i = 0; i < pageAccount.entries.length; i++) {
+        if (pageAccount.entries[i].assetId.equals(assetId)) {
+          resolvedSlotIndex = i;
+          break;
+        }
+      }
+      if (resolvedSlotIndex === null || resolvedSlotIndex === undefined) {
+        throw new Error(
+          `Position with asset ${assetId.toBase58()} not found on page ${resolvedPageIndex}`
+        );
+      }
+    }
+
+    const proofMetas = proof.proofNodes.map((node) => {
+      const pubkey = typeof node === "string" ? new PublicKey(node) : node;
+      return {
+        pubkey,
+        isWritable: false,
+        isSigner: false,
+      };
+    });
+
+    const nonceBn = BN.isBN(proof.nonce)
+      ? proof.nonce
+      : new BN(proof.nonce);
+
+    const instruction = await this.program.methods
+      .settlePosition({
+        pageIndex: resolvedPageIndex,
+        slotIndex: resolvedSlotIndex,
+        assetId,
+        root: Array.from(proof.root),
+        dataHash: Array.from(proof.dataHash),
+        creatorHash: Array.from(proof.creatorHash),
+        nonce: nonceBn,
+        leafIndex: proof.leafIndex,
+      })
+      .accountsPartial({
+        claimer,
+        market: marketPda,
+        config: configPda,
+        marketCreator,
+        positionPage,
+        mint: marketMint,
+        claimerMintAta,
+        marketVault,
+        mplCoreProgram: new PublicKey(MPL_CORE_PROGRAM_ID),
+        bubblegumProgram: new PublicKey(MPL_BUBBLEGUM_ID),
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        merkleTree,
+        collection,
+        treeConfig,
+        mplCoreCpiSigner: new PublicKey(MPL_CORE_CPI_SIGNER),
+        logWrapperProgram: new PublicKey(MPL_NOOP_ID),
+        compressionProgram: new PublicKey(MPL_ACCOUNT_COMPRESSION_ID),
+      })
+      .remainingAccounts(proofMetas)
+      .instruction();
+
+    const lookupExtras: (PublicKey | null | undefined)[] = [
+      marketPda,
+      configPda,
+      marketCreator,
+      positionPage,
+      marketMint,
+      claimerMintAta,
+      marketVault,
+      collection,
+      merkleTree,
+      new PublicKey(MPL_CORE_CPI_SIGNER),
+      new PublicKey(MPL_CORE_PROGRAM_ID),
+      treeConfig,
+      new PublicKey(MPL_BUBBLEGUM_ID),
+      new PublicKey(MPL_NOOP_ID),
+      new PublicKey(MPL_ACCOUNT_COMPRESSION_ID),
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+      anchor.web3.SystemProgram.programId,
+      this.program.programId,
+    ];
+
+    const lookupAddresses = dedupePubkeys([
+      ...proofMetas.map((m) => m.pubkey),
+      ...lookupExtras,
+    ]);
+
+    return {
+      instruction,
+      lookupAddresses,
+      resolvedSlotIndex,
+      resolvedPageIndex,
+    };
   }
 
   /**
