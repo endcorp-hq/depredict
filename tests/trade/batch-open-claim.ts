@@ -126,22 +126,16 @@ async function openPosition(params: {
   console.log("[open] direction=", Object.keys(params.direction)[0], "amount=", params.amount.toString());
   console.log("[open] positionPage=", params.positionPagePda.toBase58());
 
-  // Pre-calc next page PDA
-  const positionPageNextPda = derivePositionPagePda(params.marketId, 2);
-
   const treeConfig = PublicKey.findProgramAddressSync(
     [marketCreatorAccount.merkleTree.toBuffer()],
     BUBBLEGUM_PROGRAM_ID
   )[0];
 
-  // Using page 1 as current, set page 2 as next
-  console.log("[open] positionPageNext=", positionPageNextPda.toBase58());
   await program.methods
     .openPosition({ amount: params.amount, direction: params.direction, metadataUri: "https://arweave.net/position" })
     .accountsPartial({
       user: USER.publicKey,
       positionPage: params.positionPagePda,
-      positionPageNext: positionPageNextPda,
       market: params.marketPda,
       marketCreator: params.marketCreatorPda,
       mint: LOCAL_MINT.publicKey,
@@ -180,22 +174,6 @@ async function openPosition(params: {
         return { slotIndex: i, assetId: entry.assetId as PublicKey, pageIndex: 1 };
       }
     }
-    // check next page (index 2)
-    const pageAfterNext: any = await program.account.positionPage.fetch(positionPageNextPda).catch(() => null);
-    if (pageAfterNext) {
-      for (let i = 0; i < pageAfterNext.entries.length; i++) {
-        const entry = pageAfterNext.entries[i];
-        const idStr = (entry.assetId as PublicKey).toString();
-        if (
-          Object.keys(entry.status)[0] === "open" &&
-          idStr !== PublicKey.default.toString() &&
-          Object.keys(entry.direction)[0] === Object.keys(params.direction)[0] &&
-          (entry.amount as anchor.BN).eq(params.amount)
-        ) {
-          return { slotIndex: i, assetId: entry.assetId as PublicKey, pageIndex: 2 };
-        }
-      }
-    }
     await wait(700);
   }
   throw new Error("Could not locate newly created position entry (no new assetId found)");
@@ -225,8 +203,8 @@ async function fetchDasProofs(assetIds: PublicKey[]) {
   for (const assetId of assetIds) {
     const umiId = fromWeb3JsPublicKey(assetId);
     console.log("[das] fetching asset/proof for", assetId.toBase58());
-    const asset = await fetchWithRetry(() => umi.rpc.getAsset(umiId));
-    const proof = await fetchWithRetry(() => umi.rpc.getAssetProof(umiId));
+    const asset = await fetchWithRetry(() => (umi.rpc as any).getAsset(umiId)) as any;
+    const proof = await fetchWithRetry(() => (umi.rpc as any).getAssetProof(umiId)) as any;
     results.push({
       assetId,
       root: publicKeyBytes(proof.root),

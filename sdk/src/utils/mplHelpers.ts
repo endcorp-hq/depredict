@@ -6,6 +6,7 @@ import { createTreeV2, setTreeDelegate } from "@metaplex-foundation/mpl-bubblegu
 import { createCollectionV2, mplCore, pluginAuthorityPairV2 } from "@metaplex-foundation/mpl-core";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import { dasApi } from "@metaplex-foundation/digital-asset-standard-api";
+import { fetchMerkleTree } from "@metaplex-foundation/spl-account-compression";
 import { generateSigner, signerIdentity, createSignerFromKeypair, publicKeyBytes, type PublicKeyBytes, type KeypairSigner, Pda } from "@metaplex-foundation/umi";
 import { fromWeb3JsKeypair, fromWeb3JsPublicKey } from "@metaplex-foundation/umi-web3js-adapters";
 import type { PublicKey as UmiPublicKey } from "@metaplex-foundation/umi";
@@ -52,18 +53,35 @@ export const fetchAssetProof = async (
   nonce: number;
   index: number;
   proof: string[];
+  canopyDepth: number;
 }> => {
   const umi = getUmi(rpcEndpoint).use(dasApi());
   const assetPk = fromWeb3JsPublicKey(assetId);
   const proofRef = await (umi.rpc as any).getAssetProof(assetPk);
   const assetRef = await (umi.rpc as any).getAsset(assetPk);
+  const merkleTreeAccount = await fetchMerkleTree(umi, proofRef.tree_id);
+  const canopyNodes = Array.isArray((merkleTreeAccount as any).canopy)
+    ? (merkleTreeAccount as any).canopy
+    : [];
+  const canopyDepth =
+    canopyNodes.length > 0
+      ? Math.max(0, Math.floor(Math.log2(canopyNodes.length + 2) - 1))
+      : 0;
+  const truncatedProof =
+    canopyDepth > 0
+      ? proofRef.proof.slice(0, Math.max(0, proofRef.proof.length - canopyDepth))
+      : proofRef.proof;
+  const leafIndex =
+    BigInt(proofRef.node_index ?? 0) - (BigInt(1) << BigInt(proofRef.proof.length ?? 0));
+  const nonce = assetRef.compression.leaf_id ?? assetRef.compression.seq;
   return {
     root: publicKeyBytes(proofRef.root.toString()),
     dataHash: publicKeyBytes(assetRef.compression.data_hash.toString()),
     creatorHash: publicKeyBytes(assetRef.compression.creator_hash.toString()),
-    nonce: assetRef.compression.seq,
-    index: assetRef.compression.leaf_id,
-    proof: proofRef.proof,
+    nonce: Number(nonce ?? 0),
+    index: Number(leafIndex < 0n ? 0n : leafIndex),
+    proof: truncatedProof,
+    canopyDepth,
   };
 };
 
@@ -85,11 +103,12 @@ export async function fetchAssetProofWithRetry(
   throw lastErr;
 }
 
-export function truncateProof(proof: string[], canopyDepth: number): string[] {
+export function truncateProof(proof: string[], canopyDepth = 0): string[] {
+  if (!canopyDepth || canopyDepth <= 0) return proof;
   return proof.slice(0, Math.max(0, proof.length - canopyDepth));
 }
 
-export function proofToRemainingAccounts(proof: string[], canopyDepth: number) {
+export function proofToRemainingAccounts(proof: string[], canopyDepth = 0) {
   const truncated = truncateProof(proof, canopyDepth);
   return truncated.map((p) => ({
     pubkey: new PublicKey(p),
@@ -293,4 +312,3 @@ export async function createMerkleTree(
   if (!accountInfo) throw new Error(`Merkle tree account ${treePubkey.toString()} not found after creation`);
   return treePubkey;
 }
-
