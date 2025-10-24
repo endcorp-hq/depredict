@@ -8,7 +8,7 @@ export type Depredict = {
   "address": "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU",
   "metadata": {
     "name": "depredict",
-    "version": "0.6.9",
+    "version": "0.7.2",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
