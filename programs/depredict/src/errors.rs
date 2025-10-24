@@ -1,8 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum 
-DepredictError {
+pub enum DepredictError {
     #[msg("Unauthorized Instruction")]
     Unauthorized,
 
@@ -143,7 +142,7 @@ DepredictError {
 
     #[msg("Invalid market creator")]
     InvalidMarketCreator,
-    
+
     #[msg("Position not prunable (must be Claimed or Closed)")]
     PositionNotPrunable,
 

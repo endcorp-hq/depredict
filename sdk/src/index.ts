@@ -1,8 +1,8 @@
 import { Program } from "@coral-xyz/anchor";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { Depredict } from "./types/depredict.js";
-import DEVNET_IDL from "./types/depredict-devnet.json"; // tsup will handle this
-import MAINNET_IDL from "./types/depredict-mainnet.json"; // tsup will handle this
+import DEVNET_IDL from "./types/depredict-devnet.json" with { type: "json" }; // tsup will handle this
+import MAINNET_IDL from "./types/depredict-mainnet.json" with { type: "json" }; // tsup will handle this
 import Trade from "./trade.js";
 import Config from "./config.js";
 import Position from "./position.js";

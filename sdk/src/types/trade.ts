@@ -68,7 +68,6 @@ export type OpenOrderArgs = {
         no: {}
       }
   payer: PublicKey,
-  feeVaultAccount: PublicKey,
   metadataUri: string
 }
 

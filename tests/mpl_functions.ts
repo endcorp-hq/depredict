@@ -21,6 +21,7 @@ import {
 } from '@metaplex-foundation/umi';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 import { dasApi } from '@metaplex-foundation/digital-asset-standard-api'
+import { fetchMerkleTree } from '@metaplex-foundation/spl-account-compression';
 
 // constants
 import { 
@@ -31,17 +32,11 @@ import {
 } from "./constants";
 import { fromWeb3JsKeypair, fromWeb3JsPublicKey } from "@metaplex-foundation/umi-web3js-adapters";
 import { createLut } from '@metaplex-foundation/mpl-toolbox'
-const DAS_RPC = "https://api.devnet.solana.com";
-const CANOPY_DEPTH = 8;
+const DAS_RPC = "https://devnet.helius-rpc.com/?api-key=c7c71360-ee3b-437a-bc8d-0c2931d673df";
 let CACHED_LUT: PublicKey | null = null;
 
-function truncateProof(proof: string[], canopyDepth: number = CANOPY_DEPTH): string[] {
-  return proof.slice(0, Math.max(0, proof.length - canopyDepth));
-}
-
-function proofToRemainingAccounts(proof: string[], canopyDepth: number = CANOPY_DEPTH) {
-  const truncated = truncateProof(proof, canopyDepth);
-  return truncated.map((p) => ({
+function proofToRemainingAccounts(proof: string[]) {
+  return proof.map((p) => ({
     pubkey: new PublicKey(p),
     isSigner: false,
     isWritable: false,
@@ -55,21 +50,37 @@ async function fetchAssetProofWithRetry(assetId: PublicKey, attempts = 8, delayM
   nonce: number;
   index: number;
   proof: string[];
+  canopyDepth: number;
 }> {
   const umi = createUmi(DAS_RPC).use(dasApi());
   let lastErr: any = null;
   for (let i = 0; i < attempts; i++) {
     try {
       const assetPk = fromWeb3JsPublicKey(assetId);
-      const proofRef = await umi.rpc.getAssetProof(assetPk);
-      const assetRef = await umi.rpc.getAsset(assetPk);
+      const proofRef = await (umi.rpc as any).getAssetProof(assetPk);
+      const assetRef = await (umi.rpc as any).getAsset(assetPk);
+      const merkleTreeAccount = await fetchMerkleTree(umi, proofRef.tree_id);
+      const canopyNodes = Array.isArray((merkleTreeAccount as any).canopy)
+        ? (merkleTreeAccount as any).canopy
+        : [];
+      const canopyDepth =
+        canopyNodes.length > 0
+          ? Math.max(0, Math.floor(Math.log2(canopyNodes.length + 2) - 1))
+          : 0;
+      const truncatedProof =
+        canopyDepth > 0
+          ? proofRef.proof.slice(0, Math.max(0, proofRef.proof.length - canopyDepth))
+          : proofRef.proof;
+      const leafIndex = BigInt(proofRef.node_index ?? 0) - (BigInt(1) << BigInt(proofRef.proof.length ?? 0));
+      const nonce = assetRef.compression.leaf_id ?? assetRef.compression.seq;
       return {
         root: publicKeyBytes(proofRef.root.toString()),
         dataHash: publicKeyBytes(assetRef.compression.data_hash.toString()),
         creatorHash: publicKeyBytes(assetRef.compression.creator_hash.toString()),
-        nonce: assetRef.compression.seq,
-        index: assetRef.compression.leaf_id,
-        proof: proofRef.proof,
+        nonce: Number(nonce ?? 0),
+        index: Number(leafIndex < 0 ? 0 : leafIndex),
+        proof: truncatedProof,
+        canopyDepth,
       };
     } catch (e) {
       lastErr = e;
@@ -295,4 +306,4 @@ async function createMerkleTree(authority: Keypair): Promise<PublicKey> {
 }
 
 export { createCoreCollection, createMerkleTree };
-export { truncateProof, proofToRemainingAccounts, fetchAssetProofWithRetry, sendWithLookupV0 };
+export { proofToRemainingAccounts, fetchAssetProofWithRetry, sendWithLookupV0 };

@@ -1012,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "depredict"
-version = "0.6.6"
+version = "0.7.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",

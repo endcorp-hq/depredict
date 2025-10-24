@@ -1,22 +1,21 @@
 use anchor_lang::prelude::*;
 
-
 #[derive(InitSpace)]
 #[account]
 pub struct MarketCreator {
     pub bump: u8,
-    pub authority: Pubkey,           // The wallet that owns this market creator account
-    pub core_collection: Pubkey,     // The MPL Core collection NFT mint address
-    pub merkle_tree: Pubkey,         // The global tree address
+    pub authority: Pubkey, // The wallet that owns this market creator account
+    pub core_collection: Pubkey, // The MPL Core collection NFT mint address
+    pub merkle_tree: Pubkey, // The global tree address
     #[max_len(30)]
-    pub name: String,                // Display name for the market creator
-    pub created_at: i64,            // Timestamp when this market creator was created
-    pub num_markets: u64,           // Number of markets created by this creator
-    pub active_markets: u8,        // Currently active/open markets
-    pub pages_allocated: u16,       // Total pages allocated across all active markets
-    pub fee_vault: Pubkey,          // The vault that holds the fees for the market creator
-    pub creator_fee_bps: u16,       // The fee percentage for the market creator
-    pub verified: bool,             // Whether the market creator has been verified with a valid collection
+    pub name: String, // Display name for the market creator
+    pub created_at: i64,   // Timestamp when this market creator was created
+    pub num_markets: u64,  // Number of markets created by this creator
+    pub active_markets: u8, // Currently active/open markets
+    pub pages_allocated: u16, // Total pages allocated across all active markets
+    pub fee_vault: Pubkey, // The vault that holds the fees for the market creator
+    pub creator_fee_bps: u16, // The fee percentage for the market creator
+    pub verified: bool,    // Whether the market creator has been verified with a valid collection
 }
 
 impl Default for MarketCreator {

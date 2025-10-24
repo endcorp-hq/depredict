@@ -30,10 +30,6 @@ async function tryCreateMarketTx({
     program.programId
   );
 
-  // Extra logging for debugging
-  console.log("programId", program.programId.toBase58());
-  console.log("configPda", configPda.toBase58());
-  console.log("derived marketPda", marketPda.toBase58());
 
   // Market times
   const validatorTime = await getCurrentUnixTime();
@@ -47,17 +43,9 @@ async function tryCreateMarketTx({
   const positionPage0Pda = PublicKey.findProgramAddressSync(
     [Buffer.from("pos_page"), marketId.toArrayLike(Buffer, "le", 8), pageIndexBuf],
     program.programId
-  )[0];
-  console.log("positionPage0Pda", positionPage0Pda.toBase58());
+    )[0];
 
-  async function waitForAccount(pubkey: PublicKey, attempts = 40, delayMs = 800) {
-    for (let i = 0; i < attempts; i++) {
-      const info = await provider.connection.getAccountInfo(pubkey);
-      if (info && info.data && info.data.length > 0) return true;
-      await new Promise(r => setTimeout(r, delayMs));
-    }
-    return false;
-  }
+
   // Determine oracle type based on the oracle pubkey
   // For manual resolution, we use ADMIN.publicKey as oracle_pubkey but set oracleType to none
   const isManualResolve = oraclePubkey.equals(ADMIN.publicKey);
@@ -102,9 +90,6 @@ async function tryCreateMarketTx({
     }
 
     const tx = await method.rpc();
-    console.log("createMarket tx", tx);
-    const exists = await waitForAccount(marketPda, 50, 500);
-    console.log("market account exists:", exists);
     return { tx, error: null, marketPda, marketId };
   } catch (error) {
     console.log("error", error);
@@ -147,11 +132,7 @@ describe("depredict", () => {
     it("Creates market with manual resolution", async () => {
       const questionStr = "Will ETH reach $5k in 2024?";
       const metadataUri = "https://arweave.net/manual-metadata-uri";
-      
-      console.log("Attempting to create manual resolution market...");
-      console.log("Question:", questionStr);
-      console.log("Using ADMIN account as oracle_pubkey for manual resolution (will be ignored)");
-      
+            
       const { tx, error, marketPda } = await tryCreateMarketTx({
         questionStr,
         metadataUri,
@@ -166,11 +147,6 @@ describe("depredict", () => {
         // Check if it's a constraint error on oracle_pubkey (which is expected for manual resolution)
         if (error.toString().includes("ConstraintMut") && error.toString().includes("oracle_pubkey")) {
           console.log("Expected constraint error on oracle_pubkey for manual resolution - this is normal");
-          console.log("The issue is that we're passing PublicKey.default as oracle_pubkey, but the program expects a valid account");
-          console.log("For manual resolution, we should either:");
-          console.log("1. Use a different approach for manual resolution");
-          console.log("2. Skip this test for now");
-          console.log("Skipping manual resolution test due to oracle account constraints");
           return;
         } else {
           throw error; // Re-throw unexpected errors
@@ -246,12 +222,5 @@ describe("depredict", () => {
       }
     });
 
-    it("Creates market with oracle", async function() {
-      console.log("Skipping Switchboard oracle market creation - focusing on manual oracles only");
-      console.log("This test would normally create a market with Switchboard oracle");
-      console.log("For now, we're focusing on manual resolution markets");
-      this.skip();
-      return;
-    });
   });
 });

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::state::{ MarketStates, WinningDirection, PositionDirection, PositionStatus };
+use crate::state::{MarketStates, PositionDirection, PositionStatus, WinningDirection};
 
 // #[event]
 // pub struct PriceEvent {

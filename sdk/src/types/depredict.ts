@@ -8,7 +8,7 @@ export type Depredict = {
   "address": "deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU",
   "metadata": {
     "name": "depredict",
-    "version": "0.6.6",
+    "version": "0.6.9",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
@@ -2686,6 +2686,10 @@ export type Depredict = {
             }
           },
           {
+            "name": "lastUpdateSlot",
+            "type": "u64"
+          },
+          {
             "name": "version",
             "type": "u64"
           },
@@ -2694,7 +2698,7 @@ export type Depredict = {
             "type": {
               "array": [
                 "u8",
-                20
+                12
               ]
             }
           }

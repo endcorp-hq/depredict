@@ -20,7 +20,9 @@ import {
 } from "../constants";
 import { PublicKeyBytes } from '@metaplex-foundation/umi'
 import { fetchAssetProofWithRetry, proofToRemainingAccounts, sendWithLookupV0 } from "../mpl_functions";
+import { getCurrentMarketId } from "../helpers";
 const MPL_CORE_CPI_SIGNER = new PublicKey("CbNY3JiXdXNE9tPNEk1aRZVEkWdj2v7kfJLNQwZZgpXk");
+const FEE_BPS_DENOMINATOR = BigInt(10_000);
 
 let CACHED_LUT: PublicKey | null = null;
 
@@ -28,10 +30,20 @@ function toBigInt(n: anchor.BN | number): bigint {
   return BigInt(anchor.BN.isBN(n) ? (n as anchor.BN).toString() : Math.trunc(n));
 }
 
-function computeExpectedPayout(positionAmount: bigint, winningLiquidity: bigint, othersideLiquidity: bigint): bigint {
+function computeExpectedNetPayout(
+  positionAmount: bigint,
+  winningLiquidity: bigint,
+  othersideLiquidity: bigint,
+  creatorFeeBps: number,
+  protocolFeeBps: number,
+): bigint {
   if (winningLiquidity === BigInt(0)) return BigInt(0);
   const shareOfOtherside = (othersideLiquidity * positionAmount) / winningLiquidity;
-  return positionAmount + shareOfOtherside;
+  const grossPayout = positionAmount + shareOfOtherside;
+  const creatorFee = (grossPayout * BigInt(creatorFeeBps)) / FEE_BPS_DENOMINATOR;
+  const afterCreator = grossPayout - creatorFee;
+  const protocolFee = (afterCreator * BigInt(protocolFeeBps)) / FEE_BPS_DENOMINATOR;
+  return afterCreator - protocolFee;
 }
 
 async function waitOneSecond() { await new Promise((r) => setTimeout(r, 1100)); }
@@ -68,6 +80,8 @@ describe("depredict", () => {
 
   let marketCreatorPda: PublicKey;
   let marketCreatorAccount: any;
+  let configPda: PublicKey;
+  let treeConfigPda: PublicKey;
 
   async function loadMarketCreator() {
     const [pda] = PublicKey.findProgramAddressSync(
@@ -133,7 +147,6 @@ describe("depredict", () => {
     direction,
     amount,
   }): Promise<{ slotIndex: number; assetId: PublicKey }> {
-    
     const marketAccountBefore = await program.account.marketState.fetch(marketPda);
     const marketVault = marketAccountBefore.marketVault as PublicKey;
 
@@ -142,13 +155,11 @@ describe("depredict", () => {
       BUBBLEGUM_PROGRAM_ID
     )[0];
 
-    const positionPageNextPda = derivePositionPagePda(marketIdBn, 1);
     let tx = await program.methods
       .openPosition({ amount, direction, metadataUri: "https://arweave.net/position" })
       .accountsPartial({
         user: USER.publicKey,
         positionPage: positionPagePda,
-        positionPageNext: positionPageNextPda,
         market: marketPda,
         marketCreator: marketCreatorPda,
         mint: usdcMint,
@@ -168,37 +179,29 @@ describe("depredict", () => {
       })
       .signers([USER])
       .rpc( { commitment: "confirmed" });
-    console.log("tx", tx);
+    console.log("tx: ", tx);
 
-    const page = await program.account.positionPage.fetch(positionPagePda);
-
-
-    // pick newest matching entry by createdAt
     const desiredDirection = Object.keys(direction)[0];
-    let newestIdx: number | null = pickNewestEntry(page, desiredDirection);
-    if (newestIdx !== null) {
-      const entry = page.entries[newestIdx];
-      console.log("entry.assetId", entry.assetId.toBase58());
-      return { slotIndex: newestIdx, assetId: entry.assetId as PublicKey };
+    const maxAttempts = 6;
+    const fetchPageAndPick = async (pagePda: PublicKey): Promise<{ slotIndex: number; assetId: PublicKey } | null> => {
+      try {
+        const page: any = await program.account.positionPage.fetch(pagePda);
+        const idx = pickNewestEntry(page, desiredDirection);
+        if (idx !== null) {
+          const entry = page.entries[idx];
+          // console.log("entry.assetId", entry.assetId.toBase58());
+          return { slotIndex: idx, assetId: entry.assetId as PublicKey };
+        }
+      } catch (_) {}
+      return null;
+    };
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const found = await fetchPageAndPick(positionPagePda);
+      if (found) return found;
+      await waitOneSecond();
     }
-    // tiny retry in case of read-after-write on slow indexing
-    await new Promise((r) => setTimeout(r, 500));
-    const pageRetry = await program.account.positionPage.fetch(positionPagePda);
-    newestIdx = pickNewestEntry(pageRetry, desiredDirection);
-    if (newestIdx !== null) {
-      const entry = pageRetry.entries[newestIdx];
-      console.log("entry.assetId", entry.assetId.toBase58());
-      return { slotIndex: newestIdx, assetId: entry.assetId as PublicKey };
-    }
-    // fallback to page 1 if prewarmed or page 0 is full
-    try {
-      const page1 = await program.account.positionPage.fetch(positionPageNextPda);
-      let idx1 = pickNewestEntry(page1, desiredDirection);
-      if (idx1 !== null) {
-        const entry = page1.entries[idx1];
-        return { slotIndex: idx1, assetId: entry.assetId as PublicKey };
-      }
-    } catch (_) {}
+
     throw new Error("Could not locate newly created position entry");
   }
   let configAccount: {
@@ -216,8 +219,12 @@ describe("depredict", () => {
     // await ensureAccountBalance(ADMIN.publicKey, 2_000_000_000);
 
     await loadMarketCreator();
+    treeConfigPda = PublicKey.findProgramAddressSync(
+      [marketCreatorAccount.merkleTree.toBuffer()],
+      BUBBLEGUM_PROGRAM_ID
+    )[0];
 
-    let configPda = PublicKey.findProgramAddressSync(
+    configPda = PublicKey.findProgramAddressSync(
       [Buffer.from("config")],
       program.programId
     )[0];
@@ -296,7 +303,7 @@ describe("depredict", () => {
       }
     }
 
-    marketIdBn = new anchor.BN(89);
+    marketIdBn = await getCurrentMarketId();
     marketPda = deriveMarketPda(marketIdBn);
     positionPagePda = derivePositionPagePda(marketIdBn, 0);
 
@@ -325,13 +332,14 @@ describe("depredict", () => {
       const claimerMintAta = getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID);
       const marketAccount = await program.account.marketState.fetch(marketPda);
       const userBalBefore = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
+      if (yesSlotIndex === null || !yesAssetId) throw new Error("YES position not initialized");
 
       try {
         let tx = await program.methods
           .settlePosition({
             pageIndex: 0,
-            slotIndex: yesSlotIndex as number,
-            assetId: yesAssetId!,
+            slotIndex: yesSlotIndex,
+            assetId: yesAssetId,
             // Dummy values; instruction will fail before these are used
             root: Array.from(new Uint8Array(32)),
             dataHash: Array.from(new Uint8Array(32)),
@@ -342,6 +350,7 @@ describe("depredict", () => {
           .accountsPartial({
             claimer: USER.publicKey,
             market: marketPda,
+            config: configPda,
             marketCreator: marketCreatorPda,
             positionPage: positionPagePda,
             mint: usdcMint,
@@ -353,21 +362,19 @@ describe("depredict", () => {
             merkleTree: marketCreatorAccount.merkleTree,
             bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
             tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
-            treeConfig: PublicKey.findProgramAddressSync(
-              [marketCreatorAccount.merkleTree.toBuffer()],
-              BUBBLEGUM_PROGRAM_ID
-            )[0],
+            treeConfig: treeConfigPda,
             logWrapperProgram: MPL_NOOP_ID,
             compressionProgram: ACCOUNT_COMPRESSION_ID,
           })
           .signers([USER])
           .rpc({ commitment: "confirmed" });
-        console.log("tx", tx);
+        console.log("tx: ", tx);
         assert.fail("Expected failure before market resolution");
       } catch (err: any) {
         //assert.include(err, "Market still active");
-        console.log("err", err);
+        console.log("err: ", err);
       }
     });
 
@@ -382,12 +389,11 @@ describe("depredict", () => {
         })
         .signers([ADMIN])
         .rpc( { commitment: "confirmed" });
-      console.log("tx", tx);
-      const m = await program.account.marketState.fetch(marketPda);
-      console.log("m", m);
+      console.log("tx: ", tx);
     });
 
     it("claims winning YES position and receives correct payout", async () => {
+      if (yesSlotIndex === null || !yesAssetId) throw new Error("YES position not initialized");
       const p = await fetchAssetProofWithRetry(yesAssetId!);
       const pageBefore: any = await program.account.positionPage.fetch(positionPagePda);
       const entryBefore = pageBefore.entries[yesSlotIndex as number];
@@ -397,7 +403,15 @@ describe("depredict", () => {
       const winningLiquidity = toBigInt(marketBefore.yesLiquidity);
       const otherLiquidity = toBigInt(marketBefore.noLiquidity);
       const positionAmount = toBigInt(entryBefore.amount);
-      const expectedPayout = computeExpectedPayout(positionAmount, winningLiquidity, otherLiquidity);
+      const creatorFeeBps = Number(marketCreatorAccount.creatorFeeBps ?? 0);
+      const protocolFeeBps = Number(configAccount.feeAmount ?? 0);
+      const expectedPayout = computeExpectedNetPayout(
+        positionAmount,
+        winningLiquidity,
+        otherLiquidity,
+        creatorFeeBps,
+        protocolFeeBps,
+      );
 
       const claimerMintAta = getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID);
       const userBalBefore = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
@@ -410,8 +424,8 @@ describe("depredict", () => {
       const ixYes = await program.methods
         .settlePosition({
             pageIndex: 0,
-            slotIndex: yesSlotIndex as number,
-            assetId: yesAssetId!,
+            slotIndex: yesSlotIndex,
+            assetId: yesAssetId,
             root: Array.from(p.root),
             dataHash: Array.from(p.dataHash),
             creatorHash: Array.from(p.creatorHash),
@@ -421,6 +435,7 @@ describe("depredict", () => {
         .accountsPartial({
           claimer: USER.publicKey,
           market: marketPda,
+          config: configPda,
           marketCreator: marketCreatorPda,
           positionPage: positionPagePda,
           mint: usdcMint,
@@ -432,11 +447,9 @@ describe("depredict", () => {
           marketVault: marketBefore.marketVault as PublicKey, 
           bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
           tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
-          treeConfig: PublicKey.findProgramAddressSync(
-            [marketCreatorAccount.merkleTree.toBuffer()],
-            BUBBLEGUM_PROGRAM_ID
-          )[0],
+          treeConfig: treeConfigPda,
           logWrapperProgram: MPL_NOOP_ID,
           compressionProgram: ACCOUNT_COMPRESSION_ID,
         })
@@ -450,10 +463,27 @@ describe("depredict", () => {
       const pageAfter: any = await program.account.positionPage.fetch(positionPagePda);
       const entryAfter = pageAfter.entries[yesSlotIndex as number];
       assert.equal(Object.keys(entryAfter.status)[0], "claimed");
+
+      const userBalAfter = await provider.connection.getTokenAccountBalance(claimerMintAta).catch(() => null);
+      const vaultBalAfter = await provider.connection.getTokenAccountBalance(marketBefore.marketVault as PublicKey).catch(() => null);
+      if (userBalBefore && userBalAfter) {
+        const deltaUser = BigInt(userBalAfter.value.amount) - BigInt(userBalBefore.value.amount);
+        assert.equal(deltaUser.toString(), expectedPayout.toString());
+      }
+      if (vaultBalBefore && vaultBalAfter) {
+        const deltaVault = BigInt(vaultBalBefore.value.amount) - BigInt(vaultBalAfter.value.amount);
+        assert.equal(deltaVault.toString(), expectedPayout.toString());
+      }
     });
 
     it("claims losing NO position and receives zero", async () => {
+      if (noSlotIndex === null || !noAssetId) throw new Error("NO position not initialized");
       const p = await fetchAssetProofWithRetry(noAssetId!);
+      noRoot = p.root;
+      noDataHash = p.dataHash;
+      noCreatorHash = p.creatorHash;
+      noNonce = p.nonce;
+      noIndex = p.index;
       const pageBefore: any = await program.account.positionPage.fetch(positionPagePda);
       const entryBefore = pageBefore.entries[noSlotIndex as number];
       assert.equal(Object.keys(entryBefore.status)[0], "open");
@@ -467,8 +497,8 @@ describe("depredict", () => {
       const ixNo = await program.methods
         .settlePosition({
             pageIndex: 0,
-            slotIndex: noSlotIndex as number,
-            assetId: noAssetId!,
+            slotIndex: noSlotIndex,
+            assetId: noAssetId,
             root: Array.from(p.root),
             dataHash: Array.from(p.dataHash),
             creatorHash: Array.from(p.creatorHash),
@@ -478,6 +508,7 @@ describe("depredict", () => {
         .accountsPartial({
           claimer: USER.publicKey,
           market: marketPda,
+          config: configPda,
           marketCreator: marketCreatorPda,
           positionPage: positionPagePda,
           mint: usdcMint,
@@ -489,11 +520,9 @@ describe("depredict", () => {
           marketVault: marketState.marketVault as PublicKey,
           bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
           tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
-          treeConfig: PublicKey.findProgramAddressSync(
-            [marketCreatorAccount.merkleTree.toBuffer()],
-            BUBBLEGUM_PROGRAM_ID
-          )[0],
+          treeConfig: treeConfigPda,
           logWrapperProgram: MPL_NOOP_ID,
           compressionProgram: ACCOUNT_COMPRESSION_ID,
         })
@@ -509,69 +538,90 @@ describe("depredict", () => {
     });
 
     it("prevents double-claiming the same position", async () => {
-      try {
-        await waitOneSecond();
-        const p = await fetchAssetProofWithRetry(yesAssetId!);
-        await program.methods
-          .settlePosition({             
-            pageIndex: 0,
-            slotIndex: yesSlotIndex as number,
-            assetId: yesAssetId!,
-            root: Array.from(p.root),
-            dataHash: Array.from(p.dataHash),
-            creatorHash: Array.from(p.creatorHash!),
-            nonce: new anchor.BN(p.nonce!),
-            leafIndex: p.index as number,
+      if (yesSlotIndex === null || !yesAssetId) throw new Error("YES position not initialized");
+      await waitOneSecond();
+      const p = await fetchAssetProofWithRetry(yesAssetId!);
+      const cuIx = anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 300000 });
+      const claimIx = await program.methods
+        .settlePosition({             
+          pageIndex: 0,
+          slotIndex: yesSlotIndex,
+          assetId: yesAssetId,
+          root: Array.from(p.root),
+          dataHash: Array.from(p.dataHash),
+          creatorHash: Array.from(p.creatorHash!),
+          nonce: new anchor.BN(p.nonce!),
+          leafIndex: p.index as number,
+      })
+        .accountsPartial({
+          claimer: USER.publicKey,
+          market: marketPda,
+          config: configPda,
+          marketCreator: marketCreatorPda,
+          positionPage: positionPagePda,
+          mint: usdcMint,
+          claimerMintAta: getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID),
+          merkleTree: marketCreatorAccount.merkleTree,
+          marketVault: (await program.account.marketState.fetch(marketPda)).marketVault as PublicKey,
+          collection: marketCreatorAccount.coreCollection,
+          mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
+          mplCoreProgram: MPL_CORE_ID,
+          bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          treeConfig: treeConfigPda,
+          logWrapperProgram: MPL_NOOP_ID,
+          compressionProgram: ACCOUNT_COMPRESSION_ID,
         })
-          .accountsPartial({
-            claimer: USER.publicKey,
-            market: marketPda,
-            marketCreator: marketCreatorPda,
-            positionPage: positionPagePda,
-            mint: usdcMint,
-            claimerMintAta: getAssociatedTokenAddressSync(usdcMint, USER.publicKey, false, TOKEN_PROGRAM_ID),
-            merkleTree: marketCreatorAccount.merkleTree,
-            marketVault: (await program.account.marketState.fetch(marketPda)).marketVault as PublicKey,
-            collection: marketCreatorAccount.coreCollection,
-            mplCoreCpiSigner: MPL_CORE_CPI_SIGNER,
-            mplCoreProgram: MPL_CORE_ID,
-            bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            treeConfig: PublicKey.findProgramAddressSync(
-              [marketCreatorAccount.merkleTree.toBuffer()],
-              BUBBLEGUM_PROGRAM_ID
-            )[0],
-            logWrapperProgram: MPL_NOOP_ID,
-            compressionProgram: ACCOUNT_COMPRESSION_ID,
-          })
-          .remainingAccounts(proofToRemainingAccounts(p.proof))
-          .signers([USER])
-          .rpc();
+        .remainingAccounts(proofToRemainingAccounts(p.proof))
+        .instruction();
+
+      const proofPubkeys = (p.proof as string[]).map((x) => new PublicKey(x));
+      try {
+        await sendWithLookupV0([cuIx, claimIx], USER, proofPubkeys);
         assert.fail("Expected double-claim to fail");
       } catch (e: any) {
-        const s = e.toString ? e.toString() : "";
-        assert.match(s, /PositionNotFound|InvalidNft|ConcurrentTransaction/);
+        let diagnostic = e.toString ? e.toString() : "";
+        if (typeof e.getLogs === "function") {
+          try {
+            const fetched = await e.getLogs();
+            if (fetched && fetched.length) {
+              diagnostic += "\n" + fetched.join("\n");
+            }
+          } catch (_) {}
+        } else if (Array.isArray(e.logs)) {
+          diagnostic += "\n" + e.logs.join("\n");
+        }
+        assert.match(
+          diagnostic,
+          /PositionNotFound|InvalidNft|ConcurrentTransaction/,
+          "Double claim should fail with program error"
+        );
       }
     });
 
     it("fails with wrong assetId (InvalidNft)", async () => {
       const wrongAsset = Keypair.generate().publicKey;
+      if (noSlotIndex === null || !noRoot || !noDataHash || !noCreatorHash || noNonce === null || noIndex === null) {
+        throw new Error("NO position proof not initialized");
+      }
       try {
         await program.methods
           .settlePosition({             
             pageIndex: 0,
             slotIndex: noSlotIndex,
             assetId: wrongAsset,
-            root: Array.from(noRoot!),
-            dataHash: Array.from(noDataHash!),
-            creatorHash: Array.from(noCreatorHash!),
-            nonce: new anchor.BN(noNonce!),
+            root: Array.from(noRoot),
+            dataHash: Array.from(noDataHash),
+            creatorHash: Array.from(noCreatorHash),
+            nonce: new anchor.BN(noNonce),
             leafIndex: noIndex as number,
         })
           .accountsPartial({
             claimer: USER.publicKey,
             market: marketPda,
+            config: configPda,
             marketCreator: marketCreatorPda,
             positionPage: positionPagePda,
             mint: usdcMint,
@@ -583,11 +633,9 @@ describe("depredict", () => {
             marketVault: (await program.account.marketState.fetch(marketPda)).marketVault as PublicKey,
             bubblegumProgram: BUBBLEGUM_PROGRAM_ID,
             tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
-            treeConfig: PublicKey.findProgramAddressSync(
-              [marketCreatorAccount.merkleTree.toBuffer()],
-              BUBBLEGUM_PROGRAM_ID
-            )[0],
+            treeConfig: treeConfigPda,
             logWrapperProgram: MPL_NOOP_ID,
             compressionProgram: ACCOUNT_COMPRESSION_ID,
           })
