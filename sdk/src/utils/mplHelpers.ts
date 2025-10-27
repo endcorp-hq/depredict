@@ -12,6 +12,7 @@ import { fromWeb3JsKeypair, fromWeb3JsPublicKey } from "@metaplex-foundation/umi
 import type { PublicKey as UmiPublicKey } from "@metaplex-foundation/umi";
 import createVersionedTransaction from "./sendVersionedTransaction.js";
 import { getMarketCreatorPDA } from "./pda/index.js";
+import { dedupePubkeys } from "./helpers.js";
 
 export function getUmi(rpcEndpoint?: string) {
   const endpoint = rpcEndpoint;
@@ -216,6 +217,83 @@ export async function sendWithLookupV0(
   );
   const mainTx = await compileTxWithLookupV0(program, ixs, payer, lookupTableAddress);
   return { createLutTx, extendLutTxs, mainTx, lookupTableAddress };
+}
+
+export async function ensureLookupTable(
+  program: Program<Depredict>,
+  payer: PublicKey,
+  addresses: PublicKey[],
+  existingLookupTable?: PublicKey
+): Promise<{
+  lookupTableAddress: PublicKey;
+  createTx?: VersionedTransaction;
+  extendTxs: VersionedTransaction[];
+  currentTable?: AddressLookupTableAccount;
+}> {
+  // Creates or extends a LUT so it contains the provided address set.
+  const unique = dedupePubkeys(addresses);
+  if (unique.length === 0 && existingLookupTable) {
+    const { value } = await program.provider.connection.getAddressLookupTable(existingLookupTable);
+    if (!value) throw new Error("Lookup table not found");
+    return { lookupTableAddress: existingLookupTable, extendTxs: [], currentTable: value as AddressLookupTableAccount };
+  }
+
+  if (existingLookupTable) {
+    const { value } = await program.provider.connection.getAddressLookupTable(existingLookupTable);
+    if (!value) throw new Error("Lookup table not found/active");
+    const existingKeys = new Set(value.state.addresses.map((pk) => pk.toBase58()));
+    const missing = unique.filter((addr) => !existingKeys.has(addr.toBase58()));
+    if (missing.length === 0) {
+      return {
+        lookupTableAddress: existingLookupTable,
+        extendTxs: [],
+        currentTable: value as AddressLookupTableAccount,
+      };
+    }
+    const { extendLutTxs } = await buildLookupTableTransactions(program, payer, missing, existingLookupTable);
+    return {
+      lookupTableAddress: existingLookupTable,
+      extendTxs: extendLutTxs,
+      currentTable: value as AddressLookupTableAccount,
+    };
+  }
+
+  const { createLutTx, extendLutTxs, lookupTableAddress } = await buildLookupTableTransactions(
+    program,
+    payer,
+    unique
+  );
+  return {
+    lookupTableAddress,
+    createTx: createLutTx,
+    extendTxs: extendLutTxs,
+  };
+}
+
+export async function buildLookupTableCloseTransactions(
+  program: Program<Depredict>,
+  payer: PublicKey,
+  lookupTableAddress: PublicKey,
+  recipient?: PublicKey
+): Promise<{
+  deactivateTx: VersionedTransaction;
+  closeTx: VersionedTransaction;
+}> {
+  // Prepares deactivate+close txs so rent can be reclaimed once the LUT is idle.
+  const authority = payer;
+  const deactivateIx = AddressLookupTableProgram.deactivateLookupTable({
+    authority,
+    lookupTable: lookupTableAddress,
+  });
+  const closeIx = AddressLookupTableProgram.closeLookupTable({
+    authority,
+    lookupTable: lookupTableAddress,
+    recipient: recipient ?? payer,
+  });
+
+  const deactivateTx = await createVersionedTransaction(program, [deactivateIx], payer);
+  const closeTx = await createVersionedTransaction(program, [closeIx], payer);
+  return { deactivateTx, closeTx };
 }
 
 export function normalizeResult(result: any): { ixs: TransactionInstruction[]; alts: (AddressLookupTableAccount | string)[] } {

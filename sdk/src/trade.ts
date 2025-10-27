@@ -51,6 +51,8 @@ import Position from "./position.js";
 import {
   fetchAssetProofWithRetry,
   buildV0Message,
+  ensureLookupTable,
+  buildLookupTableCloseTransactions,
 } from "./utils/mplHelpers.js";
 
 export default class Trade {
@@ -58,6 +60,318 @@ export default class Trade {
   position: Position;
   constructor(private program: Program<Depredict>) {
     this.position = new Position(this.program);
+  }
+
+  private async collectCreatorLookupAddresses(
+    authority: PublicKey
+  ): Promise<PublicKey[]> {
+    // Creator LUT stores static/shared accounts reused by every market settle.
+    const configPda = getConfigPDA(this.program.programId);
+    const marketCreatorPda = getMarketCreatorPDA(
+      this.program.programId,
+      authority
+    );
+    const creatorAccount = await this.program.account.marketCreator.fetch(
+      marketCreatorPda
+    );
+    const merkleTree = creatorAccount.merkleTree as PublicKey;
+    const collection = creatorAccount.coreCollection as PublicKey;
+    const treeConfig = getTreeConfigPDA(merkleTree);
+
+    const baseAccounts: (PublicKey | null | undefined)[] = [
+      marketCreatorPda,
+      configPda,
+      merkleTree,
+      collection,
+      treeConfig,
+      new PublicKey(MPL_CORE_CPI_SIGNER),
+      new PublicKey(MPL_CORE_PROGRAM_ID),
+      new PublicKey(MPL_BUBBLEGUM_ID),
+      new PublicKey(MPL_NOOP_ID),
+      new PublicKey(MPL_ACCOUNT_COMPRESSION_ID),
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+      anchor.web3.SystemProgram.programId,
+      this.program.programId,
+    ];
+
+    return dedupePubkeys(baseAccounts);
+  }
+
+  private async collectMarketLookupAddresses(
+    marketId: number,
+    pageIndexes: number[] = [],
+    exclude: PublicKey[] = []
+  ): Promise<PublicKey[]> {
+    // Market LUT only tracks market-specific accounts (market PDA, vault, pages).
+    const configPda = getConfigPDA(this.program.programId);
+    const marketPda = getMarketPDA(this.program.programId, marketId);
+    const marketAccount = await this.program.account.marketState.fetch(
+      marketPda
+    );
+    const marketCreator = marketAccount.marketCreator as PublicKey;
+    const marketMint = (marketAccount.mint ?? null) as PublicKey | null;
+    const marketVault = (marketAccount.marketVault ?? null) as PublicKey | null;
+    const marketCreatorAccount = await this.program.account.marketCreator.fetch(
+      marketCreator
+    );
+    const merkleTree = marketCreatorAccount.merkleTree as PublicKey;
+    const collection = marketCreatorAccount.coreCollection as PublicKey;
+    const treeConfig = getTreeConfigPDA(merkleTree);
+
+    const pageAddresses = pageIndexes.map((pageIndex) =>
+      getPositionPagePDA(this.program.programId, marketId, pageIndex)
+    );
+
+    const baseAccounts: (PublicKey | null | undefined)[] = [
+      marketPda,
+      configPda,
+      marketCreator,
+      marketMint,
+      marketVault,
+      collection,
+      merkleTree,
+      treeConfig,
+      new PublicKey(MPL_CORE_CPI_SIGNER),
+      new PublicKey(MPL_CORE_PROGRAM_ID),
+      new PublicKey(MPL_BUBBLEGUM_ID),
+      new PublicKey(MPL_NOOP_ID),
+      new PublicKey(MPL_ACCOUNT_COMPRESSION_ID),
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+      anchor.web3.SystemProgram.programId,
+      this.program.programId,
+      ...pageAddresses,
+    ];
+
+    const excluded = new Set(exclude.map((pk) => pk.toBase58()));
+    return dedupePubkeys(baseAccounts.filter((pk) => pk && !excluded.has(pk.toBase58())));
+  }
+
+  /**
+   * Ensures a lookup table exists for a market and contains reusable settle accounts.
+   * Returns the transactions needed to create/extend the table.
+   */
+  async ensureMarketLookupTable({
+    marketId,
+    authority,
+    payer,
+    pageIndexes = [],
+    additionalAddresses = [],
+    existingLookupTable,
+    excludeAddresses = [],
+    creatorLookupTableAddress,
+  }: {
+    marketId: number;
+    authority: PublicKey;
+    payer?: PublicKey;
+    pageIndexes?: number[];
+    additionalAddresses?: (PublicKey | null | undefined)[];
+    existingLookupTable?: PublicKey;
+    excludeAddresses?: (PublicKey | null | undefined)[];
+    creatorLookupTableAddress?: PublicKey;
+  }): Promise<{
+    lookupTableAddress: PublicKey;
+    createTx?: VersionedTransaction;
+    extendTxs: VersionedTransaction[];
+  }> {
+    const payerPk = payer ?? authority;
+    let inheritedExclusions: PublicKey[] = [];
+    if (creatorLookupTableAddress) {
+      const { value } =
+        await this.program.provider.connection.getAddressLookupTable(
+          creatorLookupTableAddress
+        );
+      if (!value) {
+        throw new Error("Creator lookup table not found/active");
+      }
+      // Drop creator LUT entries so we do not pay rent twice for shared accounts.
+      inheritedExclusions = value.state.addresses;
+    }
+    const marketAddresses = await this.collectMarketLookupAddresses(
+      marketId,
+      pageIndexes,
+      dedupePubkeys([
+        ...excludeAddresses,
+        ...inheritedExclusions,
+      ] as (PublicKey | null | undefined)[])
+    );
+    const extraAddresses = dedupePubkeys(additionalAddresses ?? []);
+    const targetAddresses = dedupePubkeys([
+      ...marketAddresses,
+      ...extraAddresses,
+    ]);
+    return ensureLookupTable(
+      this.program,
+      payerPk,
+      targetAddresses,
+      existingLookupTable
+    );
+  }
+
+  /**
+   * Extends an existing market lookup table with new market-level or proof nodes.
+   * Does not create a table if it is missing.
+   */
+  async extendMarketLookupTable({
+    marketId,
+    authority,
+    lookupTableAddress,
+    pageIndexes = [],
+    proofNodes = [],
+    additionalAddresses = [],
+    excludeAddresses = [],
+    creatorLookupTableAddress,
+  }: {
+    marketId: number;
+    authority: PublicKey;
+    lookupTableAddress: PublicKey;
+    pageIndexes?: number[];
+    proofNodes?: (string | PublicKey)[];
+    additionalAddresses?: (PublicKey | null | undefined)[];
+    excludeAddresses?: (PublicKey | null | undefined)[];
+    creatorLookupTableAddress?: PublicKey;
+  }): Promise<{
+    lookupTableAddress: PublicKey;
+    extendTxs: VersionedTransaction[];
+  }> {
+    const payerPk = authority;
+    let inheritedExclusions: PublicKey[] = [];
+    if (creatorLookupTableAddress) {
+      const { value } =
+        await this.program.provider.connection.getAddressLookupTable(
+          creatorLookupTableAddress
+        );
+      if (!value) {
+        throw new Error("Creator lookup table not found/active");
+      }
+      // Ensures we only extend with genuinely new market or proof accounts.
+      inheritedExclusions = value.state.addresses;
+    }
+    const marketAddresses = await this.collectMarketLookupAddresses(
+      marketId,
+      pageIndexes,
+      dedupePubkeys([
+        ...excludeAddresses,
+        ...inheritedExclusions,
+      ] as (PublicKey | null | undefined)[])
+    );
+    const proofAddresses = proofNodes.map((node) =>
+      typeof node === "string" ? new PublicKey(node) : node
+    );
+    const extraAddresses = dedupePubkeys(additionalAddresses ?? []);
+    const targetAddresses = dedupePubkeys([
+      ...marketAddresses,
+      ...proofAddresses,
+      ...extraAddresses,
+    ]);
+
+    const { extendTxs } = await ensureLookupTable(
+      this.program,
+      payerPk,
+      targetAddresses,
+      lookupTableAddress
+    );
+
+    return { lookupTableAddress, extendTxs };
+  }
+
+  async buildMarketLookupTableCloseTxs({
+    authority,
+    lookupTableAddress,
+    recipient,
+  }: {
+    authority: PublicKey;
+    lookupTableAddress: PublicKey;
+    recipient?: PublicKey;
+  }): Promise<{
+    deactivateTx: VersionedTransaction;
+    closeTx: VersionedTransaction;
+  }> {
+    return buildLookupTableCloseTransactions(
+      this.program,
+      authority,
+      lookupTableAddress,
+      recipient
+    );
+  }
+
+  async ensureMarketCreatorLookupTable({
+    authority,
+    payer,
+    additionalAddresses = [],
+    existingLookupTable,
+  }: {
+    authority: PublicKey;
+    payer?: PublicKey;
+    additionalAddresses?: (PublicKey | null | undefined)[];
+    existingLookupTable?: PublicKey;
+  }): Promise<{
+    lookupTableAddress: PublicKey;
+    createTx?: VersionedTransaction;
+    extendTxs: VersionedTransaction[];
+  }> {
+    // Creator LUT holds shared state: config, creator PDA, tree + program IDs.
+    const creatorAddresses = await this.collectCreatorLookupAddresses(authority);
+    const extraAddresses = dedupePubkeys(additionalAddresses ?? []);
+    const targetAddresses = dedupePubkeys([
+      ...creatorAddresses,
+      ...extraAddresses,
+    ]);
+    return ensureLookupTable(
+      this.program,
+      payer ?? authority,
+      targetAddresses,
+      existingLookupTable
+    );
+  }
+
+  async extendMarketCreatorLookupTable({
+    authority,
+    lookupTableAddress,
+    additionalAddresses = [],
+  }: {
+    authority: PublicKey;
+    lookupTableAddress: PublicKey;
+    additionalAddresses?: (PublicKey | null | undefined)[];
+  }): Promise<{
+    lookupTableAddress: PublicKey;
+    extendTxs: VersionedTransaction[];
+  }> {
+    // Extend creator LUT when shared infra (e.g. helper PDAs) changes.
+    const creatorAddresses = await this.collectCreatorLookupAddresses(authority);
+    const extraAddresses = dedupePubkeys(additionalAddresses ?? []);
+    const targetAddresses = dedupePubkeys([
+      ...creatorAddresses,
+      ...extraAddresses,
+    ]);
+    const { extendTxs } = await ensureLookupTable(
+      this.program,
+      authority,
+      targetAddresses,
+      lookupTableAddress
+    );
+    return { lookupTableAddress, extendTxs };
+  }
+
+  async buildMarketCreatorLookupTableCloseTxs({
+    authority,
+    lookupTableAddress,
+    recipient,
+  }: {
+    authority: PublicKey;
+    lookupTableAddress: PublicKey;
+    recipient?: PublicKey;
+  }): Promise<{
+    deactivateTx: VersionedTransaction;
+    closeTx: VersionedTransaction;
+  }> {
+    return buildLookupTableCloseTransactions(
+      this.program,
+      authority,
+      lookupTableAddress,
+      recipient
+    );
   }
 
   /**
@@ -494,7 +808,6 @@ export default class Trade {
       marketCreator,
       positionPage,
       marketMint,
-      claimerMintAta,
       marketVault,
       collection,
       merkleTree,
@@ -510,10 +823,18 @@ export default class Trade {
       this.program.programId,
     ];
 
-    const lookupAddresses = dedupePubkeys([
+    const combinedLookup = dedupePubkeys([
       ...proofMetas.map((m) => m.pubkey),
       ...lookupExtras,
     ]);
+    const excludeSet = new Set<string>([
+      claimer.toBase58(),
+      claimerMintAta.toBase58(),
+    ]);
+    // Do not leak claimer-specific accounts into reusable LUTs.
+    const lookupAddresses = combinedLookup.filter(
+      (pk) => !excludeSet.has(pk.toBase58())
+    );
 
     return {
       instruction,

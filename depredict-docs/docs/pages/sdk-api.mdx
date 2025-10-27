@@ -50,6 +50,14 @@ const client = new DepredictClient(connection, adminKey, feeVault);
   - All SDK key inputs are web3.js `PublicKey` (UMI keys are not required)
   - Helpers available: `buildV0Message(ixs, alts, payer)`, `normalizeResult(res)`
 
+### Lookup Table Helpers
+- `ensureMarketCreatorLookupTable({ authority, payer?, additionalAddresses?, existingLookupTable? })`: Create or extend the creator-wide LUT with shared accounts (config, creator PDA, Bubblegum resources). Returns `{ lookupTableAddress, createTx?, extendTxs }`.
+- `extendMarketCreatorLookupTable({ authority, lookupTableAddress, additionalAddresses? })`: Extend an existing creator LUT with new shared addresses.
+- `buildMarketCreatorLookupTableCloseTxs({ authority, lookupTableAddress, recipient? })`: Returns deactivate/close transactions so rent can be reclaimed.
+- `ensureMarketLookupTable({ marketId, authority, payer?, creatorLookupTableAddress?, pageIndexes?, additionalAddresses?, existingLookupTable? })`: Create or extend a market-specific LUT, automatically excluding addresses already present in the creator LUT.
+- `extendMarketLookupTable({ marketId, authority, lookupTableAddress, creatorLookupTableAddress?, pageIndexes?, proofNodes?, additionalAddresses? })`: Extend the market LUT with new page PDAs or proof nodes.
+- `buildMarketLookupTableCloseTxs({ authority, lookupTableAddress, recipient? })`: Returns deactivate/close transactions for reclaiming per-market LUT rent.
+
 ---
 
 ## Config Methods

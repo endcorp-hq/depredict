@@ -127,7 +127,9 @@ SDK: `client.trade.resolveMarket({ marketId, payer, resolutionValue? })`
 
 ### Settle Position (Payout)
 1. Provide compressed NFT proof (root, hashes, nonce, index)
-2. Burn/mark position as claimed and transfer winnings to claimer
+2. Single `settlePosition` instruction burns the cNFT and transfers winnings (if any) in the same path
+3. Losing positions still execute the burn gate; payout resolves to zero so the transaction only consumes compute
+4. All settlement flows use the same instruction, so batching winners and losers in one transaction is supported
 
 SDK: `client.trade.payoutPosition({ marketId, payer, assetId, rpcEndpoint, returnMode? })`
 
@@ -198,6 +200,87 @@ SDK: `client.trade.closeMarket(marketId, payer)`
 
 ### Gas Optimization
 - **PDA Usage**: Program-derived addresses for deterministic account creation
+
+### Address Lookup Tables (LUTs)
+- **Motivation**: Settling a position requires many accounts (market, position page, mint, Bubblegum programs, proof path). Reusing a LUT keeps the user claim to a single transaction even when proofs are large.
+- **Two-tier Strategy**:
+  - **Creator LUT**: Stores accounts shared by every market under a market creator (config, creator PDA, merkle tree, collection, program IDs). Created once and reused.
+  - **Per-Market LUTs**: Store only market-specific PDAs (market state, market vault, position pages, additional proof nodes). Created alongside the market so rent deposits stay small and can be reclaimed when payouts finish.
+- **Lifecycle**:
+  1. Build or extend the creator LUT during market-creator setup.
+  2. After `createMarket`, create/extend a market LUT supplying `creatorLookupTableAddress` so shared accounts are excluded.
+  3. When fetching a proof for settlement, extend the market LUT with any new proof nodes before the user signs their claim.
+  4. Once all positions settle, deactivate and close the market LUT to reclaim the rent deposit; repeat for the creator LUT when no markets remain.
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+import DepredictClient, { buildV0Message } from '@endcorp/depredict';
+
+const client = new DepredictClient(connection);
+
+// 1. Ensure creator LUT (shared across every market this authority runs)
+const creatorLut = await client.trade.ensureMarketCreatorLookupTable({
+  authority: admin.publicKey,
+  payer: admin.publicKey,
+});
+if (creatorLut.createTx) await sendTx(creatorLut.createTx, [admin]);
+for (const tx of creatorLut.extendTxs) await sendTx(tx, [admin]);
+
+// 2. Ensure market LUT right after createMarket
+const marketLut = await client.trade.ensureMarketLookupTable({
+  marketId,
+  authority: admin.publicKey,
+  payer: admin.publicKey,
+  creatorLookupTableAddress: creatorLut.lookupTableAddress,
+  pageIndexes: [0, 1], // prewarm the first two pages
+});
+if (marketLut.createTx) await sendTx(marketLut.createTx, [admin]);
+for (const tx of marketLut.extendTxs) await sendTx(tx, [admin]);
+
+// 3. Before a user settles, extend the market LUT with new proof nodes (if any)
+await client.trade.extendMarketLookupTable({
+  marketId,
+  authority: admin.publicKey,
+  lookupTableAddress: marketLut.lookupTableAddress,
+  creatorLookupTableAddress: creatorLut.lookupTableAddress,
+  proofNodes: proof.proof, // strings or PublicKeys
+});
+
+// 4. Build the settle instruction; combine both LUTs in the final transaction
+const { instruction } = await client.trade.buildSettleInstructionWithProof({
+  marketId,
+  claimer: user.publicKey,
+  assetId,
+  pageIndex: proofPageIndex,
+  slotIndex: proofSlotIndex,
+  proof: {
+    root: proof.root,
+    dataHash: proof.dataHash,
+    creatorHash: proof.creatorHash,
+    nonce: proof.nonce,
+    leafIndex: proof.index,
+    proofNodes: proof.proof,
+  },
+});
+const { message } = await buildV0Message(
+  client.program,
+  [instruction],
+  user.publicKey,
+  [creatorLut.lookupTableAddress.toBase58(), marketLut.lookupTableAddress.toBase58()],
+);
+await sendVersioned(message, [user]);
+
+// 5. After payouts complete
+const { deactivateTx, closeTx } = await client.trade.buildMarketLookupTableCloseTxs({
+  authority: admin.publicKey,
+  lookupTableAddress: marketLut.lookupTableAddress,
+});
+await sendTx(deactivateTx, [admin]);
+await waitOneSlot();
+await sendTx(closeTx, [admin]); // rent reclaimed
+```
+
+- **Costs**: A typical market LUT (~20 addresses) locks &lt;0.0005 SOL rent, fully refunded upon close. The creator LUT deposit (~15–20 addresses) is paid once and can be recovered when the creator retires the table. Transaction fees for create/extend/deactivate/close are a few thousand lamports each.
 - **Batch Operations**: Multiple operations in single transaction
 - **Account Reuse**: Efficient account structure design
 

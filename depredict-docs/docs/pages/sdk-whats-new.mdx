@@ -9,6 +9,7 @@ A summary of the latest SDK capabilities and improvements.
 - **position**: paged storage (ensure, find, prune, close)
 - **config**: protocol config lifecycle and updates
 - **marketCreator**: creator lifecycle (create, verify, update)
+- **lookup tables**: new helpers in `trade` for creator-level and per-market LUT management
 
 ---
 
@@ -31,8 +32,16 @@ await client.trade.payoutPosition({
   rpcEndpoint: 'https://your-das.example',
   returnMode: 'message',
 });
+
+// Build reusable LUTs for a creator and market
+const creatorLut = await client.trade.ensureMarketCreatorLookupTable({ authority, payer: authority });
+const marketLut = await client.trade.ensureMarketLookupTable({
+  marketId,
+  authority,
+  creatorLookupTableAddress: creatorLut.lookupTableAddress,
+  pageIndexes: [0, 1],
+});
 ```
 
 See the [SDK API](/sdk-api) for full details.
-
 

@@ -54,6 +54,55 @@ await client.trade.openPosition({
 - Use `resolveMarket` to resolve outcomes (admin or oracle)
 - Use `payoutPosition` for users to claim winnings
 
+## 6. Reuse Address Lookup Tables for Cheap Claims
+
+```typescript
+// Create a shared LUT for all markets this creator runs
+const creatorLut = await client.trade.ensureMarketCreatorLookupTable({
+  authority: adminKey,
+  payer: adminKey,
+});
+if (creatorLut.createTx) await sendTx(creatorLut.createTx, [adminSigner]);
+for (const extendTx of creatorLut.extendTxs) await sendTx(extendTx, [adminSigner]);
+
+// After createMarket, provision a market-specific LUT that excludes creator entries
+const marketLut = await client.trade.ensureMarketLookupTable({
+  marketId,
+  authority: adminKey,
+  payer: adminKey,
+  creatorLookupTableAddress: creatorLut.lookupTableAddress,
+  pageIndexes: [0, 1],
+});
+if (marketLut.createTx) await sendTx(marketLut.createTx, [adminSigner]);
+for (const extendTx of marketLut.extendTxs) await sendTx(extendTx, [adminSigner]);
+
+// Before a user claims, add any new proof nodes to the market LUT
+await client.trade.extendMarketLookupTable({
+  marketId,
+  authority: adminKey,
+  lookupTableAddress: marketLut.lookupTableAddress,
+  creatorLookupTableAddress: creatorLut.lookupTableAddress,
+  proofNodes: proof.proof,
+});
+
+// Build the settle instruction and compile a versioned transaction with both LUTs
+const { instruction } = await client.trade.buildSettleInstructionWithProof({
+  marketId,
+  claimer: userKey,
+  assetId,
+  pageIndex,
+  slotIndex,
+  proof,
+});
+const { message } = await buildV0Message(
+  client.program,
+  [instruction],
+  userKey,
+  [creatorLut.lookupTableAddress.toBase58(), marketLut.lookupTableAddress.toBase58()],
+);
+await sendVtx(message, [userSigner]);
+```
+
 ---
 
 ## Recursive Market Creation Example
