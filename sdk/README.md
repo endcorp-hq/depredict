@@ -5,14 +5,14 @@ A TypeScript SDK for interacting with the Depredict Protocol Solana contract.
 ## Installation
 
 ```bash
-npm install depredict-sdk
+npm install @endcorp/depredict
 ```
 
 ## Usage
 
 ```typescript
 import { Connection, PublicKey } from '@solana/web3.js';
-import DepredictClient, { TOKEN_MINTS, DEFAULT_MINT } from 'depredict-sdk';
+import DepredictClient, { TOKEN_MINTS, DEFAULT_MINT } from '@endcorp/depredict';
 
 // Initialize the client
 const connection = new Connection('https://api.devnet.solana.com');
@@ -40,18 +40,31 @@ const markets = await client.trade.getAllMarkets();
 
 - `getAllMarkets()`: Get all markets
 - `getMarketById(marketId)`: Get market by ID
-- `createMarket(args)`: Create a new market (requires mintAddress)
+- `createMarket(args)`: Create a new market (mintAddress optional; defaults to USDC devnet)
 - `openPosition(args)`: Open a new position (mint is automatically determined from market)
 - `closeMarket(marketId, payer)`: Close a market
 - `resolveMarket(args)`: Resolve a market
 - `payoutPosition(args)`: Payout a position
+  - Requires `rpcEndpoint` for DAS/MAS proof fetching
+
+### Payout Example
+
+```typescript
+await client.trade.payoutPosition({
+  marketId: 1,
+  payer: wallet.publicKey,
+  assetId: new PublicKey('<compressed-nft-asset-id>'),
+  rpcEndpoint: 'https://your-das.example',
+  returnMode: 'transaction',
+});
+```
 
 ### Token Constants
 
 The SDK provides easy access to common token mints:
 
 ```typescript
-import { TOKEN_MINTS, DEFAULT_MINT } from 'depredict-sdk';
+import { TOKEN_MINTS, DEFAULT_MINT } from '@endcorp/depredict';
 
 // Available token mints
 console.log(TOKEN_MINTS.USDC_DEVNET); // USDC on devnet
@@ -70,15 +83,16 @@ When creating a market, you can specify the mint address or use the default (USD
 ```typescript
 // Using default mint (USDC devnet)
 const marketArgs = {
-  startTime: Date.now() / 1000,
-  endTime: (Date.now() / 1000) + 86400, // 24 hours from now
+  startTime: Math.floor(Date.now() / 1000),
+  endTime: Math.floor(Date.now() / 1000) + 86400, // 24 hours from now
   question: "Will BTC reach $100k by end of year?",
   metadataUri: "https://example.com/metadata.json",
   payer: wallet.publicKey,
-  feeVaultAccount: feeVault,
   // mintAddress is optional - defaults to USDC_DEVNET
   oracleType: OracleType.MANUAL,
-  marketType: MarketType.FUTURE
+  marketType: MarketType.FUTURE,
+  // Required only for FUTURE markets
+  bettingStartTime: Math.floor(Date.now() / 1000),
 };
 
 // Using specific token mint
@@ -98,11 +112,9 @@ When opening a position, the mint and decimals are automatically determined from
 ```typescript
 const positionArgs = {
   marketId: 1,
-  amount: 100, // Amount in the market's token (will be converted using market's decimals)
-  token: TOKEN_MINTS.USDC_DEVNET.toBase58(), // Token to pay with (will be swapped if different from market mint)
+  amount: 100, // Amount in the market's token; auto-converted using market decimals
   direction: { yes: {} },
   payer: wallet.publicKey,
-  feeVaultAccount: feeVault,
   metadataUri: "https://example.com/position-metadata.json"
 };
 

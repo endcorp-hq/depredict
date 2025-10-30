@@ -68,7 +68,6 @@ export type OpenOrderArgs = {
         no: {}
       }
   payer: PublicKey,
-  feeVaultAccount: PublicKey,
   metadataUri: string
 }
 
@@ -116,7 +115,6 @@ export type CreateMarketArgs = {
   question: string
   metadataUri: string
   payer: PublicKey
-  feeVaultAccount: PublicKey
   mintAddress?: PublicKey // Optional, defaults to USDC_DEVNET
   oraclePubkey?: PublicKey
   oracleType: OracleType

@@ -240,8 +240,6 @@ export async function ensureAllAccountsFunded(): Promise<void> {
   
   // Fund user accounts
   await ensureAccountBalance(ADMIN.publicKey, 2 * LAMPORTS_PER_SOL);
-  await ensureAccountBalance(USER.publicKey, 2 * LAMPORTS_PER_SOL);
-  await ensureAccountBalance(FEE_VAULT.publicKey, 1 * LAMPORTS_PER_SOL);
   
   console.log("All accounts funded successfully");
 }

@@ -3,7 +3,6 @@ use crate::errors::DepredictError;
 use crate::state::Config;
 use anchor_lang::prelude::*;
 
-
 #[derive(Accounts)]
 pub struct InitConfigContext<'info> {
     #[account(mut)]
@@ -24,10 +23,8 @@ pub struct InitConfigContext<'info> {
     pub system_program: Program<'info, System>,
 }
 
-
 #[derive(Accounts)]
 pub struct UpdateConfigContext<'info> {
-
     #[account(
         mut,
         constraint = signer.key() == config.authority @ DepredictError::Unauthorized
@@ -40,7 +37,7 @@ pub struct UpdateConfigContext<'info> {
         constraint = fee_vault.key() == config.fee_vault
     )]
     pub fee_vault: AccountInfo<'info>,
-    
+
     #[account(
         mut,
         seeds = [CONFIG.as_bytes()],
@@ -68,7 +65,6 @@ pub struct CloseConfigContext<'info> {
 
 impl<'info> InitConfigContext<'info> {
     pub fn init_config(&mut self, fee_amount: u16, bump: &InitConfigContextBumps) -> Result<()> {
-
         require!(
             fee_amount <= MAX_FEE_AMOUNT,
             DepredictError::InvalidFeeAmount
@@ -87,10 +83,7 @@ impl<'info> InitConfigContext<'info> {
 }
 
 impl<'info> UpdateConfigContext<'info> {
-    pub fn update_fee_amount(
-        &mut self,
-        fee_amount: u16,
-    ) -> Result<()> {
+    pub fn update_fee_amount(&mut self, fee_amount: u16) -> Result<()> {
         let config = &mut self.config;
         require!(
             config.authority == *self.signer.key,
@@ -112,12 +105,9 @@ impl<'info> UpdateConfigContext<'info> {
         Ok(())
     }
 
-    pub fn update_authority(
-        &mut self,
-        authority: Pubkey,
-    ) -> Result<()> {
+    pub fn update_authority(&mut self, authority: Pubkey) -> Result<()> {
         let config = &mut self.config;
-        
+
         require!(
             config.authority == *self.signer.key,
             DepredictError::Unauthorized
@@ -130,20 +120,14 @@ impl<'info> UpdateConfigContext<'info> {
         Ok(())
     }
 
-    pub fn update_fee_vault(
-        &mut self,
-        fee_vault: Pubkey,
-    ) -> Result<()> {
+    pub fn update_fee_vault(&mut self, fee_vault: Pubkey) -> Result<()> {
         let config = &mut self.config;
         require!(
             config.authority == *self.signer.key,
             DepredictError::Unauthorized
         );
 
-        require!(
-            fee_vault != config.fee_vault,
-            DepredictError::SameFeeVault
-        );
+        require!(fee_vault != config.fee_vault, DepredictError::SameFeeVault);
 
         config.fee_vault = fee_vault;
         config.version = config.version.checked_add(1).unwrap();
@@ -152,10 +136,7 @@ impl<'info> UpdateConfigContext<'info> {
         Ok(())
     }
 
-    pub fn update_base_uri(
-        &mut self,
-        base_uri: [u8; 200],
-    ) -> Result<()> {
+    pub fn update_base_uri(&mut self, base_uri: [u8; 200]) -> Result<()> {
         let config = &mut self.config;
         require!(
             config.authority == *self.signer.key,

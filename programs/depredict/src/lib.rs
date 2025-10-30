@@ -1,14 +1,14 @@
 use anchor_lang::prelude::*;
-pub mod instructions;
-pub mod state;
 mod constants;
 mod constraints;
 mod errors;
 mod events;
 mod helpers;
+pub mod instructions;
+pub mod state;
 
-use state::*;
 use instructions::*;
+use state::*;
 
 declare_id!("deprZ6k7MU6w3REU6hJ2yCfnkbDvzUZaKE4Z4BuZBhU");
 
@@ -48,32 +48,52 @@ pub mod depredict {
     }
 
     // MARKET CREATOR INSTRUCTIONS
-    pub fn create_market_creator(ctx: Context<CreateMarketCreatorContext>, args: CreateMarketCreatorArgs) -> Result<()> {
+    pub fn create_market_creator(
+        ctx: Context<CreateMarketCreatorContext>,
+        args: CreateMarketCreatorArgs,
+    ) -> Result<()> {
         ctx.accounts.create_market_creator(args, &ctx.bumps)?;
         Ok(())
     }
 
-    pub fn verify_market_creator(ctx: Context<VerifyMarketCreatorContext>, args: VerifyMarketCreatorArgs) -> Result<()> {
+    pub fn verify_market_creator(
+        ctx: Context<VerifyMarketCreatorContext>,
+        args: VerifyMarketCreatorArgs,
+    ) -> Result<()> {
         ctx.accounts.verify_market_creator(args)?;
         Ok(())
     }
 
-    pub fn update_creator_name(ctx: Context<UpdateMarketCreatorDetailsContext>, name: String) -> Result<()> {
+    pub fn update_creator_name(
+        ctx: Context<UpdateMarketCreatorDetailsContext>,
+        name: String,
+    ) -> Result<()> {
         ctx.accounts.update_creator_name(name)?;
         Ok(())
     }
 
-    pub fn update_creator_fee_vault(ctx: Context<UpdateMarketCreatorDetailsContext>, current_fee_vault: Pubkey, new_fee_vault: Pubkey) -> Result<()> {
-        ctx.accounts.update_creator_fee_vault(current_fee_vault, new_fee_vault)?;
+    pub fn update_creator_fee_vault(
+        ctx: Context<UpdateMarketCreatorDetailsContext>,
+        current_fee_vault: Pubkey,
+        new_fee_vault: Pubkey,
+    ) -> Result<()> {
+        ctx.accounts
+            .update_creator_fee_vault(current_fee_vault, new_fee_vault)?;
         Ok(())
     }
 
-    pub fn update_creator_fee(ctx: Context<UpdateMarketCreatorDetailsContext>, creator_fee: u16) -> Result<()> {
+    pub fn update_creator_fee(
+        ctx: Context<UpdateMarketCreatorDetailsContext>,
+        creator_fee: u16,
+    ) -> Result<()> {
         ctx.accounts.update_creator_fee(creator_fee)?;
         Ok(())
     }
 
-    pub fn update_merkle_tree(ctx: Context<UpdateMarketCreatorTreeContext>, new_tree: Pubkey) -> Result<()> {
+    pub fn update_merkle_tree(
+        ctx: Context<UpdateMarketCreatorTreeContext>,
+        new_tree: Pubkey,
+    ) -> Result<()> {
         ctx.accounts.update_merkle_tree(new_tree)?;
         Ok(())
     }
@@ -89,8 +109,11 @@ pub mod depredict {
         ctx.accounts.update_market(args)?;
         Ok(())
     }
-    
-    pub fn resolve_market(ctx: Context<ResolveMarketContext>, args: ResolveMarketArgs) -> Result<()> {
+
+    pub fn resolve_market(
+        ctx: Context<ResolveMarketContext>,
+        args: ResolveMarketArgs,
+    ) -> Result<()> {
         ctx.accounts.resolve_market(args)?;
         Ok(())
     }
@@ -107,22 +130,39 @@ pub mod depredict {
         Ok(())
     }
 
-    pub fn settle_position(ctx: Context<SettlePositionContext>, args: SettlePositionArgs) -> Result<()> {
-        ctx.accounts.settle_position(args)?;
+    pub fn settle_position<'info>(
+        ctx: Context<'_, '_, '_, 'info, SettlePositionContext<'info>>,
+        args: SettlePositionArgs,
+    ) -> Result<()> {
+        let Context {
+            accounts,
+            remaining_accounts,
+            ..
+        } = ctx;
+        accounts.settle_position(args, remaining_accounts)?;
         Ok(())
     }
 
-    pub fn ensure_position_page(ctx: Context<EnsurePositionPageContext>, args: EnsurePageArgs) -> Result<()> {
+    pub fn ensure_position_page(
+        ctx: Context<EnsurePositionPageContext>,
+        args: EnsurePageArgs,
+    ) -> Result<()> {
         ctx.accounts.ensure(args)?;
         Ok(())
     }
 
-    pub fn prune_position(ctx: Context<PrunePositionContext>, args: PrunePositionArgs) -> Result<()> {
+    pub fn prune_position(
+        ctx: Context<PrunePositionContext>,
+        args: PrunePositionArgs,
+    ) -> Result<()> {
         ctx.accounts.prune(args)?;
         Ok(())
     }
 
-    pub fn close_position_page(ctx: Context<ClosePositionPageContext>, args: ClosePositionPageArgs) -> Result<()> {
+    pub fn close_position_page(
+        ctx: Context<ClosePositionPageContext>,
+        args: ClosePositionPageArgs,
+    ) -> Result<()> {
         ctx.accounts.close_page(args)?;
         Ok(())
     }

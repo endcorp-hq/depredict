@@ -1,8 +1,9 @@
 import * as anchor from "@coral-xyz/anchor";
-import { PublicKey} from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey} from "@solana/web3.js";
 import { 
   getNetworkConfig, 
   updateMarketIds,
+  ensureAccountBalance
 } from "./helpers";
 import {
   ADMIN, 
@@ -25,7 +26,7 @@ describe("Market Setup", () => {
     console.log(`Setting up markets on ${isDevnet ? "devnet" : "localnet"}`);
 
     // Ensure all accounts are properly funded
-    await ensureAllAccountsFunded();
+    // await ensureAccountBalance(ADMIN.publicKey, 2 * LAMPORTS_PER_SOL);
 
     // Get config PDA
     configPda = PublicKey.findProgramAddressSync(

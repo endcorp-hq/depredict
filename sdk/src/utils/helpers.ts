@@ -23,6 +23,35 @@ export const decodeString = (bytes: number[]): string => {
   return buffer.toString('utf8').trim()
 }
 
+/**
+ * Deduplicate a collection of public keys while preserving order.
+ *
+ * Useful when preparing `remainingAccounts` or lookup-table address lists where
+ * duplicate pubkeys can trigger duplicate-account errors.
+ */
+/**
+ * Removes duplicate public keys from an array while preserving the first occurrence.
+ *
+ * Use this when constructing `remainingAccounts` or lookup-table address lists;
+ * Solana instructions reject duplicate accounts, so running the inputs through
+ * this helper prevents runtime errors without changing ordering semantics.
+ */
+export const dedupePubkeys = (keys: (PublicKey | null | undefined)[]): PublicKey[] => {
+  const seen = new Set<string>()
+  const unique: PublicKey[] = []
+  for (const key of keys) {
+    if (!key) continue
+    const keyStr = key.toBase58()
+    if (seen.has(keyStr)) continue
+    seen.add(keyStr)
+    unique.push(key)
+  }
+  return unique
+}
+
+/** @deprecated Prefer {@link dedupePubkeys}. */
+export const uniquePubkeys = dedupePubkeys
+
 export const formatMarket = (
   account: IdlAccounts<Depredict>['marketState'],
   address: PublicKey

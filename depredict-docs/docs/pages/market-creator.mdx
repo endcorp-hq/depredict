@@ -26,7 +26,7 @@ const { ixs, marketCreator } = await client.marketCreator.createMarketCreator({
 const created = await createCoreCollection(program, adminKey, {
   name: 'My Collection',
   uri: 'https://example.com/metadata.json',
-  rpcEndpoint: process.env.DAS_RPC,
+  rpcEndpoint: 'https://your-das.example',
 });
 
 await client.marketCreator.verifyMarketCreator({
