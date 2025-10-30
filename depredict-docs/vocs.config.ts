@@ -6,9 +6,9 @@ export default defineConfig({
   head: React.createElement(React.Fragment, null,
     React.createElement('link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }),
     React.createElement('link', { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }),
-    React.createElement('link', { rel: 'apple-touch-icon', href: '/logo.png' }),
+    React.createElement('link', { rel: 'apple-touch-icon', href: '/logo.webp' }),
   ),
-  logoUrl: './logo.png', 
+  logoUrl: './logo.webp', 
   topNav: [
     { text: 'Getting Started', link: '/getting-started', match: '/getting-started' },
     { text: 'Architecture', link: '/architecture', match: '/architecture' },
